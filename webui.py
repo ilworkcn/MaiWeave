@@ -7,6 +7,7 @@ from datetime import timedelta
 from maibot_sdk import API
 
 from .models import GoalInput, PlanInput, PlanPatch, RoutineInput
+from .usage import summary as usage_summary
 
 KIND = {"sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交"}
 STATUS = {"scheduled": "未开始", "active": "进行中", "completed": "已完成", "cancelled": "已取消", "paused": "已暂停", "awaiting_confirmation": "等待完成确认", "blocked": "需要调整"}
@@ -27,6 +28,22 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_usage", description="模型调用用量与趋势")
+    async def ui_usage(self, days: int = 7, feature: str = "") -> dict:
+        return usage_summary(self.store, self.now(), days, "" if feature == "all" else feature)
+
+    @API("ui_editor_records", description="按类别查找可编辑记录")
+    async def ui_editor_records(self, category: str, query: str = "") -> dict:
+        if category not in {"profile", "anniversary", "plan", "routine", "place", "route", "experience", "thread"}:
+            raise ValueError("请选择资料、纪念日、日程、重复规则、地点、路线、经历或跟进事项")
+        rows = self.anniversaries.upcoming(self.now().date()) if category == "anniversary" else self.store.all(category)
+        if category == "plan":
+            rows = [row for row in rows if row["status"] in {"scheduled", "active", "paused", "blocked"}]
+        if query.strip():
+            rows = [row for row in rows if query.casefold() in json.dumps(row, ensure_ascii=False).casefold()]
+        return {"records": rows[-200:][::-1], "total": len(rows), "profiles": self.store.all("profile"),
+                "places": self.store.all("place")}
+
     @API("ui_anniversaries", description="个人资料和纪念日")
     async def ui_anniversaries(self) -> dict:
         return {"profiles": self.store.all("profile"), "anniversaries": self.anniversaries.upcoming(self.now().date())}
@@ -59,7 +76,7 @@ class WebUI:
         return {"state": state, "activity": current["title"] if current else "空闲", "travel": travel,
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
                 "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",
-                "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "未处于关键词唤醒时段",
+                "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "当前没有陪伴时段",
                 "mood_label": "心情不错" if state["mood"] > 10 else ("有些低落" if state["mood"] < -10 else "平静"),
                 "updated_at": display_time(state["updated_at"]), "enabled": "已启用" if self.config.life.enabled else "已停用",
                 "pending_count": sum(p["status"] in {"scheduled", "active"} for p in plans),
@@ -269,7 +286,7 @@ class WebUI:
         return {
             "reflections": self.store.all("reflection")[-50:][::-1],
             "preferences": [{**p, "evidence": "、".join(p["evidence_ids"])} for p in self.store.all("preference")],
-            "continuations": [{**p, "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")][-30:],
+            "continuations": [{**p, "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")][-30:],
             "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")][-50:],
             "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
                          "request_label": "已向宿主请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")][-100:],

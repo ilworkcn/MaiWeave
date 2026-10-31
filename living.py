@@ -1,12 +1,15 @@
 """自主活动与主动交流，复用宿主模型和发言机制。"""
 
 import json
+import re
+import hashlib
 from datetime import datetime, timedelta
 
 from .config import MaiWeaveConfig
 from .engine import LifeEngine
 from .models import ActivityChoice, PlanInput
 from .anniversaries import Anniversaries
+from .usage import generate
 
 
 def in_hours(hour: int, start: int, end: int) -> bool:
@@ -34,13 +37,9 @@ class Living:
             if plan["autonomous"] and plan["kind"] == "sleep" and plan["status"] in {"scheduled", "active", "paused", "blocked"}:
                 self.spatial.transition(plan["id"], "cancel", plan["session_id"], now)
 
-    def wake_for_message(self, text, session, now):
+    def wake(self, session, now, reason, user_id=""):
         config = self.config.life
-        if text.lstrip().startswith("/"):
-            return False
         if not (config.enabled and config.schedule_enabled and config.wake_enabled):
-            return False
-        if not any(word.strip() and word.strip().casefold() in text.casefold() for word in config.wake_keywords):
             return False
         current = self.engine.current(now)
         if not (current and current["kind"] == "sleep") and not self.awake_until(now):
@@ -50,9 +49,37 @@ class Living:
             self.spatial.transition(current["id"], "cancel", current["session_id"], now)
         with self.engine.store.db:
             self.engine.store.put("runtime", {"id": "awakening", "until": (now + timedelta(minutes=config.wake_minutes)).isoformat(),
-                                             "reason": "聊天命中陪伴唤醒关键词，已醒来，可以自然回应", "session_id": session})
-        self.ctx.logger.info("MaiWeave 已由关键词唤醒，保持清醒 %s 分钟", config.wake_minutes)
+                                             "reason": reason, "session_id": session, "user_id": user_id})
+        self.ctx.logger.info("MaiWeave 已醒来，留出 %s 分钟聊天", config.wake_minutes)
         return True
+
+    def wake_for_message(self, text, session, now, user_id=""):
+        config = self.config.life
+        if text.lstrip().startswith("/"):
+            return False
+        if not (config.enabled and config.schedule_enabled and config.wake_enabled):
+            return False
+        active = self.engine.store.find("runtime", "awakening")
+        if self.awake_until(now) and active["session_id"] == session and active.get("user_id", "") == user_id:
+            if any(word in text for word in ("晚安", "去睡吧", "我去睡了", "先聊到这里")):
+                with self.engine.store.db:
+                    self.engine.store.put("runtime", {**active, "until": now.isoformat(), "reason": "这段聊天已结束，恢复作息"})
+                return True
+            if text.strip():
+                return self.wake(session, now, "正在继续聊天", user_id)
+        for clause in re.split(r"[。！？；\n]", text.casefold()):
+            for word in config.wake_keywords:
+                word = word.strip().casefold()
+                if not word:
+                    continue
+                for match in re.finditer(re.escape(word), clause):
+                    prefix = clause[:match.start()]
+                    if re.search(r"(?:不再|并不|没有|没那么|不那么|不怎么|不太|不)$", prefix):
+                        continue
+                    if re.search(r"(?:现在|已经).*(?:好了|过去了|缓过来了)", clause):
+                        continue
+                    return self.wake(session, now, "聊天中表达了需要陪伴的心情", user_id)
+        return False
 
     def adjust(self, now, reason="", unavailable_until=""):
         """环境和临时事件改变时，重排可变动安排并记录原因。"""
@@ -130,19 +157,30 @@ class Living:
         free = engine.free_minutes(now)
         if free < 10:
             return
+        state = engine.state()
+        signature = hashlib.sha256(json.dumps({
+            "day": now.date().isoformat(), "sleep": config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour),
+            "body": [state["hunger"] >= 65, state["energy"] <= 25, state["stress"] >= 70],
+            "plans": [(p["id"], p["status"], p["start"], p["end"], len(p["changes"])) for p in engine.store.all("plan")],
+            "goals": engine.store.all("goal"), "interests": config.interests,
+            "weather": self.world.context(now)["weather"],
+        }, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         previous = engine.store.find("runtime", "planning")
-        if previous and (now - engine.time(previous["at"])).total_seconds() < config.planning_interval_minutes * 60:
+        if previous and previous.get("signature") == signature and (now - engine.time(previous["at"])).total_seconds() < config.planning_interval_minutes * 60:
             return
         with engine.store.db:
-            engine.store.put("runtime", {"id": "planning", "at": now.isoformat()})
-        state = engine.state()
+            engine.store.put("runtime", {"id": "planning", "at": now.isoformat(), "signature": signature})
         session = ""
         goal_id = ""
         goal_step_id = ""
+        continuation_id = ""
         habit = self.rhythm.candidate(now)
         if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
             habit = None
         next_step = self.continuity.next_step()
+        continuations = [r for r in engine.store.all("activity_memory") if r["next_action"] and not r.get("completed", False)
+                         and r.get("kind") in {"study", "work", "leisure", "rest"}
+                         and engine.time(r.get("last_continued_at", r["updated_at"])).date() < now.date()]
         if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
             title, kind, location, motivation = "睡觉", "sleep", self.spatial.place("home")["name"], "按习惯休息，恢复精力"
             minutes = free
@@ -154,8 +192,9 @@ class Living:
             title, kind, location = habit["title"], habit["kind"], habit["location"]
             motivation, minutes, session = "在熟悉的时间延续已有习惯", min(free, habit["duration_minutes"]), habit["session_id"]
             continuation = next((r for r in reversed(engine.store.all("activity_memory"))
-                                 if r["activity"] == title and r["session_id"] == session), None)
+                                 if r["activity"] == title and r["session_id"] == session and not r.get("completed", False)), None)
             if continuation:
+                continuation_id = continuation["id"]
                 title = f"{title}：{continuation['subject']}" if continuation["subject"] else title
                 motivation += "；" + continuation["next_action"]
         elif next_step:
@@ -164,6 +203,12 @@ class Living:
             minutes, session = min(free, step["minutes"]), goal["session_id"]
             goal_id, goal_step_id = goal["id"], step["id"]
             motivation = f"推进目标：{goal['title']}；阶段依据：{step['criterion']}；上次进展：{step['note']}"
+        elif continuations:
+            continuation = max(continuations, key=lambda item: item["updated_at"])
+            continuation_id, session = continuation["id"], continuation["session_id"]
+            title = f"继续{continuation['activity']}：{continuation['subject']}" if continuation["subject"] else f"继续{continuation['activity']}"
+            kind, location = continuation["kind"], continuation["location"] or state["location"]
+            motivation, minutes = continuation["next_action"], min(free, 30)
         else:
             goals = [g for g in engine.store.all("goal") if g["status"] == "active"]
             personality = await self.ctx.config.get("personality")
@@ -184,7 +229,7 @@ class Living:
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
-            result = await self.ctx.llm.generate(prompt, task_name=config.model_task)
+            result = await generate(self.ctx, engine.store, self.config, "自主活动", prompt)
             if not result["success"]:
                 raise RuntimeError(result.get("error") or "自主规划模型调用失败")
             text = result["response"].strip()
@@ -214,8 +259,13 @@ class Living:
             return
         start = now + timedelta(minutes=travel_minutes)
         value = PlanInput(title=title, start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
-                          kind=kind, location=location, motivation=motivation, goal_id=goal_id, goal_step_id=goal_step_id)
+                          kind=kind, location=location, motivation=motivation, goal_id=goal_id, goal_step_id=goal_step_id,
+                          continuation_id=continuation_id)
         self.spatial.schedule(value, session, now, autonomous=True)
+        if continuation_id:
+            with engine.store.db:
+                continuation = engine.store.get("activity_memory", continuation_id)
+                engine.store.put("activity_memory", {**continuation, "last_continued_at": now.isoformat()})
 
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine

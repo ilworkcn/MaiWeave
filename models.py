@@ -27,6 +27,7 @@ class PlanInput(BaseModel):
     simulation: bool = True
     goal_id: str = ""
     goal_step_id: str = ""
+    continuation_id: str = ""
     flexible: bool = False
 
 
@@ -129,6 +130,7 @@ class ActivityOutcome(ActivityMeaning):
     stress: float = Field(default=0, ge=-5, le=5)
     next_action: str = Field(default="", max_length=300)
     goal_units: int = Field(default=1, ge=0, le=1)
+    completed: bool = False
 
 
 class ActivityAssessment(ActivityMeaning):

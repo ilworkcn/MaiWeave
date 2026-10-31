@@ -11,7 +11,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.4.2", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.5.0", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -23,13 +23,13 @@ class LifeConfig(PluginConfigBase):
     timezone: str = setting("生活时区（必填）", default="Asia/Shanghai", description="已填中国标准时间，可直接使用；其他地区例如 Asia/Tokyo。")
     model_task: str = setting("生活规划模型任务（必填）", default="utils", description="默认 utils；填写 MaiBot 中已配置的模型任务名称，无需填写密钥。")
     schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后切换为全天候模式，已有约定继续执行。")
-    wake_enabled: bool = setting("允许关键词唤醒", default=True, description="遵循作息时，普通聊天命中关键词可中断睡眠；原消息仍正常进入对话。")
+    wake_enabled: bool = setting("允许聊天唤醒", default=True, description="关键词匹配和 MaiBot 对当前情绪、陪伴请求的判断都可唤醒角色，原消息正常进入对话。")
     wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项填写一个词。聊天中出现这些词时唤醒角色；可增删默认词，清空词表可关闭匹配。")
-    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="唤醒后留出这段时间聊天；再次命中关键词会延长时间，到期恢复作息。")
+    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="同一用户继续聊天会延长清醒时间；道晚安或聊天时间到期后恢复作息。")
     sleep_hour: int = setting("习惯入睡时间（整点）", default=23, ge=0, le=23, description="夜间睡眠窗口开始时间")
     wake_hour: int = setting("习惯起床时间（整点）", default=7, ge=0, le=23, description="夜间睡眠窗口结束时间")
     tick_seconds: int = setting("状态更新间隔（秒）", default=60, ge=10, description="每次推进生活的间隔")
-    planning_interval_minutes: int = setting("自主规划间隔（分钟）", default=30, ge=5, description="两次自主规划的最短间隔")
+    planning_interval_minutes: int = setting("自主规划间隔（分钟）", default=30, ge=5, description="生活情况保持一致时的规划间隔；活动结束、日程与目标变化会触发新规划。")
     background: str = setting("生活背景（选填）", default="", description="留空沿用宿主人格；可补充居住环境、日常身份和生活偏好。", json_schema_extra={"x-widget": "textarea", "rows": 2, "placeholder": "例如：住在城市近郊，白天工作，晚上喜欢读书。"})
     interests: list[str] = setting("兴趣爱好（选填）", default_factory=lambda: ["阅读", "散步"], description="已有阅读、散步作为参考，可修改或删除；每项填写一个兴趣。")
 

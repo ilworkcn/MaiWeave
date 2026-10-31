@@ -6,14 +6,15 @@ from datetime import timedelta
 
 from .engine import uid
 from .models import ActivityAssessment, ActivityOutcome, GoalOutline
+from .usage import generate
 
 
 class Continuity:
     def __init__(self, engine, context, config):
         self.engine, self.ctx, self.config = engine, context, config
 
-    async def ask(self, prompt, model):
-        result = await self.ctx.llm.generate(prompt, task_name=self.config.life.model_task)
+    async def ask(self, prompt, model, feature):
+        result = await generate(self.ctx, self.engine.store, self.config, feature, prompt)
         if not result["success"]:
             raise RuntimeError(result.get("error") or "生活模型调用失败")
         text = result["response"].strip()
@@ -80,17 +81,20 @@ class Continuity:
                 "按活动时长安排合理进展，内容围绕角色独自进行的活动展开。"
                 "返回activity、subject、summary、details（中文键和值的对象，包含过程、结果、进度）、"
                 "enjoyment（-5到5）、mood和stress（-5到5）、next_action（下一次从哪里接着做）、"
-                "goal_units（本次有实质进展为1，失败或没有进展为0）。所有新细节均属于角色模拟。"
+                "goal_units（本次有实质进展为1，失败或没有进展为0）、completed（这件作品或任务已经完成时为true）。所有新细节均属于角色模拟。"
             )
         else:
             prompt += ("从已有记录提取活动类别 activity 和具体对象 subject，输出这两个字段。"
                        "关联阶段目标时，依据现有结果返回goal_units（有实质进展为1，没有或未知为0）和next_action（依据现有记录提出下一步）。")
         try:
-            result = await self.ask(prompt, ActivityOutcome if enrich else ActivityAssessment)
+            result = await self.ask(prompt, ActivityOutcome if enrich else ActivityAssessment, "活动结果" if enrich else "习惯归类")
+            if plan.get("continuation_id"):
+                continuation = store.get("activity_memory", plan["continuation_id"])
+                result = result.model_copy(update={"activity": continuation["activity"], "subject": continuation["subject"]})
             plan = store.get("plan", plan_id)
             event = store.get("experience", plan["experience_id"])
             key = hashlib.sha256(f"{plan['session_id']}|{plan['kind']}|{result.activity}".encode()).hexdigest()[:16]
-            memory_key = hashlib.sha256(f"{key}|{result.subject}".encode()).hexdigest()[:16]
+            memory_key = plan.get("continuation_id") or hashlib.sha256(f"{key}|{result.subject}".encode()).hexdigest()[:16]
             with store.db:
                 plan.update(activity_key=key, activity_label=result.activity, subject=result.subject)
                 store.put("plan", plan)
@@ -108,7 +112,9 @@ class Continuity:
                     store.put("preference", previous)
                     store.put("activity_memory", {"id": memory_key, "session_id": plan["session_id"], "activity": result.activity,
                                                    "subject": result.subject, "next_action": result.next_action, "details": event["details"],
-                                                   "experience_id": event["id"], "updated_at": now.isoformat()})
+                                                   "experience_id": event["id"], "updated_at": now.isoformat(),
+                                                   "kind": plan["kind"], "location": plan["location"], "completed": result.completed,
+                                                   "last_continued_at": now.isoformat()})
                     if plan.get("goal_step_id"):
                         self.engine.progress_stage(plan, result.goal_units, result.next_action or result.summary)
                 record.update(status="已完成", activity=result.activity, subject=result.subject, experience_id=event["id"])
@@ -145,7 +151,7 @@ class Continuity:
         with store.db:
             store.put("goal", goal)
         try:
-            outline = await self.ask(prompt, GoalOutline)
+            outline = await self.ask(prompt, GoalOutline, "目标分解")
             if sum(s.sessions for s in outline.steps) != remaining:
                 raise ValueError("阶段次数总和与目标剩余次数不一致")
             if goal.get("steps"):

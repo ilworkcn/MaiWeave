@@ -222,7 +222,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "约好了后续时间的话题可以保存为跟进事项，解决后关闭。"
             "接续活动沿用保存的进度；关联目标时填写当前阶段 goal_step_id，按阶段推进。\n"
             "sleep_policy 中的 awake_until 尚未到期时，按已经醒来的状态回应。"
-            "当前聊天流的个人资料和纪念日由用户配置。填写了年份时可计算年龄或周年数，其余情况直接表达祝福。\n"
+            "睡眠期间，用户正在低落、需要陪伴或明确请求醒来时，调用 maiweave_wake 并说明当前表达。"
+            "结合前后文理解心情；已经恢复心情、转述往事和引用他人的话按各自语境回应。"
+            "用户提到自己的称呼、生日或纪念日时，使用 maiweave_personal 查询并保存；修改时合并原有资料。填写了年份时可计算年龄或周年数，其余情况直接表达祝福。\n"
             + json.dumps(snapshot, ensure_ascii=False)
         )
 
@@ -243,6 +245,49 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             return {"action": "continue"}
         kwargs["extra_prompt"] += self.context_text(kwargs["session_id"])
         return {"action": "continue", "modified_kwargs": kwargs}
+
+    @Tool("maiweave_wake", description="用户当前需要陪伴或明确请求醒来时使用。结合当前消息和前文判断，reason 填写触发这次唤醒的具体表达。", parameters=schema({"reason": text_field("当前需要陪伴的表达")}, ["reason"]))
+    @operation
+    async def wake(self, reason: str, **kwargs):
+        return {"awake": self.living.wake(kwargs["stream_id"], self.now(), reason, kwargs.get("user_id", ""))}
+
+    @Tool("maiweave_personal", description="用对话管理当前聊天流的个人资料与生日、纪念日。list 查询 ID；profile 保存称呼和备注；save_date 保存日期；delete_date 删除纪念日；delete_profile 删除人物及其纪念日。公历用 solar，农历用 lunar，农历闰月 leap_month=true，未知年份填0。修改时先查询原记录并合并用户提出的修改。", parameters=schema({
+        "action": {"type": "string", "enum": ["list", "profile", "save_date", "delete_date", "delete_profile"]},
+        "profile_id": text_field("个人资料 ID，创建时留空"), "anniversary_id": text_field("纪念日 ID，创建时留空"),
+        "name": text_field("称呼"), "notes": text_field("个人资料备注"), "title": text_field("例如生日、相识纪念日"),
+        "calendar": {"type": "string", "enum": ["solar", "lunar"]},
+        "month": {"type": "integer"}, "day": {"type": "integer"}, "year": {"type": "integer"},
+        "leap_month": {"type": "boolean"}, "enabled": {"type": "boolean"},
+    }, ["action"]))
+    @operation
+    async def personal(self, action: str, profile_id: str = "", anniversary_id: str = "", name: str = "", notes: str = "",
+                       title: str = "生日", calendar: str = "solar", month: int = 0, day: int = 0, year: int = 0,
+                       leap_month: bool = False, enabled: bool = True, **kwargs):
+        session, user = kwargs["stream_id"], kwargs.get("user_id", "")
+        if action == "list":
+            return {"profiles": [p for p in self.store.all("profile") if p["session_id"] == session],
+                    "anniversaries": self.anniversaries.upcoming(self.now().date(), session)}
+        if anniversary_id:
+            existing = self.store.get("anniversary", anniversary_id)
+            profile_id = existing["profile_id"]
+        profile = self.engine.owned("profile", profile_id, session) if profile_id else None
+        if action == "delete_date":
+            return self.anniversaries.delete("anniversary", anniversary_id)
+        if action == "delete_profile":
+            return self.anniversaries.delete("profile", profile_id)
+        if not profile:
+            matches = [p for p in self.store.all("profile") if p["session_id"] == session and user and p["user_id"] == user]
+            profile = matches[0] if len(matches) == 1 else None
+        if action == "profile":
+            return self.anniversaries.save_profile(name or (profile["name"] if profile else user or "当前用户"), session,
+                                                  profile["user_id"] if profile else user, notes, profile["id"] if profile else "")
+        if action == "save_date":
+            if month == 0 or day == 0:
+                raise ValueError("请提供纪念日的月份和日期")
+            if not profile:
+                profile = self.anniversaries.save_profile(name or user or "当前用户", session, user)
+            return self.anniversaries.save_date(profile["id"], title, calendar, month, day, year, leap_month, enabled, anniversary_id)
+        raise ValueError("请选择查询、保存资料、保存日期或删除操作")
 
     @Tool("maiweave_query", description="查询角色状态、计划、生活经历、长期目标、当前用户关系或原生记忆。修改前可先查询事件 ID。", parameters=schema({
         "topic": {"type": "string", "enum": ["life", "plans", "experiences", "goals", "relationship", "memory"]},
@@ -355,7 +400,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @HookHandler("chat.receive.after_process", name="maiweave_status")
     async def management_message(self, message: dict, **kwargs):
         if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
-            self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now())
+            self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now(),
+                                         message.get("message_info", {}).get("user_info", {}).get("user_id", ""))
             return {"action": "continue"}
         # 接收 Hook 早于会话创建；先打开原生会话，首次使用指令也能收到回复。
         info = message["message_info"]
@@ -380,7 +426,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.4.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.5.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

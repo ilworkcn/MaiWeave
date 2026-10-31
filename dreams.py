@@ -3,6 +3,7 @@
 import json
 
 from .models import DreamContent
+from .usage import generate
 
 
 class Dreams:
@@ -39,7 +40,7 @@ class Dreams:
             f"最近经历：{json.dumps(recent, ensure_ascii=False)}"
         )
         try:
-            response = await self.ctx.llm.generate(prompt, task_name=self.config.life.model_task)
+            response = await generate(self.ctx, self.engine.store, self.config, "梦境", prompt)
             if not response["success"]:
                 raise RuntimeError(response.get("error") or "梦境模型调用失败")
             text = response["response"].strip()

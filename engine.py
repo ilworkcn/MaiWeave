@@ -169,6 +169,12 @@ class LifeEngine:
         record["revision"] += 1
         with self.store.db:
             self.store.put("experience", record)
+            for memory in self.store.all("activity_memory"):
+                if memory["experience_id"] == record_id:
+                    memory.update(details=dict(record["details"]), updated_at=now.isoformat())
+                    if "进度" in details:
+                        memory["next_action"] = "从更新后的进度继续：" + details["进度"]
+                    self.store.put("activity_memory", memory)
         return record
 
     def experiences(self, session: str, query: str = "", limit: int = 10) -> list[dict]:

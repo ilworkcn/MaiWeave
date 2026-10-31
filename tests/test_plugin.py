@@ -21,7 +21,7 @@ async def plugin(tmp_path):
     context = SimpleNamespace(paths=SimpleNamespace(data_dir=tmp_path), logger=logging.getLogger("test"),
                               send=SimpleNamespace(text=AsyncMock(return_value=True)),
                               config=SimpleNamespace(get=AsyncMock(return_value={"personality": "喜欢安静"})),
-                              llm=SimpleNamespace(generate=AsyncMock()),
+                              llm=SimpleNamespace(generate=AsyncMock(return_value={"success": False, "error": "测试尚未设置模型结果"})),
                               maisaka=SimpleNamespace(proactive=SimpleNamespace(trigger=AsyncMock(return_value={"success": True}))))
     plugin._set_context(context)
     await plugin.on_load()

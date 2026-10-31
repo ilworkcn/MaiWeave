@@ -1,7 +1,8 @@
 {
   "schema_version": 2,
   "required_capabilities": [
-    "declarative_basic"
+    "declarative_basic",
+    "custom_pages"
   ],
   "workspace_title": "MaiWeave · 生活",
   "pages": [
@@ -2803,7 +2804,7 @@
         },
         {
           "type": "table",
-          "label": "下次从这里继续",
+          "label": "作品进度与接续",
           "value": {
             "source": "data",
             "field": "continuations"
@@ -2816,6 +2817,10 @@
             {
               "field": "subject",
               "label": "具体对象"
+            },
+            {
+              "field": "progress_status",
+              "label": "完成情况"
             },
             {
               "field": "next_action",
@@ -3132,40 +3137,28 @@
       "id": "anniversaries",
       "title": "个人资料与纪念日",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "list",
-      "poll_interval_seconds": 30,
-      "auto_refresh": false,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
-          "api": "ui_anniversaries",
-          "version": "1"
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
-        "add_profile": {
-          "api": "ui_save_profile",
-          "version": "1",
-          "parameters": {
-            "name": {
-              "type": "string",
-              "required": true
-            },
-            "session_id": {
-              "type": "string",
-              "required": true
-            },
-            "user_id": {
-              "type": "string",
-              "required": false
-            },
-            "notes": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "edit_profile": {
+        "profile": {
           "api": "ui_save_profile",
           "version": "1",
           "parameters": {
@@ -3187,63 +3180,11 @@
             },
             "profile_id": {
               "type": "string",
-              "required": true
-            }
-          },
-          "arguments": {
-            "profile_id": {
-              "scope": "selection",
-              "source": "profile",
-              "field": "id"
+              "required": false
             }
           }
         },
-        "add_date": {
-          "api": "ui_save_anniversary",
-          "version": "1",
-          "parameters": {
-            "profile_id": {
-              "type": "string",
-              "required": true
-            },
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "calendar": {
-              "type": "string",
-              "required": true
-            },
-            "month": {
-              "type": "integer",
-              "required": true
-            },
-            "day": {
-              "type": "integer",
-              "required": true
-            },
-            "year": {
-              "type": "integer",
-              "required": false
-            },
-            "leap_month": {
-              "type": "boolean",
-              "required": false
-            },
-            "enabled": {
-              "type": "boolean",
-              "required": false
-            }
-          },
-          "arguments": {
-            "profile_id": {
-              "scope": "selection",
-              "source": "profile",
-              "field": "id"
-            }
-          }
-        },
-        "edit_date": {
+        "anniversary": {
           "api": "ui_save_anniversary",
           "version": "1",
           "parameters": {
@@ -3281,19 +3222,7 @@
             },
             "anniversary_id": {
               "type": "string",
-              "required": true
-            }
-          },
-          "arguments": {
-            "profile_id": {
-              "scope": "selection",
-              "source": "anniversary",
-              "field": "profile_id"
-            },
-            "anniversary_id": {
-              "scope": "selection",
-              "source": "anniversary",
-              "field": "id"
+              "required": false
             }
           }
         },
@@ -3306,15 +3235,9 @@
               "required": true
             }
           },
-          "arguments": {
-            "profile_id": {
-              "scope": "selection",
-              "source": "profile",
-              "field": "id"
-            }
-          }
+          "confirmation": "删除这份个人资料及关联的纪念日？"
         },
-        "delete_date": {
+        "delete_anniversary": {
           "api": "ui_delete_anniversary",
           "version": "1",
           "parameters": {
@@ -3323,278 +3246,737 @@
               "required": true
             }
           },
-          "arguments": {
-            "anniversary_id": {
-              "scope": "selection",
-              "source": "anniversary",
-              "field": "id"
+          "confirmation": "删除这个纪念日？"
+        },
+        "plan": {
+          "api": "ui_update_plan",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            },
+            "new_title": {
+              "type": "string",
+              "required": false
+            },
+            "new_start": {
+              "type": "string",
+              "required": false
+            },
+            "new_end": {
+              "type": "string",
+              "required": false
+            },
+            "new_location": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "routine": {
+          "api": "ui_save_routine",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "anchor_date": {
+              "type": "string",
+              "required": true
+            },
+            "start_time": {
+              "type": "string",
+              "required": true
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "required": true
+            },
+            "frequency": {
+              "type": "string",
+              "required": false
+            },
+            "interval": {
+              "type": "integer",
+              "required": false
+            },
+            "weekdays": {
+              "type": "string",
+              "required": false
+            },
+            "month_day": {
+              "type": "integer",
+              "required": false
+            },
+            "until": {
+              "type": "string",
+              "required": false
+            },
+            "kind": {
+              "type": "string",
+              "required": false
+            },
+            "location": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "participants": {
+              "type": "string",
+              "required": false
+            },
+            "simulation": {
+              "type": "boolean",
+              "required": false
+            },
+            "rule_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "place": {
+          "api": "ui_save_place",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "outdoor": {
+              "type": "boolean",
+              "required": false
+            },
+            "description": {
+              "type": "string",
+              "required": false
+            },
+            "place_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "route": {
+          "api": "ui_save_route",
+          "version": "1",
+          "parameters": {
+            "origin": {
+              "type": "string",
+              "required": true
+            },
+            "destination": {
+              "type": "string",
+              "required": true
+            },
+            "minutes": {
+              "type": "integer",
+              "required": true
+            },
+            "mode": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "experience": {
+          "api": "ui_revise_record",
+          "version": "1",
+          "parameters": {
+            "experience_id": {
+              "type": "string",
+              "required": true
+            },
+            "evidence": {
+              "type": "string",
+              "required": true
+            },
+            "detail_key": {
+              "type": "string",
+              "required": false
+            },
+            "detail_value": {
+              "type": "string",
+              "required": false
+            },
+            "summary": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "thread": {
+          "api": "ui_save_thread",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "context": {
+              "type": "string",
+              "required": true
+            },
+            "due_at": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "thread_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "editor",
+      "title": "编辑工作台",
+      "placement": "workspace",
+      "mode": "custom",
+      "icon": "list",
+      "entry": "webui/editor.html",
+      "layout": "document",
+      "queries": {
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
             }
           }
         }
       },
+      "actions": {
+        "profile": {
+          "api": "ui_save_profile",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "user_id": {
+              "type": "string",
+              "required": false
+            },
+            "notes": {
+              "type": "string",
+              "required": false
+            },
+            "profile_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "anniversary": {
+          "api": "ui_save_anniversary",
+          "version": "1",
+          "parameters": {
+            "profile_id": {
+              "type": "string",
+              "required": true
+            },
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "calendar": {
+              "type": "string",
+              "required": true
+            },
+            "month": {
+              "type": "integer",
+              "required": true
+            },
+            "day": {
+              "type": "integer",
+              "required": true
+            },
+            "year": {
+              "type": "integer",
+              "required": false
+            },
+            "leap_month": {
+              "type": "boolean",
+              "required": false
+            },
+            "enabled": {
+              "type": "boolean",
+              "required": false
+            },
+            "anniversary_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "delete_profile": {
+          "api": "ui_delete_profile",
+          "version": "1",
+          "parameters": {
+            "profile_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "confirmation": "删除这份个人资料及关联的纪念日？"
+        },
+        "delete_anniversary": {
+          "api": "ui_delete_anniversary",
+          "version": "1",
+          "parameters": {
+            "anniversary_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "confirmation": "删除这个纪念日？"
+        },
+        "plan": {
+          "api": "ui_update_plan",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            },
+            "new_title": {
+              "type": "string",
+              "required": false
+            },
+            "new_start": {
+              "type": "string",
+              "required": false
+            },
+            "new_end": {
+              "type": "string",
+              "required": false
+            },
+            "new_location": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "routine": {
+          "api": "ui_save_routine",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "anchor_date": {
+              "type": "string",
+              "required": true
+            },
+            "start_time": {
+              "type": "string",
+              "required": true
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "required": true
+            },
+            "frequency": {
+              "type": "string",
+              "required": false
+            },
+            "interval": {
+              "type": "integer",
+              "required": false
+            },
+            "weekdays": {
+              "type": "string",
+              "required": false
+            },
+            "month_day": {
+              "type": "integer",
+              "required": false
+            },
+            "until": {
+              "type": "string",
+              "required": false
+            },
+            "kind": {
+              "type": "string",
+              "required": false
+            },
+            "location": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "participants": {
+              "type": "string",
+              "required": false
+            },
+            "simulation": {
+              "type": "boolean",
+              "required": false
+            },
+            "rule_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "place": {
+          "api": "ui_save_place",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "outdoor": {
+              "type": "boolean",
+              "required": false
+            },
+            "description": {
+              "type": "string",
+              "required": false
+            },
+            "place_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "route": {
+          "api": "ui_save_route",
+          "version": "1",
+          "parameters": {
+            "origin": {
+              "type": "string",
+              "required": true
+            },
+            "destination": {
+              "type": "string",
+              "required": true
+            },
+            "minutes": {
+              "type": "integer",
+              "required": true
+            },
+            "mode": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "experience": {
+          "api": "ui_revise_record",
+          "version": "1",
+          "parameters": {
+            "experience_id": {
+              "type": "string",
+              "required": true
+            },
+            "evidence": {
+              "type": "string",
+              "required": true
+            },
+            "detail_key": {
+              "type": "string",
+              "required": false
+            },
+            "detail_value": {
+              "type": "string",
+              "required": false
+            },
+            "summary": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "thread": {
+          "api": "ui_save_thread",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "context": {
+              "type": "string",
+              "required": true
+            },
+            "due_at": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "thread_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "usage",
+      "title": "模型用量",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "chart",
+      "poll_interval_seconds": 30,
+      "auto_refresh": true,
+      "queries": {
+        "data": {
+          "api": "ui_usage",
+          "version": "1",
+          "parameters": {
+            "days": {
+              "type": "integer",
+              "required": false
+            },
+            "feature": {
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "actions": {},
       "content": [
         {
           "type": "text",
-          "value": "先添加个人资料，再选中人物填写生日或纪念日。需要祝福提醒时，到「主动交流」中开启功能并添加该人物的聊天流。"
+          "value": "记录 MaiWeave 发起的模型请求。Token 使用宿主返回值，缺少用量的调用标为「用量未返回」。"
+        },
+        {
+          "type": "grid",
+          "columns": 2,
+          "children": [
+            {
+              "type": "input",
+              "name": "days",
+              "label": "统计天数（1、7 或30）",
+              "value": 7
+            },
+            {
+              "type": "select",
+              "name": "feature",
+              "label": "功能",
+              "value": "all",
+              "options": [
+                {
+                  "value": "自主活动",
+                  "label": "自主活动"
+                },
+                {
+                  "value": "梦境",
+                  "label": "梦境"
+                },
+                {
+                  "value": "活动结果",
+                  "label": "活动结果"
+                },
+                {
+                  "value": "习惯归类",
+                  "label": "习惯归类"
+                },
+                {
+                  "value": "目标分解",
+                  "label": "目标分解"
+                },
+                {
+                  "value": "all",
+                  "label": "全部功能"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": 4,
+          "children": [
+            {
+              "type": "stat",
+              "label": "调用次数",
+              "value": {
+                "source": "data",
+                "field": "totals.calls"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "已记录 Token",
+              "value": {
+                "source": "data",
+                "field": "totals.total"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "请求成功率（%）",
+              "value": {
+                "source": "data",
+                "field": "totals.success_rate"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "平均耗时（秒）",
+              "value": {
+                "source": "data",
+                "field": "totals.seconds"
+              }
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": 4,
+          "children": [
+            {
+              "type": "stat",
+              "label": "输入 Token",
+              "value": {
+                "source": "data",
+                "field": "totals.input"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "输出 Token",
+              "value": {
+                "source": "data",
+                "field": "totals.output"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "缓存命中 Token",
+              "value": {
+                "source": "data",
+                "field": "totals.cached"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "用量未返回的调用",
+              "value": {
+                "source": "data",
+                "field": "totals.missing_calls"
+              }
+            }
+          ]
+        },
+        {
+          "type": "chart",
+          "label": "每日 Token",
+          "value": {
+            "source": "data",
+            "field": "daily"
+          },
+          "x": "day",
+          "y": "total",
+          "chart_type": "bar"
         },
         {
           "type": "table",
-          "label": "个人资料",
+          "label": "各功能用量",
           "value": {
             "source": "data",
-            "field": "profiles"
+            "field": "features"
           },
           "columns": [
             {
-              "field": "name",
-              "label": "称呼"
+              "field": "feature",
+              "label": "功能"
             },
             {
-              "field": "session_id",
-              "label": "聊天流"
+              "field": "calls",
+              "label": "次数"
             },
             {
-              "field": "user_id",
-              "label": "用户 ID"
+              "field": "input",
+              "label": "输入"
             },
             {
-              "field": "notes",
-              "label": "备注"
-            }
-          ],
-          "selection": "profile"
-        },
-        {
-          "type": "collapsible",
-          "label": "填写个人资料",
-          "children": [
-            {
-              "type": "text",
-              "value": "新增时填写以下资料；修改时先选中表格中的人物，再填写完整的新资料。"
+              "field": "output",
+              "label": "输出"
             },
             {
-              "type": "grid",
-              "columns": 2,
-              "children": [
-                {
-                  "type": "input",
-                  "name": "name",
-                  "label": "姓名或称呼（必填）",
-                  "value": ""
-                },
-                {
-                  "type": "input",
-                  "name": "session_id",
-                  "label": "所属聊天流 ID（必填，从 /maiweave 复制）",
-                  "value": ""
-                },
-                {
-                  "type": "input",
-                  "name": "user_id",
-                  "label": "用户 ID（选填）",
-                  "value": ""
-                },
-                {
-                  "type": "input",
-                  "name": "notes",
-                  "label": "个人资料备注（选填）",
-                  "value": ""
-                }
-              ]
+              "field": "total",
+              "label": "总量"
             },
             {
-              "type": "button",
-              "label": "添加个人资料",
-              "action": "add_profile"
+              "field": "missing_calls",
+              "label": "用量未返回"
             },
             {
-              "type": "button",
-              "label": "保存资料修改",
-              "action": "edit_profile",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "profile",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            },
-            {
-              "type": "text",
-              "value": "删除个人资料会同时删除该人物的所有纪念日。"
-            },
-            {
-              "type": "button",
-              "label": "删除所选资料及其纪念日",
-              "action": "delete_profile",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "profile",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
+              "field": "seconds",
+              "label": "平均秒数"
             }
           ]
         },
         {
           "type": "table",
-          "label": "生日与纪念日",
+          "label": "最近100次调用",
           "value": {
             "source": "data",
-            "field": "anniversaries"
+            "field": "recent"
           },
           "columns": [
             {
-              "field": "person",
-              "label": "人物"
+              "field": "at",
+              "label": "时间"
             },
             {
-              "field": "title",
-              "label": "名称"
+              "field": "feature",
+              "label": "功能"
             },
             {
-              "field": "calendar_label",
-              "label": "历法"
+              "field": "model",
+              "label": "模型"
             },
             {
-              "field": "date_label",
-              "label": "原日期"
+              "field": "usage_label",
+              "label": "Token"
             },
             {
-              "field": "year",
-              "label": "起始年份（0为未填）"
+              "field": "seconds",
+              "label": "耗时（秒）"
             },
             {
-              "field": "next_date",
-              "label": "下次公历日期"
+              "field": "status",
+              "label": "结果"
             },
             {
-              "field": "days_left",
-              "label": "剩余天数"
-            },
-            {
-              "field": "enabled_label",
-              "label": "提醒"
-            }
-          ],
-          "selection": "anniversary"
-        },
-        {
-          "type": "text",
-          "value": "公历2月29日在平年按2月28日庆祝；农历闰月遇普通年份按同月，小月的三十按月底。填写出生或起始年份后，可计算年龄或周年数。"
-        },
-        {
-          "type": "collapsible",
-          "label": "填写生日或纪念日",
-          "children": [
-            {
-              "type": "text",
-              "value": "添加时先选中人物。修改时先选中纪念日，再手动填写下方各项并保存。"
-            },
-            {
-              "type": "grid",
-              "columns": 2,
-              "children": [
-                {
-                  "type": "input",
-                  "name": "title",
-                  "label": "名称（必填，例如生日、相识纪念日）",
-                  "value": "生日"
-                },
-                {
-                  "type": "select",
-                  "name": "calendar",
-                  "label": "日期历法",
-                  "value": "solar",
-                  "options": [
-                    {
-                      "value": "solar",
-                      "label": "公历"
-                    },
-                    {
-                      "value": "lunar",
-                      "label": "农历"
-                    }
-                  ]
-                },
-                {
-                  "type": "input",
-                  "name": "month",
-                  "label": "月份（1—12）",
-                  "value": 1
-                },
-                {
-                  "type": "input",
-                  "name": "day",
-                  "label": "日期（农历1—30）",
-                  "value": 1
-                },
-                {
-                  "type": "input",
-                  "name": "year",
-                  "label": "出生或起始年份（选填，未知填 0）",
-                  "value": 0
-                },
-                {
-                  "type": "switch",
-                  "name": "leap_month",
-                  "label": "农历闰月（公历忽略）",
-                  "value": false
-                },
-                {
-                  "type": "switch",
-                  "name": "enabled",
-                  "label": "开启当日提醒",
-                  "value": true
-                }
-              ]
-            },
-            {
-              "type": "button",
-              "label": "添加到所选人物",
-              "action": "add_date",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "profile",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            },
-            {
-              "type": "button",
-              "label": "保存纪念日修改",
-              "action": "edit_date",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "anniversary",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            },
-            {
-              "type": "button",
-              "label": "删除所选纪念日",
-              "action": "delete_date",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "anniversary",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
+              "field": "error",
+              "label": "原因"
             }
           ]
         }
