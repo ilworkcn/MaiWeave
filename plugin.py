@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from contextlib import suppress
 from datetime import datetime, timedelta
 from functools import wraps
@@ -10,7 +11,7 @@ from urllib.error import URLError
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from maibot_sdk import Command, HomeCard, HookHandler, MaiBotPlugin, Tool
+from maibot_sdk import HomeCard, HookHandler, MaiBotPlugin, Tool
 
 from .config import MaiWeaveConfig
 from .engine import LifeEngine
@@ -307,21 +308,39 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         record = self.engine.owned("experience", experience_id, kwargs["stream_id"])
         return await self.sync_experience(record)
 
-    @Command("maiweave_status", description="查看生活状态、会话 ID 与运行错误", pattern=r"^/(?:maiweave|织生活)(?:\s+状态)?$")
+    @HookHandler("chat.receive.after_process", name="maiweave_status")
+    async def management_message(self, message: dict, **kwargs):
+        if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
+            return {"action": "continue"}
+        # 接收 Hook 早于会话创建；先打开原生会话，首次使用指令也能收到回复。
+        info = message["message_info"]
+        group = info.get("group_info")
+        try:
+            await self.ctx.chat.open_session(
+                platform=message["platform"], chat_type="group" if group else "private",
+                user_id=info["user_info"]["user_id"], group_id=group["group_id"] if group else "",
+                account_id=message["account_id"], scope=message["scope"],
+            )
+            sent = await self.status(stream_id=message["session_id"])
+            if not sent:
+                self.ctx.logger.error("MaiWeave 状态回复发送失败")
+        except Exception:
+            self.ctx.logger.exception("MaiWeave 状态指令处理失败")
+        # 状态回复失败也结束管理指令，避免宿主将它当作普通对话处理。
+        return {"action": "abort"}
+
     async def status(self, **kwargs):
         session = kwargs["stream_id"]
-        snapshot = self.engine.snapshot(session, self.now()) if self.config.life.enabled else {"state": self.engine.state(), "current": None}
-        current = snapshot["current"]
-        activity = (current.get("title") or current.get("summary")) if current else "空闲"
-        state = snapshot["state"]
+        current = self.engine.current(self.now()) if self.config.life.enabled else None
+        activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
+        state = self.engine.state()
         message = (
-            f"MaiWeave 0.3.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.3.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
         )
-        sent = await self.ctx.send.text(message, session)
-        return sent, "状态已发送" if sent else "状态发送失败", 2
+        return await self.ctx.send.text(message, session, storage_message=False, sync_to_maisaka_history=False)
 
     @HomeCard("maiweave_home", title="MaiWeave · 角色生活", description="查看角色此刻、日程与生活记录",
               content=[{"type": "text", "content": "打开生活工作区，查看实时状态、天气、路线、梦境与习惯。"}],

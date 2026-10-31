@@ -2,14 +2,44 @@
   "manifest_version": 2,
   "id": "ilworkcn.maiweave",
   "name": "MaiWeave",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "由对话与时间共同驱动的持续角色生活引擎",
-  "author": {"name": "ilworkcn", "url": "https://github.com/ilworkcn"},
+  "author": {
+    "name": "ilworkcn",
+    "url": "https://github.com/ilworkcn"
+  },
   "license": "UNLICENSED",
-  "host_application": {"min_version": "1.3.19", "max_version": "1.3.99"},
-  "sdk": {"min_version": "2.21.0", "max_version": "2.21.99"},
+  "host_application": {
+    "min_version": "1.3.19",
+    "max_version": "1.3.99"
+  },
+  "sdk": {
+    "min_version": "2.21.0",
+    "max_version": "2.21.99"
+  },
   "dependencies": [],
-  "capabilities": ["llm.generate", "config.get", "send.text", "maisaka.proactive.trigger", "web.search", "web.fetch"],
-  "i18n": {"default_locale": "zh-CN", "supported_locales": ["zh-CN"]},
-  "urls": {"repository": "https://github.com/ilworkcn/MaiWeave"}
+  "capabilities": [
+    "llm.generate",
+    "config.get",
+    "send.text",
+    "maisaka.proactive.trigger",
+    "web.search",
+    "web.fetch",
+    "chat.open_session"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "supported_locales": [
+      "zh-CN"
+    ]
+  },
+  "urls": {
+    "repository": "https://github.com/ilworkcn/MaiWeave"
+  },
+  "display": {
+    "icon": {
+      "type": "local",
+      "value": "assets/icon.png"
+    }
+  }
 }
