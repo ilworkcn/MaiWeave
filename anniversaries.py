@@ -29,7 +29,7 @@ class Anniversaries:
         if not 1 <= month <= 12 or not 1 <= day <= (31 if calendar == "solar" else 30):
             raise ValueError("月份应为 1 至 12；公历日期为 1 至 31，农历为 1 至 30")
         if year != 0 and not 1900 <= year <= 2100:
-            raise ValueError("起始年份填 1900 至 2100，不填写时使用 0")
+            raise ValueError("起始年份填 1900 至 2100，未知填 0")
         if calendar == "solar":
             date(year or 2000, month, day)
             leap_month = False

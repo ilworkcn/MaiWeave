@@ -67,8 +67,8 @@ class Continuity:
         history = self.engine.experiences(plan["session_id"], limit=20)
         goal = store.get("goal", plan["goal_id"]) if plan["goal_id"] else None
         prompt = (
-            "你正在维护角色的连续生活。仅返回JSON。activity 是稳定的活动类别，如阅读、烹饪、绘画；"
-            "subject 是具体作品或对象名称，未知则为空。优先复用已有同义类别，不能把不同作品混成同一对象。"
+            "整理角色这次活动的结果，输出 JSON 对象。activity 是稳定的活动类别，如阅读、烹饪、绘画；"
+            "subject 填具体作品或对象名称，缺少名称时填空字符串。同义活动沿用已有类别，每部作品保留各自的名称。"
             f"已有类别：{json.dumps(meanings, ensure_ascii=False)}；活动：{json.dumps(plan, ensure_ascii=False)}；"
             f"现有经历：{json.dumps(event, ensure_ascii=False)}；目标：{json.dumps(goal, ensure_ascii=False)}；"
             f"最近经历：{json.dumps(history, ensure_ascii=False)}；"
@@ -76,14 +76,14 @@ class Continuity:
         )
         if enrich:
             prompt += (
-                "这是已完成的独自虚拟活动，现在生成具体模拟结果。保持已有事实、作品进度和细节一致，"
-                "按实际活动时长给出适量进展；不得新增真实用户的行动。"
+                "为这次已完成的角色活动补充过程和结果，接续已有作品进度与细节，"
+                "按活动时长安排合理进展，内容围绕角色独自进行的活动展开。"
                 "返回activity、subject、summary、details（中文键和值的对象，包含过程、结果、进度）、"
                 "enjoyment（-5到5）、mood和stress（-5到5）、next_action（下一次从哪里接着做）、"
                 "goal_units（本次有实质进展为1，失败或没有进展为0）。所有新细节均属于角色模拟。"
             )
         else:
-            prompt += ("只提取已有记录中的活动类别与对象，返回activity和subject，不补写事实或感受。"
+            prompt += ("从已有记录提取活动类别 activity 和具体对象 subject，输出这两个字段。"
                        "关联阶段目标时，依据现有结果返回goal_units（有实质进展为1，没有或未知为0）和next_action（依据现有记录提出下一步）。")
         try:
             result = await self.ask(prompt, ActivityOutcome if enrich else ActivityAssessment)
@@ -135,9 +135,9 @@ class Continuity:
             raise ValueError("请先完成或取消该目标已安排的活动，再调整阶段")
         remaining = max(1, goal["target_sessions"] - goal["completed_sessions"])
         prompt = (
-            "把角色长期目标拆为可执行阶段，只返回JSON对象steps数组。每阶段包含title、criterion（完成依据）、"
+            "把角色长期目标拆为可执行阶段，输出包含 steps 数组的 JSON 对象。每阶段包含title、criterion（完成依据）、"
             "sessions（预计有效活动次数）、minutes（每次10到120分钟）、kind（study/work/leisure/rest）。"
-            f"所有阶段的sessions总和必须等于{remaining}，最多12阶段，不重复已完成的内容。"
+            f"所有阶段的sessions总和必须等于{remaining}，最多12阶段，围绕剩余内容安排后续步骤。"
             f"目标与已有进度：{json.dumps(goal, ensure_ascii=False)}；"
             f"相关经历：{json.dumps([e for e in self.engine.experiences(goal['session_id'], limit=30) if e['plan_id'] in {p['id'] for p in store.all('plan') if p['goal_id'] == goal_id}], ensure_ascii=False)}"
         )

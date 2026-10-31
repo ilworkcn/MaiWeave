@@ -35,7 +35,7 @@ class Spatial:
 
     def save_place(self, name: str, outdoor: bool, description: str, place_id: str = "") -> dict:
         if not name.strip():
-            raise ValueError("地点名称不能为空")
+            raise ValueError("请填写地点名称")
         existing = next((p for p in self.engine.store.all("place") if p["name"] == name and p["id"] != place_id), None)
         if existing:
             raise ValueError("已有同名地点")
@@ -276,7 +276,7 @@ class Spatial:
         if self.engine.time(value.end) <= self.engine.time(value.start):
             raise ValueError("结束时间必须晚于开始时间")
         if self.engine.time(value.start) < now - timedelta(minutes=1):
-            raise ValueError("过去发生的事情请记录为经历，不能创建过去的计划")
+            raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
         if value.goal_id:
             goal = self.engine.owned("goal", value.goal_id, session)
             if goal["status"] != "active":

@@ -24,7 +24,7 @@ def living(x):
 
 def result(**values):
     return {"success": True, "response": json.dumps({"activity": "阅读", "subject": "虚拟小说", "summary": "读完第二章，记住了主角的选择",
-            "details": {"进度": "第二章", "地点": "模型不应覆盖的地点", "感受": "情节很吸引人"}, "enjoyment": 3,
+            "details": {"进度": "第二章", "地点": "模型生成的地点", "感受": "情节很吸引人"}, "enjoyment": 3,
             "mood": 2, "stress": -1, "next_action": "从第三章开始", "goal_units": 1, **values}, ensure_ascii=False)}
 
 

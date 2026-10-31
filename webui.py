@@ -197,7 +197,7 @@ class WebUI:
     @API("ui_dreams", description="梦境档案与睡眠记录")
     async def ui_dreams(self) -> dict:
         dreams = self.store.all("dream")[-100:][::-1]
-        return {"dreams": [{"title": "尚未生成", "story": "", "feeling": "", **d, "source_label": "梦境，不是现实经历"} for d in dreams],
+        return {"dreams": [{"title": "尚未生成", "story": "", "feeling": "", **d, "source_label": "梦境"} for d in dreams],
                 "sleeps": [{**plan_row(p), "hours": round(p["elapsed_seconds"] / 3600, 1)} for p in self.store.all("plan") if p["kind"] == "sleep"][-100:][::-1],
                 "jobs": self.store.all("job")[-10:]}
 
@@ -233,7 +233,7 @@ class WebUI:
         rows = [{**e, "source_label": SOURCE[e["source"]], "time_label": display_time(e["occurred_at"]),
                  "details_text": "\n".join(f"{k}：{v}" for k, v in e["details"].items()),
                  "history_text": json.dumps(e["history"], ensure_ascii=False, indent=2),
-                 "memory_label": "已同步" if e["memory_revision"] == e["revision"] else ("模拟经历，仅本地保存" if e["source"] == "simulated" else "尚未同步当前修订")}
+                 "memory_label": "已同步" if e["memory_revision"] == e["revision"] else ("保存在生活档案" if e["source"] == "simulated" else "尚未同步当前修订")}
                 for e in records[(page - 1) * 30:page * 30]]
         return {"records": rows, "pagination": {"page": page, "pages": pages, "total": len(records)}, "jobs": self.store.all("job")[-10:]}
 

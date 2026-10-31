@@ -89,7 +89,7 @@ class PlanPatch(BaseModel):
         if not self.model_fields_set:
             raise ValueError("请提供需要修改的字段")
         if any(getattr(self, field) is None for field in self.model_fields_set):
-            raise ValueError("修改字段不能为 null")
+            raise ValueError("请填写修改字段的值，保持原值的字段可省略")
         return self
 
 

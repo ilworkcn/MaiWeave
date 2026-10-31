@@ -33,7 +33,7 @@ class NativeMemory:
 
     async def sync(self, experience: dict) -> dict:
         if experience["source"] == "simulated":
-            raise ValueError("模拟经历只保存在生活库，不写入原生事实账本")
+            raise ValueError("这条模拟经历已保存在生活档案中；原生记忆同步适用于用户陈述或已确认的交互")
         if not experience["session_id"]:
             raise ValueError("原生记忆写入需要具体聊天流")
         labels = {"reported": "用户陈述", "observed": "交互观测"}

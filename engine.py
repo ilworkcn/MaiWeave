@@ -1,4 +1,4 @@
-"""生活规则与业务操作，不依赖 MaiBot 运行时。"""
+"""生活状态推进、日程管理和经历记录。"""
 
 from datetime import datetime, timedelta
 import math
@@ -55,7 +55,7 @@ class LifeEngine:
     def create_plan(self, value: PlanInput, session: str, now: datetime, autonomous: bool = False) -> dict:
         start, end = self.time(value.start), self.time(value.end)
         if start < now - timedelta(minutes=1):
-            raise ValueError("过去发生的事情请记录为经历，不能创建过去的计划")
+            raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
         self._check_interval(start, end)
         if value.goal_id:
             goal = self.owned("goal", value.goal_id, session)
@@ -76,12 +76,12 @@ class LifeEngine:
     def change_plan(self, record_id: str, patch: PlanPatch, session: str, now: datetime) -> dict:
         plan = self.owned("plan", record_id, session)
         if plan["status"] not in ACTIVE | {"paused", "blocked"}:
-            raise ValueError("已结束的计划不能改期；请创建新计划或修订经历")
+            raise ValueError("这项计划已经结束，请创建新计划或修订对应经历")
         changes = patch.model_dump(exclude_unset=True)
         updated = {**plan, **changes}
         start, end = self.time(updated["start"]), self.time(updated["end"])
         if "start" in changes and start < now:
-            raise ValueError("不能把计划改到过去")
+            raise ValueError("请选择当前或未来的开始时间")
         if end <= now:
             raise ValueError("结束时间必须在当前时间之后")
         self._check_interval(start, end, {record_id, plan.get("travel_id", "")})
@@ -137,7 +137,7 @@ class LifeEngine:
         if plan and occurred < self.time(plan["start"]):
             raise ValueError("经历时间早于关联计划，请核对计划 ID 和发生时间")
         if plan and plan["participants"] and value.source == "simulated":
-            raise ValueError("共同安排需要实际完成依据，不能用模拟结果确认参与者已经参加")
+            raise ValueError("请根据用户陈述或已确认的交互记录共同安排的完成情况")
         record = {**value.model_dump(), "id": uid(), "session_id": session,
                   "occurred_at": occurred.isoformat(), "recorded_at": now.isoformat(),
                   "revision": 1, "history": [], "memory_id": "", "memory_revision": 0}
@@ -298,7 +298,7 @@ class LifeEngine:
             state["mood"] = bounded(state["mood"] + 3, -100, 100)
 
     def advance(self, now: datetime) -> dict:
-        """只结算已保存的活动，不为离线空白时段补造经历。"""
+        """按已有日程结算活动，并更新空闲时段的身体状态。"""
         state = self.state()
         cursor = self.time(state["updated_at"])
         if now <= cursor:

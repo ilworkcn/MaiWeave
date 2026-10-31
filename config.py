@@ -11,7 +11,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.4.0", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.4.2", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -22,10 +22,10 @@ class LifeConfig(PluginConfigBase):
     autonomous: bool = setting("自主安排活动", default=True, description="空闲时由角色选择活动")
     timezone: str = setting("生活时区（必填）", default="Asia/Shanghai", description="已填中国标准时间，可直接使用；其他地区例如 Asia/Tokyo。")
     model_task: str = setting("生活规划模型任务（必填）", default="utils", description="默认 utils；填写 MaiBot 中已配置的模型任务名称，无需填写密钥。")
-    schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后不自动安排夜间睡眠，可全天候交流；明确约定的日程仍保留。")
+    schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后切换为全天候模式，已有约定继续执行。")
     wake_enabled: bool = setting("允许关键词唤醒", default=True, description="遵循作息时，普通聊天命中关键词可中断睡眠；原消息仍正常进入对话。")
-    wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项一个，按文字包含匹配，不是模型情绪诊断；清空后不触发。可按需要增删默认词。")
-    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="期间不自主安排活动；再次命中关键词延长清醒时间，到期后恢复作息。")
+    wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项填写一个词。聊天中出现这些词时唤醒角色；可增删默认词，清空词表可关闭匹配。")
+    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="唤醒后留出这段时间聊天；再次命中关键词会延长时间，到期恢复作息。")
     sleep_hour: int = setting("习惯入睡时间（整点）", default=23, ge=0, le=23, description="夜间睡眠窗口开始时间")
     wake_hour: int = setting("习惯起床时间（整点）", default=7, ge=0, le=23, description="夜间睡眠窗口结束时间")
     tick_seconds: int = setting("状态更新间隔（秒）", default=60, ge=10, description="每次推进生活的间隔")
@@ -39,11 +39,11 @@ class ProactiveConfig(PluginConfigBase):
 
     __ui_label__ = "主动交流"
     enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求宿主主动开口")
-    session_ids: list[str] = setting("接收聊天流（启用主动交流后必填）", default_factory=list, description="先在目标聊天发送 /maiweave，再复制回复中的聊天流 ID；每项一个，不是 QQ 号。")
+    session_ids: list[str] = setting("接收聊天流（启用主动交流后必填）", default_factory=list, description="在目标聊天发送 /maiweave，复制回复中的聊天流 ID，每项填写一个。")
     daily_limit: int = setting("每日主动请求上限", default=2, ge=0, description="每个聊天流每天的请求次数")
     cooldown_minutes: int = setting("主动交流间隔（分钟）", default=180, ge=1, description="两次请求的最短间隔")
     start_hour: int = setting("允许开始时间（整点）", default=9, ge=0, le=23, description="主动交流时间窗口起点")
-    end_hour: int = setting("允许结束时间（整点）", default=22, ge=0, le=23, description="不包含这个整点")
+    end_hour: int = setting("允许结束时间（整点）", default=22, ge=0, le=23, description="到这个整点停止主动交流")
 
 
 class MemoryConfig(PluginConfigBase):
@@ -61,8 +61,8 @@ class WorldConfig(PluginConfigBase):
     __ui_label__ = "天气与外部世界"
     weather_enabled: bool = setting("启用实时天气", default=True, description="使用 Open-Meteo 实时天气数据")
     search_enabled: bool = setting("启用宿主联网搜索", default=False, description="使用 MaiBot 已配置的统一联网服务，无需另填搜索密钥")
-    city: str = setting("天气城市（使用天气时必填）", default="", description="填写角色所在城市；留空不请求天气，示例不会自动作为实际城市。", json_schema_extra={"placeholder": "例如：上海"})
-    country_code: str = setting("国家或地区代码（选填）", default="", description="用于区分同名城市；中国填写 CN，日本填写 JP，不需要时留空。", json_schema_extra={"placeholder": "例如：CN"})
+    city: str = setting("天气城市（使用天气时必填）", default="", description="填写角色所在城市后开始获取天气，例如上海。", json_schema_extra={"placeholder": "例如：上海"})
+    country_code: str = setting("国家或地区代码（选填）", default="", description="有同名城市时可以补充：中国填 CN，日本填 JP；选填。", json_schema_extra={"placeholder": "例如：CN"})
     news_enabled: bool = setting("启用订阅资讯", default=False, description="读取已配置的 RSS 或 Atom 信息源")
     feed_urls: list[str] = setting("资讯订阅地址（启用资讯后必填）", default_factory=list, description="每项填写一个真实 RSS 或 Atom 地址，例如 https://站点域名/feed.xml；未启用可留空。")
     weather_minutes: int = setting("天气更新间隔（分钟）", default=60, ge=15, description="实时天气刷新频率")
@@ -81,12 +81,12 @@ class RhythmConfig(PluginConfigBase):
 
 
 class DreamConfig(PluginConfigBase):
-    """满足睡眠时长后生成梦境；梦境独立保存，不当作现实事实。"""
+    """睡够设定时长后，角色会记下一段梦境，并带着醒后的心情开始新一天。"""
 
     __ui_label__ = "睡眠与梦境"
     enabled: bool = setting("启用梦境", default=True, description="足够长的睡眠结束后生成一次梦境")
     mood_effect: bool = setting("梦境影响醒后心情", default=True, description="允许梦境带来小幅情绪变化")
-    minimum_hours: float = setting("产生梦境的最低睡眠时长（小时）", default=3, ge=0.5, le=12, description="短暂休息不会自动生成梦境")
+    minimum_hours: float = setting("产生梦境的最低睡眠时长（小时）", default=3, ge=0.5, le=12, description="睡满这个时长后生成梦境")
 
 
 class ContinuityConfig(PluginConfigBase):

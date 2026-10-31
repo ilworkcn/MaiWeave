@@ -1,4 +1,4 @@
-"""只存储生活业务记录，不实现通用记忆检索库。"""
+"""使用 SQLite 保存生活业务记录。"""
 
 import json
 import sqlite3

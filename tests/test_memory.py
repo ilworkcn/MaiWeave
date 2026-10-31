@@ -1,4 +1,4 @@
-"""用本地 HTTP 服务验证真实请求格式，不冒充宿主联调。"""
+"""通过本地 HTTP 服务验证记忆接口的请求与响应。"""
 
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

@@ -1,4 +1,4 @@
-"""睡后梦境独立保存，不作为实际经历或原生事实。"""
+"""生成睡后梦境，保存梦境内容与醒后心情。"""
 
 import json
 
@@ -32,8 +32,8 @@ class Dreams:
         with self.engine.store.db:
             self.engine.store.put("dream", record)
         prompt = (
-            "为虚拟角色写一段睡梦。梦可以重组最近经历，但不能把梦声称为现实。"
-            "不要新增真实用户的行为或隐私。只返回 JSON：title（简短标题）、story（150到400字）、"
+            "结合角色最近的经历写一段梦境，用睡梦中的视角讲述。"
+            "内容围绕角色的感受和想象展开，涉及用户时沿用已有记录。输出 JSON 对象：title（简短标题）、story（150到400字）、"
             "feeling（醒后感受）、mood_delta（-3到3）。"
             f"当前状态：{json.dumps(self.engine.state(), ensure_ascii=False)}；"
             f"最近经历：{json.dumps(recent, ensure_ascii=False)}"

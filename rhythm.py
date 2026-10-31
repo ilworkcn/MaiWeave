@@ -32,7 +32,7 @@ class Rhythm:
         anchor = date.fromisoformat(value.anchor_date)
         time.fromisoformat(value.start_time)
         if value.until and date.fromisoformat(value.until) < anchor:
-            raise ValueError("重复规则的结束日期不能早于开始日期")
+            raise ValueError("结束日期请设为开始日期当天或之后")
         if value.frequency == "weekly" and (not value.weekdays or any(d not in range(7) for d in value.weekdays)):
             raise ValueError("每周规则需填写星期，周一为0，周日为6")
         old = self.engine.owned("routine", rule_id, session) if rule_id else None
