@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from .config import MaiWeaveConfig
 from .engine import LifeEngine
 from .models import ActivityChoice, PlanInput
+from .anniversaries import Anniversaries
 
 
 def in_hours(hour: int, start: int, end: int) -> bool:
@@ -28,12 +29,15 @@ class Living:
         """切换全天候模式时撤销自主睡眠，保留用户明确安排的日程。"""
         if not self.config.life.enabled or self.config.life.schedule_enabled:
             return
+        self.engine.advance(now)
         for plan in self.engine.store.all("plan"):
             if plan["autonomous"] and plan["kind"] == "sleep" and plan["status"] in {"scheduled", "active", "paused", "blocked"}:
                 self.spatial.transition(plan["id"], "cancel", plan["session_id"], now)
 
     def wake_for_message(self, text, session, now):
         config = self.config.life
+        if text.lstrip().startswith("/"):
+            return False
         if not (config.enabled and config.schedule_enabled and config.wake_enabled):
             return False
         if not any(word.strip() and word.strip().casefold() in text.casefold() for word in config.wake_keywords):
@@ -42,6 +46,7 @@ class Living:
         if not (current and current["kind"] == "sleep") and not self.awake_until(now):
             return False
         if current and current["kind"] == "sleep":
+            self.engine.advance(now)
             self.spatial.transition(current["id"], "cancel", current["session_id"], now)
         with self.engine.store.db:
             self.engine.store.put("runtime", {"id": "awakening", "until": (now + timedelta(minutes=config.wake_minutes)).isoformat(),
@@ -232,6 +237,11 @@ class Living:
                           if e["importance"] >= 2 and e["id"] not in sent["experience_ids"]
                           and 0 <= (now - engine.time(e["occurred_at"])).total_seconds() < 6 * 3600]
             notices = []
+            for item in Anniversaries(engine.store).upcoming(now.date(), session):
+                if item["enabled"] and item["days_left"] == 0:
+                    notices.append((f"anniversary:{item['id']}:{item['next_date']}",
+                                    f"今天是{item['person']}的{item['title']}，按用户配置的{item['calendar_label']}{item['date_label']}计算。"
+                                    "可自然表达祝福，不编造共同经历；不知道出生年份时不要猜年龄。", None))
             for plan in engine.plans(session):
                 if plan["session_id"] != session or not plan["participants"]:
                     continue

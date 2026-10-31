@@ -56,7 +56,7 @@ def test_all_page_bindings_match_real_registered_api():
     raw = (Path(__file__).parents[1] / "webui.json").read_bytes()
     assert len(raw) <= 128 * 1024
     pages = json.loads(raw)["pages"]
-    assert len(pages) == 9
+    assert len(pages) == 10
     for page in pages:
         for binding in [*page["queries"].values(), *page["actions"].values()]:
             component = components[binding["api"]]
@@ -72,7 +72,7 @@ def test_all_page_bindings_match_real_registered_api():
 async def test_page_queries_do_not_mutate_life(plugin):
     before = plugin.store.db.total_changes
     for query in (plugin.ui_overview, plugin.ui_schedule, plugin.ui_world, plugin.ui_space,
-                  plugin.ui_dreams, plugin.ui_habits, plugin.ui_records, plugin.ui_continuity):
+                  plugin.ui_dreams, plugin.ui_habits, plugin.ui_records, plugin.ui_continuity, plugin.ui_anniversaries):
         result = await query()
         json.dumps(result, ensure_ascii=False, allow_nan=False)
     assert plugin.store.db.total_changes == before

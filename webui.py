@@ -27,6 +27,27 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_anniversaries", description="个人资料和纪念日")
+    async def ui_anniversaries(self) -> dict:
+        return {"profiles": self.store.all("profile"), "anniversaries": self.anniversaries.upcoming(self.now().date())}
+
+    @API("ui_save_profile", description="保存个人资料")
+    async def ui_save_profile(self, name: str, session_id: str, user_id: str = "", notes: str = "", profile_id: str = "") -> dict:
+        return self.anniversaries.save_profile(name, session_id, user_id, notes, profile_id)
+
+    @API("ui_save_anniversary", description="保存生日或纪念日")
+    async def ui_save_anniversary(self, profile_id: str, title: str, calendar: str, month: int, day: int,
+                                  year: int = 0, leap_month: bool = False, enabled: bool = True, anniversary_id: str = "") -> dict:
+        return self.anniversaries.save_date(profile_id, title, calendar, month, day, year, leap_month, enabled, anniversary_id)
+
+    @API("ui_delete_profile", description="删除个人资料及关联纪念日")
+    async def ui_delete_profile(self, profile_id: str) -> dict:
+        return self.anniversaries.delete("profile", profile_id)
+
+    @API("ui_delete_anniversary", description="删除纪念日")
+    async def ui_delete_anniversary(self, anniversary_id: str) -> dict:
+        return self.anniversaries.delete("anniversary", anniversary_id)
+
     @API("ui_overview", description="生活状态和趋势")
     async def ui_overview(self) -> dict:
         now, state = self.now(), self.engine.state()
@@ -37,6 +58,8 @@ class WebUI:
         history = sorted(self.store.all("state_history"), key=lambda r: r["at"])[-144:]
         return {"state": state, "activity": current["title"] if current else "空闲", "travel": travel,
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
+                "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",
+                "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "未处于关键词唤醒时段",
                 "mood_label": "心情不错" if state["mood"] > 10 else ("有些低落" if state["mood"] < -10 else "平静"),
                 "updated_at": display_time(state["updated_at"]), "enabled": "已启用" if self.config.life.enabled else "已停用",
                 "pending_count": sum(p["status"] in {"scheduled", "active"} for p in plans),

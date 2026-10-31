@@ -90,6 +90,22 @@
                     "source": "data",
                     "field": "enabled"
                   }
+                },
+                {
+                  "type": "text",
+                  "label": "作息模式",
+                  "value": {
+                    "source": "data",
+                    "field": "schedule_mode"
+                  }
+                },
+                {
+                  "type": "text",
+                  "label": "唤醒保持至",
+                  "value": {
+                    "source": "data",
+                    "field": "awake_until"
+                  }
                 }
               ]
             }
@@ -3107,6 +3123,478 @@
             {
               "field": "created_at",
               "label": "开始时间"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "anniversaries",
+      "title": "个人资料与纪念日",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_anniversaries",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "add_profile": {
+          "api": "ui_save_profile",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "user_id": {
+              "type": "string",
+              "required": false
+            },
+            "notes": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "edit_profile": {
+          "api": "ui_save_profile",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "user_id": {
+              "type": "string",
+              "required": false
+            },
+            "notes": {
+              "type": "string",
+              "required": false
+            },
+            "profile_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "profile_id": {
+              "scope": "selection",
+              "source": "profile",
+              "field": "id"
+            }
+          }
+        },
+        "add_date": {
+          "api": "ui_save_anniversary",
+          "version": "1",
+          "parameters": {
+            "profile_id": {
+              "type": "string",
+              "required": true
+            },
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "calendar": {
+              "type": "string",
+              "required": true
+            },
+            "month": {
+              "type": "integer",
+              "required": true
+            },
+            "day": {
+              "type": "integer",
+              "required": true
+            },
+            "year": {
+              "type": "integer",
+              "required": false
+            },
+            "leap_month": {
+              "type": "boolean",
+              "required": false
+            },
+            "enabled": {
+              "type": "boolean",
+              "required": false
+            }
+          },
+          "arguments": {
+            "profile_id": {
+              "scope": "selection",
+              "source": "profile",
+              "field": "id"
+            }
+          }
+        },
+        "edit_date": {
+          "api": "ui_save_anniversary",
+          "version": "1",
+          "parameters": {
+            "profile_id": {
+              "type": "string",
+              "required": true
+            },
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "calendar": {
+              "type": "string",
+              "required": true
+            },
+            "month": {
+              "type": "integer",
+              "required": true
+            },
+            "day": {
+              "type": "integer",
+              "required": true
+            },
+            "year": {
+              "type": "integer",
+              "required": false
+            },
+            "leap_month": {
+              "type": "boolean",
+              "required": false
+            },
+            "enabled": {
+              "type": "boolean",
+              "required": false
+            },
+            "anniversary_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "profile_id": {
+              "scope": "selection",
+              "source": "anniversary",
+              "field": "profile_id"
+            },
+            "anniversary_id": {
+              "scope": "selection",
+              "source": "anniversary",
+              "field": "id"
+            }
+          }
+        },
+        "delete_profile": {
+          "api": "ui_delete_profile",
+          "version": "1",
+          "parameters": {
+            "profile_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "profile_id": {
+              "scope": "selection",
+              "source": "profile",
+              "field": "id"
+            }
+          }
+        },
+        "delete_date": {
+          "api": "ui_delete_anniversary",
+          "version": "1",
+          "parameters": {
+            "anniversary_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "anniversary_id": {
+              "scope": "selection",
+              "source": "anniversary",
+              "field": "id"
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "text",
+          "value": "先添加个人资料，再选中该人物添加生日或纪念日。资料仅用于所属聊天流。提醒还需在插件配置中开启主动交流，并添加相同聊天流。"
+        },
+        {
+          "type": "table",
+          "label": "个人资料",
+          "value": {
+            "source": "data",
+            "field": "profiles"
+          },
+          "columns": [
+            {
+              "field": "name",
+              "label": "称呼"
+            },
+            {
+              "field": "session_id",
+              "label": "聊天流"
+            },
+            {
+              "field": "user_id",
+              "label": "用户 ID"
+            },
+            {
+              "field": "notes",
+              "label": "备注"
+            }
+          ],
+          "selection": "profile"
+        },
+        {
+          "type": "collapsible",
+          "label": "填写个人资料",
+          "children": [
+            {
+              "type": "text",
+              "value": "新增时填写以下资料；修改时先选中表格中的人物，再填写完整的新资料。"
+            },
+            {
+              "type": "grid",
+              "columns": 2,
+              "children": [
+                {
+                  "type": "input",
+                  "name": "name",
+                  "label": "姓名或称呼（必填）",
+                  "value": ""
+                },
+                {
+                  "type": "input",
+                  "name": "session_id",
+                  "label": "所属聊天流 ID（必填，从 /maiweave 复制）",
+                  "value": ""
+                },
+                {
+                  "type": "input",
+                  "name": "user_id",
+                  "label": "用户 ID（选填）",
+                  "value": ""
+                },
+                {
+                  "type": "input",
+                  "name": "notes",
+                  "label": "个人资料备注（选填）",
+                  "value": ""
+                }
+              ]
+            },
+            {
+              "type": "button",
+              "label": "添加个人资料",
+              "action": "add_profile"
+            },
+            {
+              "type": "button",
+              "label": "保存资料修改",
+              "action": "edit_profile",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "profile",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            },
+            {
+              "type": "text",
+              "value": "删除个人资料会同时删除该人物的所有纪念日。"
+            },
+            {
+              "type": "button",
+              "label": "删除所选资料及其纪念日",
+              "action": "delete_profile",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "profile",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "生日与纪念日",
+          "value": {
+            "source": "data",
+            "field": "anniversaries"
+          },
+          "columns": [
+            {
+              "field": "person",
+              "label": "人物"
+            },
+            {
+              "field": "title",
+              "label": "名称"
+            },
+            {
+              "field": "calendar_label",
+              "label": "历法"
+            },
+            {
+              "field": "date_label",
+              "label": "原日期"
+            },
+            {
+              "field": "year",
+              "label": "起始年份（0为未填）"
+            },
+            {
+              "field": "next_date",
+              "label": "下次公历日期"
+            },
+            {
+              "field": "days_left",
+              "label": "剩余天数"
+            },
+            {
+              "field": "enabled_label",
+              "label": "提醒"
+            }
+          ],
+          "selection": "anniversary"
+        },
+        {
+          "type": "text",
+          "value": "公历2月29日平年按2月28日；农历闰月当年不存在时按普通同月，三十遇小月按最后一天。年份按所选历法填写；未填年份不会计算年龄或周年数。"
+        },
+        {
+          "type": "collapsible",
+          "label": "填写生日或纪念日",
+          "children": [
+            {
+              "type": "text",
+              "value": "新增时选择上方人物；修改时选择纪念日并填写完整的新日期。切换选中行不会自动填入表单。"
+            },
+            {
+              "type": "grid",
+              "columns": 2,
+              "children": [
+                {
+                  "type": "input",
+                  "name": "title",
+                  "label": "名称（必填，例如生日、相识纪念日）",
+                  "value": "生日"
+                },
+                {
+                  "type": "select",
+                  "name": "calendar",
+                  "label": "日期历法",
+                  "value": "solar",
+                  "options": [
+                    {
+                      "value": "solar",
+                      "label": "公历"
+                    },
+                    {
+                      "value": "lunar",
+                      "label": "农历"
+                    }
+                  ]
+                },
+                {
+                  "type": "input",
+                  "name": "month",
+                  "label": "月份（1—12）",
+                  "value": 1
+                },
+                {
+                  "type": "input",
+                  "name": "day",
+                  "label": "日期（农历1—30）",
+                  "value": 1
+                },
+                {
+                  "type": "input",
+                  "name": "year",
+                  "label": "出生或起始年份（选填，0 表示不记录年份）",
+                  "value": 0
+                },
+                {
+                  "type": "switch",
+                  "name": "leap_month",
+                  "label": "农历闰月（公历忽略）",
+                  "value": false
+                },
+                {
+                  "type": "switch",
+                  "name": "enabled",
+                  "label": "开启当日提醒",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "type": "button",
+              "label": "添加到所选人物",
+              "action": "add_date",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "profile",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            },
+            {
+              "type": "button",
+              "label": "保存纪念日修改",
+              "action": "edit_date",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "anniversary",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            },
+            {
+              "type": "button",
+              "label": "删除所选纪念日",
+              "action": "delete_date",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "anniversary",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
             }
           ]
         }

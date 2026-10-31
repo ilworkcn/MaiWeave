@@ -1,9 +1,9 @@
 [project]
 name = "maiweave"
-version = "0.3.4"
+version = "0.4.0"
 description = "MaiBot 持续角色生活引擎"
 requires-python = ">=3.10"
-dependencies = ["maibot-plugin-sdk==2.21.0", "tzdata>=2026.1"]
+dependencies = ["maibot-plugin-sdk==2.21.0", "tzdata>=2026.1", "lunar_python==1.4.8"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio>=0.24"]

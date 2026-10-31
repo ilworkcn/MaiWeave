@@ -26,6 +26,7 @@ from .dreams import Dreams
 from .feature_tools import FeatureTools
 from .webui import WebUI
 from .continuity import Continuity
+from .anniversaries import Anniversaries
 
 
 def schema(properties: dict, required: list[str]) -> dict:
@@ -90,6 +91,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     async def on_load(self):
         self.store = Store(Path(self.ctx.paths.data_dir) / "maiweave.sqlite3")
+        self.anniversaries = Anniversaries(self.store)
         self.engine = LifeEngine(self.store, self.config.life.timezone, self.now())
         self.spatial = Spatial(self.engine)
         self.world = World(self.engine, self.ctx, self.config)
@@ -200,8 +202,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         snapshot["schedule_notices"] = [r for r in self.store.all("schedule_notice") if self.engine.visible(r, session)]
         snapshot["sleep_policy"] = {
             "mode": "按作息生活" if self.config.life.schedule_enabled else "全天候交流，不因夜间作息拒绝交流",
-            "awakening": self.store.find("runtime", "awakening") if self.living.awake_until(self.now()) else None,
+            "awake_until": self.living.awake_until(self.now()).isoformat() if self.config.life.schedule_enabled and self.living.awake_until(self.now()) else "",
         }
+        snapshot["profiles"] = [p for p in self.store.all("profile") if p["session_id"] == session]
+        snapshot["anniversaries"] = [item for item in self.anniversaries.upcoming(self.now().date(), session) if item["days_left"] <= 30]
         return (
             "\n【MaiWeave 当前生活】\n"
             "以下记录是当前角色生活状态。对话涉及安排的新增、修改、取消时使用 maiweave 工具，"
@@ -217,6 +221,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "新出现的临时事件可用 maiweave_continuity 的 replan 调整可变动日程。"
             "有具体后续时间的话题可保存为跟进事项，已解决时关闭；不要每轮制造待办。"
             "接续活动沿用保存的具体进度；关联目标时使用当前阶段 goal_step_id，不能跳过阶段。\n"
+            "sleep_policy 中的 awake_until 尚未到期时表示已经醒来，不要说自己仍在睡觉。"
+            "个人资料和纪念日来自用户配置，只用于所属聊天流；未填写年份时不要猜测年龄。\n"
             + json.dumps(snapshot, ensure_ascii=False)
         )
 
@@ -374,7 +380,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.3.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.4.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

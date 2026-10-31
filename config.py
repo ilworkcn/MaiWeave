@@ -11,7 +11,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.3.4", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.4.0", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
