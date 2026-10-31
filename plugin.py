@@ -60,7 +60,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         groups = [
             ("life", "life", "生活开关", "控制生活推进与自主活动。", ["enabled", "autonomous"]),
             ("profile", "life", "角色设定", "时区已有默认值，背景和兴趣按需补充。", ["timezone", "interests", "background"]),
-            ("sleep", "life", "日常作息", "使用 24 小时制；默认晚上 23 点入睡、早上 7 点起床。", ["sleep_hour", "wake_hour"]),
+            ("sleep", "life", "日常作息", "关闭作息可全天候交流；开启后按 24 小时制安排睡眠。", ["schedule_enabled", "sleep_hour", "wake_hour"]),
+            ("wake", "life", "睡眠唤醒", "按自定义词识别需要陪伴的表达，不额外调用模型。", ["wake_enabled", "wake_minutes", "wake_keywords"]),
             ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
             ("weather", "world", "实时天气", "填写城市后获取天气；城市不预填，以免使用错误地点。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
@@ -77,7 +78,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                 "collapsed": key == "planning",
             }
         schema["layout"] = {"type": "tabs", "tabs": [
-            {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "dreams", "planning"], "order": 0},
+            {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
             {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
             {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "plugin"], "order": 3},
@@ -97,6 +98,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
         self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
+        self.living.apply_schedule(self.now())
         self.last_error = ""
         self.last_errors = {}
         self.jobs = set()
@@ -125,6 +127,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     async def tick(self):
         now = self.now()
+        self.living.apply_schedule(now)
         for name, job in [("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn)]:
             try:
                 job(now)
@@ -195,6 +198,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         snapshot["continuity"] = self.continuity.context(session, self.now())
         snapshot["schedule_issues"] = [r for r in self.store.all("schedule_issue") if self.engine.visible(r, session)]
         snapshot["schedule_notices"] = [r for r in self.store.all("schedule_notice") if self.engine.visible(r, session)]
+        snapshot["sleep_policy"] = {
+            "mode": "按作息生活" if self.config.life.schedule_enabled else "全天候交流，不因夜间作息拒绝交流",
+            "awakening": self.store.find("runtime", "awakening") if self.living.awake_until(self.now()) else None,
+        }
         return (
             "\n【MaiWeave 当前生活】\n"
             "以下记录是当前角色生活状态。对话涉及安排的新增、修改、取消时使用 maiweave 工具，"
@@ -342,6 +349,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @HookHandler("chat.receive.after_process", name="maiweave_status")
     async def management_message(self, message: dict, **kwargs):
         if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
+            self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now())
             return {"action": "continue"}
         # 接收 Hook 早于会话创建；先打开原生会话，首次使用指令也能收到回复。
         info = message["message_info"]
@@ -366,7 +374,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.3.3\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.3.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

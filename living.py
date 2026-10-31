@@ -20,6 +20,35 @@ class Living:
         self.spatial, self.rhythm, self.world = spatial, rhythm, world
         self.continuity = continuity
 
+    def awake_until(self, now):
+        record = self.engine.store.find("runtime", "awakening")
+        return self.engine.time(record["until"]) if record and self.engine.time(record["until"]) > now else None
+
+    def apply_schedule(self, now):
+        """切换全天候模式时撤销自主睡眠，保留用户明确安排的日程。"""
+        if not self.config.life.enabled or self.config.life.schedule_enabled:
+            return
+        for plan in self.engine.store.all("plan"):
+            if plan["autonomous"] and plan["kind"] == "sleep" and plan["status"] in {"scheduled", "active", "paused", "blocked"}:
+                self.spatial.transition(plan["id"], "cancel", plan["session_id"], now)
+
+    def wake_for_message(self, text, session, now):
+        config = self.config.life
+        if not (config.enabled and config.schedule_enabled and config.wake_enabled):
+            return False
+        if not any(word.strip() and word.strip().casefold() in text.casefold() for word in config.wake_keywords):
+            return False
+        current = self.engine.current(now)
+        if not (current and current["kind"] == "sleep") and not self.awake_until(now):
+            return False
+        if current and current["kind"] == "sleep":
+            self.spatial.transition(current["id"], "cancel", current["session_id"], now)
+        with self.engine.store.db:
+            self.engine.store.put("runtime", {"id": "awakening", "until": (now + timedelta(minutes=config.wake_minutes)).isoformat(),
+                                             "reason": "聊天命中陪伴唤醒关键词，已醒来，可以自然回应", "session_id": session})
+        self.ctx.logger.info("MaiWeave 已由关键词唤醒，保持清醒 %s 分钟", config.wake_minutes)
+        return True
+
     def adjust(self, now, reason="", unavailable_until=""):
         """环境和临时事件改变时，重排可变动安排并记录原因。"""
         if not self.config.continuity.adaptive_schedule:
@@ -86,6 +115,8 @@ class Living:
 
     async def choose_activity(self, now: datetime):
         engine, config = self.engine, self.config.life
+        if config.schedule_enabled and self.awake_until(now):
+            return
         if not config.autonomous or engine.current(now):
             return
         busy = engine.store.find("runtime", "busy")
@@ -104,8 +135,10 @@ class Living:
         goal_id = ""
         goal_step_id = ""
         habit = self.rhythm.candidate(now)
+        if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
+            habit = None
         next_step = self.continuity.next_step()
-        if in_hours(now.hour, config.sleep_hour, config.wake_hour):
+        if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
             title, kind, location, motivation = "睡觉", "sleep", self.spatial.place("home")["name"], "按习惯休息，恢复精力"
             minutes = free
         elif state["hunger"] >= 65:

@@ -11,7 +11,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.3.3", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.3.4", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -22,6 +22,10 @@ class LifeConfig(PluginConfigBase):
     autonomous: bool = setting("自主安排活动", default=True, description="空闲时由角色选择活动")
     timezone: str = setting("生活时区（必填）", default="Asia/Shanghai", description="已填中国标准时间，可直接使用；其他地区例如 Asia/Tokyo。")
     model_task: str = setting("生活规划模型任务（必填）", default="utils", description="默认 utils；填写 MaiBot 中已配置的模型任务名称，无需填写密钥。")
+    schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后不自动安排夜间睡眠，可全天候交流；明确约定的日程仍保留。")
+    wake_enabled: bool = setting("允许关键词唤醒", default=True, description="遵循作息时，普通聊天命中关键词可中断睡眠；原消息仍正常进入对话。")
+    wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项一个，按文字包含匹配，不是模型情绪诊断；清空后不触发。可按需要增删默认词。")
+    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="期间不自主安排活动；再次命中关键词延长清醒时间，到期后恢复作息。")
     sleep_hour: int = setting("习惯入睡时间（整点）", default=23, ge=0, le=23, description="夜间睡眠窗口开始时间")
     wake_hour: int = setting("习惯起床时间（整点）", default=7, ge=0, le=23, description="夜间睡眠窗口结束时间")
     tick_seconds: int = setting("状态更新间隔（秒）", default=60, ge=10, description="每次推进生活的间隔")
