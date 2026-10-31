@@ -9,7 +9,7 @@ from maibot_sdk import API
 from .models import GoalInput, PlanInput, PlanPatch, RoutineInput
 
 KIND = {"sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交"}
-STATUS = {"scheduled": "未开始", "active": "进行中", "completed": "已完成", "cancelled": "已取消", "paused": "已暂停", "awaiting_confirmation": "等待完成确认"}
+STATUS = {"scheduled": "未开始", "active": "进行中", "completed": "已完成", "cancelled": "已取消", "paused": "已暂停", "awaiting_confirmation": "等待完成确认", "blocked": "需要调整"}
 SOURCE = {"reported": "用户陈述", "observed": "交互观测", "simulated": "角色模拟", "dream": "梦境"}
 FREQUENCY = {"daily": "按日", "weekly": "按周", "monthly": "按月"}
 WEEKDAYS = {"周一": 0, "周二": 1, "周三": 2, "周四": 3, "周五": 4, "周六": 5, "周日": 6}
@@ -59,14 +59,15 @@ class WebUI:
         return {"plans": [plan_row(p) for p in plans],
                 "rules": [{**r, "frequency_label": FREQUENCY[r["frequency"]], "status_label": STATUS[r["status"]],
                            "weekdays_label": "、".join(list(WEEKDAYS)[d] for d in r["weekdays"]), "exceptions_label": "、".join(r["exceptions"]),
-                           "kind_label": KIND[r["kind"]]} for r in rules], "issues": self.store.all("routine_issue")[-100:]}
+                           "kind_label": KIND[r["kind"]]} for r in rules], "issues": self.store.all("routine_issue")[-100:],
+                "schedule_issues": self.store.all("schedule_issue"), "notices": self.store.all("schedule_notice"), "adjustments": self.store.all("adjustment")[-50:]}
 
     @API("ui_create_plan", description="新增生活安排")
-    async def ui_create_plan(self, title: str, start: str, end: str, kind: str = "leisure", location: str = "", session_id: str = "", participants: str = "", simulation: bool = True) -> dict:
+    async def ui_create_plan(self, title: str, start: str, end: str, kind: str = "leisure", location: str = "", session_id: str = "", participants: str = "", simulation: bool = True, flexible: bool = False) -> dict:
         self.require_life()
         self.engine.advance(self.now())
         value = PlanInput(title=title, start=start, end=end, kind=kind, location=location,
-                          participants=[v.strip() for v in participants.split(",") if v.strip()], simulation=simulation)
+                          participants=[v.strip() for v in participants.split(",") if v.strip()], simulation=simulation, flexible=flexible)
         return self.spatial.schedule(value, session_id, self.now())
 
     @API("ui_plan_action", description="取消、暂停或恢复所选日程")
@@ -74,7 +75,7 @@ class WebUI:
         self.require_life()
         self.engine.advance(self.now())
         plan = self.store.get("plan", plan_id)
-        return self.engine.transition(plan_id, action, plan["session_id"], self.now())
+        return self.spatial.transition(plan_id, action, plan["session_id"], self.now())
 
     @API("ui_update_plan", description="修改所选日程")
     async def ui_update_plan(self, plan_id: str, new_title: str = "", new_start: str = "", new_end: str = "", new_location: str = "") -> dict:
@@ -238,3 +239,57 @@ class WebUI:
         self.require_life()
         goal = self.store.get("goal", goal_id)
         return self.engine.close_goal(goal_id, goal["session_id"])
+
+    @API("ui_continuity", description="活动接续、阶段目标与待跟进事项")
+    async def ui_continuity(self) -> dict:
+        goals = self.store.all("goal")
+        return {
+            "reflections": self.store.all("reflection")[-50:][::-1],
+            "preferences": [{**p, "evidence": "、".join(p["evidence_ids"])} for p in self.store.all("preference")],
+            "continuations": [{**p, "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")][-30:],
+            "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")][-50:],
+            "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
+                         "request_label": "已向宿主请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")][-100:],
+            "goals": [{**g, "outline_status": g.get("outline_status", "待分解"), "outline_error": g.get("outline_error", ""), "status_label": STATUS[g["status"]]} for g in goals],
+            "steps": [{**s, "goal_title": g["title"], "status_label": {"pending": "未开始", "active": "进行中", "completed": "已完成"}[s["status"]]} for g in goals for s in g.get("steps", [])],
+            "jobs": self.store.all("job")[-10:],
+        }
+
+    @API("ui_reflect", description="后台生成或重试活动具体结果")
+    async def ui_reflect(self, plan_id: str) -> dict:
+        self.require_life()
+        return self.start_job("整理活动结果", self.continuity.reflect(plan_id, self.now()))
+
+    @API("ui_outline", description="后台分解或调整目标阶段")
+    async def ui_outline(self, goal_id: str, revise: bool = False) -> dict:
+        self.require_life()
+        return self.start_job("规划目标阶段", self.continuity.outline(goal_id, self.now(), revise))
+
+    @API("ui_replan", description="根据临时事件调整可变动安排")
+    async def ui_replan(self, reason: str, unavailable_until: str) -> dict:
+        self.require_life()
+        if not reason.strip() or not unavailable_until:
+            raise ValueError("请填写临时事件原因和结束时间")
+        return {"adjustments": self.living.adjust(self.now(), reason, unavailable_until)}
+
+    @API("ui_save_thread", description="保存需要接续的话题")
+    async def ui_save_thread(self, title: str, context: str, due_at: str, session_id: str, thread_id: str = "") -> dict:
+        self.require_life()
+        if thread_id:
+            session_id = self.store.get("thread", thread_id)["session_id"]
+        return self.continuity.save_thread(title, context, session_id, due_at, self.now(), thread_id)
+
+    @API("ui_resolve_thread", description="关闭已经解决的跟进事项")
+    async def ui_resolve_thread(self, thread_id: str) -> dict:
+        self.require_life()
+        thread = self.store.get("thread", thread_id)
+        return self.continuity.resolve_thread(thread_id, thread["session_id"], self.now())
+
+    @API("ui_resolve_effect", description="结束所选事件的持续影响")
+    async def ui_resolve_effect(self, effect_id: str) -> dict:
+        self.require_life()
+        effect = self.store.get("effect", effect_id)
+        effect["status"] = "resolved"
+        with self.store.db:
+            self.store.put("effect", effect)
+        return effect

@@ -26,6 +26,8 @@ class PlanInput(BaseModel):
     participants: list[str] = Field(default_factory=list)
     simulation: bool = True
     goal_id: str = ""
+    goal_step_id: str = ""
+    flexible: bool = False
 
 
 class ExperienceInput(BaseModel):
@@ -45,6 +47,7 @@ class ActivityChoice(BaseModel):
     location: str
     motivation: str
     goal_id: str = ""
+    goal_step_id: str = ""
 
 
 class LifeState(BaseModel):
@@ -79,6 +82,7 @@ class PlanPatch(BaseModel):
     kind: Kind | None = None
     location: str | None = None
     motivation: str | None = None
+    flexible: bool | None = None
 
     @model_validator(mode="after")
     def has_changes(self):
@@ -110,3 +114,35 @@ class DreamContent(BaseModel):
     story: str = Field(min_length=1, max_length=1600)
     feeling: str = Field(min_length=1, max_length=160)
     mood_delta: float = Field(default=0, ge=-3, le=3)
+
+
+class ActivityMeaning(BaseModel):
+    activity: str = Field(min_length=1, max_length=80)
+    subject: str = Field(default="", max_length=160)
+
+
+class ActivityOutcome(ActivityMeaning):
+    summary: str = Field(min_length=1, max_length=1500)
+    details: dict[str, str]
+    enjoyment: float = Field(ge=-5, le=5)
+    mood: float = Field(default=0, ge=-5, le=5)
+    stress: float = Field(default=0, ge=-5, le=5)
+    next_action: str = Field(default="", max_length=300)
+    goal_units: int = Field(default=1, ge=0, le=1)
+
+
+class ActivityAssessment(ActivityMeaning):
+    goal_units: int = Field(default=0, ge=0, le=1)
+    next_action: str = Field(default="", max_length=300)
+
+
+class GoalStep(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    criterion: str = Field(min_length=1, max_length=300)
+    sessions: int = Field(ge=1, le=100)
+    minutes: int = Field(default=30, ge=10, le=120)
+    kind: Literal["study", "work", "leisure", "rest"] = "study"
+
+
+class GoalOutline(BaseModel):
+    steps: list[GoalStep] = Field(min_length=1, max_length=12)

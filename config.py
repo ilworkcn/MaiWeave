@@ -11,7 +11,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.2.0", description="配置版本，由插件维护")
+    config_version: str = setting("配置版本", default="0.3.0", description="配置版本，由插件维护")
 
 
 class LifeConfig(PluginConfigBase):
@@ -73,6 +73,16 @@ class DreamConfig(PluginConfigBase):
     mood_effect: bool = setting("梦境影响醒后心情", default=True, description="允许梦境带来小幅情绪变化")
 
 
+class ContinuityConfig(PluginConfigBase):
+    __ui_label__ = "生活连贯性"
+    outcomes_enabled: bool = setting("生成具体活动结果", default=True, description="独自模拟活动结束后生成细节、感受和下次接续内容")
+    semantic_learning: bool = setting("归并同类活动与学习偏好", default=True, description="使用宿主模型归并不同说法，依据已发生体验更新偏好")
+    goal_planning: bool = setting("分解与推进长期目标", default=True, description="将目标拆成可执行阶段，并依据活动结果推进")
+    adaptive_schedule: bool = setting("动态调整自主日程", default=True, description="天气、精力与临时事件改变时调整可变动安排")
+    reminder_minutes: int = setting("共同安排提前提醒（分钟）", default=30, ge=1, le=120, description="使用已有主动交流开关、时段和额度")
+    followup_hours: int = setting("未完成事项跟进间隔（小时）", default=24, ge=1, description="关系中的未解决事项进入一次性跟进队列")
+
+
 class MaiWeaveConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     life: LifeConfig = Field(default_factory=LifeConfig)
@@ -81,3 +91,4 @@ class MaiWeaveConfig(PluginConfigBase):
     world: WorldConfig = Field(default_factory=WorldConfig)
     rhythm: RhythmConfig = Field(default_factory=RhythmConfig)
     dreams: DreamConfig = Field(default_factory=DreamConfig)
+    continuity: ContinuityConfig = Field(default_factory=ContinuityConfig)

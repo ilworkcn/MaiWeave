@@ -1,6 +1,6 @@
 [project]
 name = "maiweave"
-version = "0.2.0"
+version = "0.3.0"
 description = "MaiBot 持续角色生活引擎"
 requires-python = ">=3.10"
 dependencies = ["maibot-plugin-sdk==2.21.0", "tzdata>=2026.1"]

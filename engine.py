@@ -1,6 +1,7 @@
 """生活规则与业务操作，不依赖 MaiBot 运行时。"""
 
 from datetime import datetime, timedelta
+import math
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -47,7 +48,7 @@ class LifeEngine:
             raise ValueError("结束时间必须晚于开始时间")
         for plan in self.store.all("plan"):
             excluded = {exclude} if isinstance(exclude, str) else exclude
-            if plan["id"] not in excluded and plan["status"] in ACTIVE:
+            if plan["id"] not in excluded and plan["status"] in ACTIVE and not (plan.get("activity_id") and plan["status"] == "scheduled"):
                 if start < self.time(plan["end"]) and end > self.time(plan["start"]):
                     raise ValueError("这段时间已有安排，请选择其他时间或先调整原安排")
 
@@ -60,16 +61,21 @@ class LifeEngine:
             goal = self.owned("goal", value.goal_id, session)
             if goal["status"] != "active":
                 raise ValueError("该目标已结束")
+            if goal.get("steps"):
+                step = next((s for s in goal["steps"] if s["status"] != "completed"), None)
+                if not step or value.goal_step_id != step["id"]:
+                    raise ValueError("关联分阶段目标时，请填写当前未完成阶段的 goal_step_id")
         plan = {**value.model_dump(), "id": uid(), "session_id": session,
                 "start": start.isoformat(), "end": end.isoformat(), "status": "scheduled",
-                "autonomous": autonomous, "elapsed_seconds": 0, "created_at": now.isoformat(), "changes": []}
+                "autonomous": autonomous, "flexible": value.flexible or autonomous,
+                "elapsed_seconds": 0, "created_at": now.isoformat(), "changes": []}
         with self.store.db:
             self.store.put("plan", plan)
         return plan
 
     def change_plan(self, record_id: str, patch: PlanPatch, session: str, now: datetime) -> dict:
         plan = self.owned("plan", record_id, session)
-        if plan["status"] not in ACTIVE | {"paused"}:
+        if plan["status"] not in ACTIVE | {"paused", "blocked"}:
             raise ValueError("已结束的计划不能改期；请创建新计划或修订经历")
         changes = patch.model_dump(exclude_unset=True)
         updated = {**plan, **changes}
@@ -81,7 +87,7 @@ class LifeEngine:
         self._check_interval(start, end, {record_id, plan.get("travel_id", "")})
         updated.update(start=start.isoformat(), end=end.isoformat())
         updated["changes"].append({"at": now.isoformat(), "before": {k: plan[k] for k in changes}, "after": changes})
-        if "start" in changes:
+        if "start" in changes or updated["status"] == "blocked":
             updated["status"] = "scheduled"
         elif updated["status"] == "paused" and "end" in changes:
             updated["remaining_seconds"] = (end - now).total_seconds()
@@ -92,7 +98,7 @@ class LifeEngine:
     def transition(self, record_id: str, action: str, session: str, now: datetime) -> dict:
         plan = self.owned("plan", record_id, session)
         previous = plan["status"]
-        if action == "cancel" and previous in ACTIVE | {"paused", "awaiting_confirmation"}:
+        if action == "cancel" and previous in ACTIVE | {"paused", "awaiting_confirmation", "blocked"}:
             plan["status"] = "cancelled"
         elif action == "pause" and previous == "active":
             plan["status"] = "paused"
@@ -142,7 +148,7 @@ class LifeEngine:
                 plan["experience_id"] = record["id"]
                 plan["changes"].append({"at": now.isoformat(), "action": "record_completion", "source": value.source})
                 self.store.put("plan", plan)
-                self._progress_goal(plan)
+                self._progress_goal(plan, confirmed=True)
                 state = self.state()
                 self._completion_effect(state, plan)
                 self.store.put("state", state)
@@ -182,9 +188,22 @@ class LifeEngine:
         goal["status"] = "cancelled"
         with self.store.db:
             self.store.put("goal", goal)
+            for plan in self.store.all("plan"):
+                if plan["goal_id"] == record_id and plan["autonomous"] and plan["status"] == "scheduled":
+                    plan["status"] = "cancelled"
+                    self.store.put("plan", plan)
+                    if plan.get("travel_id"):
+                        trip = self.store.get("plan", plan["travel_id"])
+                        if trip["status"] == "scheduled":
+                            trip["status"] = "cancelled"
+                            self.store.put("plan", trip)
         return goal
 
-    def _progress_goal(self, plan: dict):
+    def _progress_goal(self, plan: dict, confirmed=False):
+        if plan.get("goal_step_id"):
+            if confirmed:
+                self.progress_stage(plan, 1, "已通过经历确认完成")
+            return
         if plan["goal_id"]:
             goal = self.store.get("goal", plan["goal_id"])
             if goal["status"] == "active":
@@ -192,6 +211,24 @@ class LifeEngine:
                 if goal["completed_sessions"] >= goal["target_sessions"]:
                     goal["status"] = "completed"
                 self.store.put("goal", goal)
+
+    def progress_stage(self, plan, units, note):
+        if plan.get("goal_progress_applied"):
+            return
+        goal = self.store.get("goal", plan["goal_id"])
+        step = next(s for s in goal["steps"] if s["id"] == plan["goal_step_id"])
+        step["note"] = note
+        if goal["status"] == "active":
+            added = min(units, step["sessions"] - step["completed_sessions"])
+            step["completed_sessions"] += added
+            step["status"] = "completed" if step["completed_sessions"] >= step["sessions"] else "active"
+            goal["completed_sessions"] += added
+            if all(s["status"] == "completed" for s in goal["steps"]):
+                goal["status"] = "completed"
+        plan["goal_progress_applied"] = True
+        with self.store.db:
+            self.store.put("goal", goal)
+            self.store.put("plan", plan)
 
     def relationship(self, session: str, person: str) -> dict:
         key = f"{session}:{person}"
@@ -209,9 +246,25 @@ class LifeEngine:
         relation["history"].append({"at": now.isoformat(), **change.model_dump(exclude_unset=True)})
         with self.store.db:
             self.store.put("relationship", relation)
+            if "unresolved" in change.model_fields_set:
+                key = "relationship:" + relation["id"]
+                if relation["unresolved"]:
+                    self.add_effect(key, relation["unresolved"], -1, 2, now, 72, session)
+                else:
+                    effect = self.store.find("effect", key)
+                    if effect:
+                        effect["status"] = "resolved"
+                        self.store.put("effect", effect)
         return relation
 
-    def affect(self, mood: float, stress: float, reason: str, now: datetime) -> dict:
+    def add_effect(self, key, reason, mood, stress, now, duration_hours, session=""):
+        record = {"id": key, "session_id": session, "reason": reason, "mood": mood, "stress": stress,
+                  "started_at": now.isoformat(), "expires_at": (now + timedelta(hours=duration_hours)).isoformat(),
+                  "half_life_hours": max(1, duration_hours / 2), "status": "active"}
+        self.store.put("effect", record)
+        return record
+
+    def affect(self, mood: float, stress: float, reason: str, now: datetime, duration_hours: float = 48, session: str = "") -> dict:
         if not -10 <= mood <= 10 or not -10 <= stress <= 10 or not reason.strip():
             raise ValueError("单次情绪变化须在 -10 到 10 之间，并说明具体原因")
         state = self.state()
@@ -219,7 +272,10 @@ class LifeEngine:
         state["stress"] = bounded(state["stress"] + stress)
         with self.store.db:
             self.store.put("state", state)
-            self.store.put("emotion", {"id": uid(), "at": now.isoformat(), "mood": mood, "stress": stress, "reason": reason})
+            key = uid()
+            self.store.put("emotion", {"id": key, "at": now.isoformat(), "mood": mood, "stress": stress, "reason": reason})
+            if duration_hours > 0 and (mood or stress):
+                self.add_effect(key, reason, mood, stress, now, duration_hours, session)
         return state
 
     def _evolve(self, state: dict, hours: float, kind: str):
@@ -281,6 +337,20 @@ class LifeEngine:
                         plan["status"] = "active"
             for plan in plans:
                 self.store.put("plan", plan)
+            for effect in self.store.all("effect"):
+                if effect["status"] != "active":
+                    continue
+                start, end = self.time(effect["started_at"]), self.time(effect["expires_at"])
+                left, right = max(cursor, start), min(now, end)
+                if right > left:
+                    rate = math.log(2) / effect["half_life_hours"]
+                    a, b = (left - start).total_seconds() / 3600, (right - start).total_seconds() / 3600
+                    weight = (math.exp(-rate * a) - math.exp(-rate * b)) / rate / 24
+                    state["mood"] = bounded(state["mood"] + effect["mood"] * weight, -100, 100)
+                    state["stress"] = bounded(state["stress"] + effect["stress"] * weight)
+                if now >= end:
+                    effect["status"] = "expired"
+                    self.store.put("effect", effect)
             state["updated_at"] = now.isoformat()
             self.store.put("state", state)
         return state
@@ -310,7 +380,7 @@ class LifeEngine:
         current = self.current(now)
         if current and not self.visible(current, session):
             current = {"status": "active", "summary": "正在处理其他安排", "end": current["end"]}
-        plans = [p for p in self.plans(session) if p["status"] in ACTIVE | {"paused", "awaiting_confirmation"}]
+        plans = [p for p in self.plans(session) if p["status"] in ACTIVE | {"paused", "awaiting_confirmation", "blocked"}]
         result = {"now": now.isoformat(), "state": state, "current": current, "plans": plans[:12],
                   "experiences": self.experiences(session, limit=6),
                   "goals": [g for g in self.store.all("goal") if self.visible(g, session) and g["status"] == "active"]}

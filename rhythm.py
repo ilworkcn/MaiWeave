@@ -64,6 +64,7 @@ class Rhythm:
         with self.engine.store.db:
             self._cancel_future(rule_id, now)
             self.engine.store.put("routine", rule)
+        self.spatial.reconcile(now)
         return rule
 
     def skip(self, rule_id: str, on_date: str, session: str, now) -> dict:
@@ -76,6 +77,7 @@ class Rhythm:
             for plan in self.engine.store.all("plan"):
                 if plan.get("routine_id") == rule_id and plan.get("routine_date") == on_date and plan["status"] in ACTIVE:
                     self.engine.transition(plan["id"], "cancel", session, now)
+        self.spatial.reconcile(now)
         return rule
 
     def materialize(self, now):
@@ -116,7 +118,7 @@ class Rhythm:
                 continue
             when = self.engine.time(plan["start"]).astimezone(ZoneInfo(self.engine.timezone))
             if 0 <= (now.date() - when.date()).days < self.config.rhythm.learning_days:
-                key = (plan["session_id"], plan["kind"], plan["title"], plan["location"])
+                key = (plan["session_id"], plan["kind"], plan.get("activity_label", plan["title"]), plan["location"])
                 groups[key].append(plan)
         live_ids = set()
         with self.engine.store.db:
@@ -149,9 +151,12 @@ class Rhythm:
         if not self.config.rhythm.habits_enabled or not self.config.rhythm.follow_habits:
             return None
         minute = now.hour * 60 + now.minute
-        completed_today = {(p["title"], p["location"], p["session_id"]) for p in self.engine.store.all("plan")
+        completed_today = {(p.get("activity_label", p["title"]), p["location"], p["session_id"]) for p in self.engine.store.all("plan")
                            if p["status"] in ACTIVE | {"completed"} and self.engine.time(p["start"]).date() == now.date()}
         for habit in sorted(self.engine.store.all("habit"), key=lambda h: h["strength"], reverse=True):
+            preference = next((p for p in self.engine.store.all("preference") if p["activity"] == habit["title"] and p["session_id"] == habit["session_id"]), None)
+            if preference and preference["samples"] >= 3 and preference["score"] <= -2:
+                continue
             distance = abs(minute - habit["minute"])
             if (habit["active"] and habit["enabled"] and habit["strength"] >= 50 and min(distance, 1440 - distance) <= 45
                     and now.weekday() in habit["weekdays"] and (habit["title"], habit["location"], habit["session_id"]) not in completed_today):

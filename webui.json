@@ -362,6 +362,10 @@
             "simulation": {
               "type": "boolean",
               "required": false
+            },
+            "flexible": {
+              "type": "boolean",
+              "required": false
             }
           }
         },
@@ -421,6 +425,64 @@
         }
       },
       "content": [
+        {
+          "type": "table",
+          "label": "需要调整的固定安排",
+          "value": {
+            "source": "data",
+            "field": "schedule_issues"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "安排"
+            },
+            {
+              "field": "reason",
+              "label": "原因"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "环境与临时事件提醒",
+          "value": {
+            "source": "data",
+            "field": "notices"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "安排"
+            },
+            {
+              "field": "reason",
+              "label": "提醒"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "最近自动调整",
+          "value": {
+            "source": "data",
+            "field": "adjustments"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "安排"
+            },
+            {
+              "field": "reason",
+              "label": "调整原因"
+            },
+            {
+              "field": "at",
+              "label": "时间"
+            }
+          ]
+        },
         {
           "type": "card",
           "label": "筛选",
@@ -650,6 +712,12 @@
               "name": "simulation",
               "label": "独自活动允许模拟完成",
               "value": true
+            },
+            {
+              "type": "switch",
+              "name": "flexible",
+              "label": "允许根据环境和前序安排自动调整",
+              "value": false
             },
             {
               "type": "button",
@@ -2509,6 +2577,536 @@
                 "field": "history_text"
               },
               "format": "log"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "continuity",
+      "title": "生活接续",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_continuity",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "reflect": {
+          "api": "ui_reflect",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "plan_id": {
+              "scope": "selection",
+              "source": "reflection",
+              "field": "id"
+            }
+          }
+        },
+        "outline": {
+          "api": "ui_outline",
+          "version": "1",
+          "parameters": {
+            "goal_id": {
+              "type": "string",
+              "required": true
+            },
+            "revise": {
+              "type": "boolean",
+              "required": false
+            }
+          },
+          "arguments": {
+            "goal_id": {
+              "scope": "selection",
+              "source": "outline_goal",
+              "field": "id"
+            }
+          }
+        },
+        "resolve_effect": {
+          "api": "ui_resolve_effect",
+          "version": "1",
+          "parameters": {
+            "effect_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "effect_id": {
+              "scope": "selection",
+              "source": "effect",
+              "field": "id"
+            }
+          }
+        },
+        "resolve": {
+          "api": "ui_resolve_thread",
+          "version": "1",
+          "parameters": {
+            "thread_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "thread_id": {
+              "scope": "selection",
+              "source": "thread",
+              "field": "id"
+            }
+          }
+        },
+        "thread": {
+          "api": "ui_save_thread",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "context": {
+              "type": "string",
+              "required": true
+            },
+            "due_at": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "update_thread": {
+          "api": "ui_save_thread",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "context": {
+              "type": "string",
+              "required": true
+            },
+            "due_at": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "thread_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "thread_id": {
+              "scope": "selection",
+              "source": "thread",
+              "field": "id"
+            }
+          }
+        },
+        "replan": {
+          "api": "ui_replan",
+          "version": "1",
+          "parameters": {
+            "reason": {
+              "type": "string",
+              "required": true
+            },
+            "unavailable_until": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "text",
+          "value": "活动的具体结果、下次接续内容、阶段进度和持续事项在这里保留。模拟细节与现实事实分别管理。"
+        },
+        {
+          "type": "table",
+          "label": "活动结果整理",
+          "value": {
+            "source": "data",
+            "field": "reflections"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "活动"
+            },
+            {
+              "field": "activity",
+              "label": "归并类别"
+            },
+            {
+              "field": "status",
+              "label": "状态"
+            },
+            {
+              "field": "error",
+              "label": "错误"
+            }
+          ],
+          "selection": "reflection"
+        },
+        {
+          "type": "button",
+          "label": "重试所选活动结果",
+          "action": "reflect",
+          "disabled_when": {
+            "reference": {
+              "scope": "selection",
+              "source": "reflection",
+              "field": "id"
+            },
+            "operator": "empty"
+          },
+          "disabled_reason": "请先在表格中选择一条记录"
+        },
+        {
+          "type": "table",
+          "label": "下次从这里继续",
+          "value": {
+            "source": "data",
+            "field": "continuations"
+          },
+          "columns": [
+            {
+              "field": "activity",
+              "label": "活动"
+            },
+            {
+              "field": "subject",
+              "label": "具体对象"
+            },
+            {
+              "field": "next_action",
+              "label": "接下来做什么"
+            },
+            {
+              "field": "details_text",
+              "label": "已有具体结果"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "逐步形成的偏好",
+          "value": {
+            "source": "data",
+            "field": "preferences"
+          },
+          "columns": [
+            {
+              "field": "activity",
+              "label": "活动"
+            },
+            {
+              "field": "score",
+              "label": "体验评分（负5到正5）"
+            },
+            {
+              "field": "samples",
+              "label": "经历次数"
+            },
+            {
+              "field": "evidence",
+              "label": "依据经历"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "阶段目标",
+          "value": {
+            "source": "data",
+            "field": "goals"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "目标"
+            },
+            {
+              "field": "status_label",
+              "label": "目标状态"
+            },
+            {
+              "field": "outline_status",
+              "label": "阶段规划"
+            },
+            {
+              "field": "outline_error",
+              "label": "错误"
+            }
+          ],
+          "selection": "outline_goal"
+        },
+        {
+          "type": "switch",
+          "name": "revise",
+          "label": "根据现有进度重新分解剩余阶段",
+          "value": false
+        },
+        {
+          "type": "button",
+          "label": "分解目标／重试／调整剩余阶段",
+          "action": "outline",
+          "disabled_when": {
+            "reference": {
+              "scope": "selection",
+              "source": "outline_goal",
+              "field": "id"
+            },
+            "operator": "empty"
+          },
+          "disabled_reason": "请先在表格中选择一条记录"
+        },
+        {
+          "type": "table",
+          "label": "阶段进度",
+          "value": {
+            "source": "data",
+            "field": "steps"
+          },
+          "columns": [
+            {
+              "field": "goal_title",
+              "label": "目标"
+            },
+            {
+              "field": "title",
+              "label": "阶段"
+            },
+            {
+              "field": "criterion",
+              "label": "完成依据"
+            },
+            {
+              "field": "completed_sessions",
+              "label": "有效进展次数"
+            },
+            {
+              "field": "sessions",
+              "label": "计划次数"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            },
+            {
+              "field": "note",
+              "label": "上次结果与下一步"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "持续影响的事情",
+          "value": {
+            "source": "data",
+            "field": "effects"
+          },
+          "columns": [
+            {
+              "field": "reason",
+              "label": "原因"
+            },
+            {
+              "field": "mood",
+              "label": "心情影响"
+            },
+            {
+              "field": "stress",
+              "label": "压力影响"
+            },
+            {
+              "field": "expires_at",
+              "label": "自然消退时间"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            }
+          ],
+          "selection": "effect"
+        },
+        {
+          "type": "button",
+          "label": "结束所选持续影响",
+          "action": "resolve_effect",
+          "disabled_when": {
+            "reference": {
+              "scope": "selection",
+              "source": "effect",
+              "field": "id"
+            },
+            "operator": "empty"
+          },
+          "disabled_reason": "请先在表格中选择一条记录"
+        },
+        {
+          "type": "table",
+          "label": "待接续的话题",
+          "value": {
+            "source": "data",
+            "field": "threads"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "话题"
+            },
+            {
+              "field": "context",
+              "label": "上下文"
+            },
+            {
+              "field": "due_at",
+              "label": "跟进时间"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            },
+            {
+              "field": "request_label",
+              "label": "主动跟进"
+            }
+          ],
+          "selection": "thread"
+        },
+        {
+          "type": "button",
+          "label": "标记所选事项已解决",
+          "action": "resolve",
+          "disabled_when": {
+            "reference": {
+              "scope": "selection",
+              "source": "thread",
+              "field": "id"
+            },
+            "operator": "empty"
+          },
+          "disabled_reason": "请先在表格中选择一条记录"
+        },
+        {
+          "type": "collapsible",
+          "label": "新增或更新跟进事项",
+          "children": [
+            {
+              "type": "input",
+              "name": "title",
+              "label": "话题标题",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "context",
+              "label": "具体上下文",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "due_at",
+              "label": "跟进时间（ISO格式）",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "session_id",
+              "label": "所属聊天流",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "新增跟进",
+              "action": "thread"
+            },
+            {
+              "type": "button",
+              "label": "更新所选跟进",
+              "action": "update_thread",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "thread",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "collapsible",
+          "label": "临时事件",
+          "children": [
+            {
+              "type": "input",
+              "name": "reason",
+              "label": "临时事件原因",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "unavailable_until",
+              "label": "忙到什么时间（ISO格式）",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "重排可变动安排",
+              "action": "replan"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "后台操作进度",
+          "value": {
+            "source": "data",
+            "field": "jobs"
+          },
+          "columns": [
+            {
+              "field": "label",
+              "label": "操作"
+            },
+            {
+              "field": "status",
+              "label": "状态"
+            },
+            {
+              "field": "error",
+              "label": "错误"
+            },
+            {
+              "field": "created_at",
+              "label": "开始时间"
             }
           ]
         }

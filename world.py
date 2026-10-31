@@ -11,7 +11,7 @@ from xml.etree import ElementTree
 
 
 def download(url: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "MaiWeave/0.2"})
+    request = Request(url, headers={"User-Agent": "MaiWeave/0.3"})
     with urlopen(request, timeout=20) as response:
         return response.read()
 
@@ -154,4 +154,6 @@ class World:
             weather = dict(weather)
             weather["stale"] = (now - self.engine.time(weather["retrieved_at"])).total_seconds() > self.config.world.weather_minutes * 120
         news = sorted(self.engine.store.all("news"), key=lambda n: n["retrieved_at"], reverse=True)[:5]
-        return {"weather": weather, "news": news}
+        readings = [{"title": r["title"], "url": r["url"], "retrieved_at": r["retrieved_at"], "content": r["content"][:1500]}
+                    for r in self.engine.store.all("reading")[-2:]]
+        return {"weather": weather, "news": news, "readings": readings}

@@ -102,6 +102,124 @@ class Spatial:
             return max(previous, key=lambda p: self.engine.time(p["end"]))["location"]
         return self.engine.state()["location"]
 
+    def reconcile(self, now):
+        """沿整条未完成时间线重算后续路线，固定安排冲突进入待调整。"""
+        engine, store = self.engine, self.engine.store
+        plans = store.all("plan")
+        origin, available = engine.state()["location"], now
+        used = set()
+        pending = [p for p in plans if not p.get("activity_id") and p["status"] in ACTIVE | {"blocked"}]
+        moving = next((p for p in plans if p.get("activity_id") and p["status"] == "active"), None)
+        if moving:
+            origin, available = moving["location"], engine.time(moving["end"])
+            used.add(moving["id"])
+        while pending:
+            pending.sort(key=lambda p: engine.time(p["start"]))
+            plan = pending.pop(0)
+            if plan["status"] == "active":
+                origin = plan["location"] or origin
+                available = max(available, engine.time(plan["end"]))
+                if plan.get("travel_id"):
+                    used.add(plan["travel_id"])
+                continue
+            start, end = engine.time(plan["start"]), engine.time(plan["end"])
+            duration = end - start
+            try:
+                route = self.route(origin, plan["location"]) if plan["location"] else {"minutes": 0, "legs": [], "origin": origin, "destination": origin}
+                minutes = route["minutes"] if plan["kind"] != "travel" else 0
+                earliest = available + timedelta(minutes=minutes)
+                proposed = max(start, earliest)
+                if plan.get("flexible", plan["autonomous"]):
+                    fixed = next((p for p in pending if not p.get("flexible", p["autonomous"])), None)
+                    if fixed:
+                        onward = self.route(plan["location"] or origin, fixed["location"])["minutes"] if fixed["location"] else 0
+                        if proposed + duration + timedelta(minutes=onward) > engine.time(fixed["start"]):
+                            plan.update(start=engine.time(fixed["end"]).isoformat(), end=(engine.time(fixed["end"]) + duration).isoformat())
+                            pending.append(plan)
+                            continue
+                    if proposed != start:
+                        plan["changes"].append({"at": now.isoformat(), "action": "自动顺延", "before": plan["start"], "reason": "前序活动与出行耗时变化"})
+                        start, end = proposed, proposed + duration
+                elif start < earliest and not (not minutes and start <= now < end and available == now):
+                    raise ValueError(f"前序安排后最早 {earliest.isoformat()} 才能到达，需调整固定安排")
+                if plan["kind"] == "travel":
+                    if duration.total_seconds() < route["minutes"] * 60:
+                        raise ValueError(f"路线改变后需要 {route['minutes']} 分钟，请调整出行结束时间")
+                    plan["route"] = route
+                plan.update(start=start.isoformat(), end=end.isoformat(), status="scheduled")
+                plan.pop("blocking_reason", None)
+                if minutes:
+                    departure = start - timedelta(minutes=minutes)
+                    old_trip = store.find("plan", plan.get("travel_id", ""))
+                    if old_trip and old_trip["status"] == "active":
+                        used.add(old_trip["id"])
+                    else:
+                        trip = {**PlanInput(title=f"前往{route['destination']}", start=departure.isoformat(), end=start.isoformat(),
+                                           kind="travel", location=route["destination"], motivation=f"为{plan['title']}出行").model_dump(),
+                                "id": old_trip["id"] if old_trip and old_trip["status"] == "scheduled" else uid(),
+                                "session_id": plan["session_id"], "status": "scheduled", "autonomous": plan["autonomous"],
+                                "elapsed_seconds": 0, "created_at": now.isoformat(), "changes": [], "route": route, "activity_id": plan["id"]}
+                        plan["travel_id"] = trip["id"]
+                        used.add(trip["id"])
+                        with store.db:
+                            store.put("plan", trip)
+                elif plan.get("travel_id") not in used:
+                    plan.pop("travel_id", None)
+                origin, available = plan["location"] or origin, max(available, end)
+                with store.db:
+                    store.delete("schedule_issue", plan["id"])
+            except ValueError as error:
+                plan["status"] = "blocked"
+                plan["blocking_reason"] = str(error)
+                with store.db:
+                    store.put("schedule_issue", {"id": plan["id"], "session_id": plan["session_id"], "title": plan["title"],
+                                                 "reason": str(error), "at": now.isoformat()})
+            with store.db:
+                store.put("plan", plan)
+        with store.db:
+            for trip in store.all("plan"):
+                if trip.get("activity_id") and trip["status"] == "scheduled" and trip["id"] not in used:
+                    trip["status"] = "cancelled"
+                    store.put("plan", trip)
+            for issue in store.all("schedule_issue"):
+                if store.get("plan", issue["id"])["status"] != "blocked":
+                    store.delete("schedule_issue", issue["id"])
+
+    def transition(self, plan_id, action, session, now):
+        plan = self.engine.owned("plan", plan_id, session)
+        if action == "resume" and plan["status"] == "paused" and plan["kind"] != "travel" and plan["location"]:
+            route = self.route(self.engine.state()["location"], plan["location"])
+            arrival = now + timedelta(minutes=route["minutes"])
+            end = arrival + timedelta(seconds=plan["remaining_seconds"])
+            self.engine._check_interval(now, end, {plan_id, plan.get("travel_id", "")})
+            plan.update(start=arrival.isoformat(), end=end.isoformat(), status="scheduled")
+            plan["changes"].append({"at": now.isoformat(), "action": "恢复活动并重新安排出行"})
+            with self.engine.store.db:
+                self.engine.store.put("plan", plan)
+            result = plan
+        else:
+            result = self.engine.transition(plan_id, action, session, now)
+        self.reconcile(now)
+        return self.engine.store.get("plan", result["id"])
+
+    def make_room(self, start, end, now):
+        """明确的新安排占用时间时，让自主活动让出该时间段。"""
+        conflicts = [p for p in self.engine.store.all("plan") if p["status"] in ACTIVE and not p.get("activity_id")
+                     and self.engine.time(p["start"]) < end and self.engine.time(p["end"]) > start]
+        if any(not p["autonomous"] or p["participants"] for p in conflicts):
+            raise ValueError("这段时间已有固定安排，请先调整原安排")
+        with self.engine.store.db:
+            for plan in conflicts:
+                duration = self.engine.time(plan["end"]) - max(now, self.engine.time(plan["start"]))
+                plan["changes"].append({"at": now.isoformat(), "action": "为新安排让出时间", "before": plan["start"]})
+                plan.update(start=end.isoformat(), end=(end + duration).isoformat(), status="scheduled")
+                self.engine.store.put("plan", plan)
+                if plan.get("travel_id"):
+                    trip = self.engine.store.get("plan", plan["travel_id"])
+                    if trip["status"] == "scheduled":
+                        trip["status"] = "cancelled"
+                        self.engine.store.put("plan", trip)
+
     def move(self, destination: str, session: str, now) -> dict:
         self.engine.advance(now)
         route = self.route(self.engine.state()["location"], destination)
@@ -113,13 +231,16 @@ class Spatial:
         plan["route"] = route
         with self.engine.store.db:
             self.engine.store.put("plan", plan)
+        self.reconcile(now)
         return plan
 
     def change(self, plan_id, patch, session, now):
         old = self.engine.owned("plan", plan_id, session)
         changes = patch.model_dump(exclude_unset=True)
         if not {"start", "location"} & changes.keys() or old["kind"] == "travel":
-            return self.engine.change_plan(plan_id, patch, session, now)
+            self.engine.change_plan(plan_id, patch, session, now)
+            self.reconcile(now)
+            return self.engine.store.get("plan", plan_id)
         target = changes.get("location", old["location"])
         if not target:
             target = self.engine.state()["location"]
@@ -147,21 +268,41 @@ class Spatial:
                 self.engine.store.put("plan", travel)
         with self.engine.store.db:
             self.engine.store.put("plan", updated)
-        return updated
+        self.reconcile(now)
+        return self.engine.store.get("plan", plan_id)
 
     def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False) -> dict:
         """地点变化时，在活动前显式安排出行时间。"""
+        if self.engine.time(value.end) <= self.engine.time(value.start):
+            raise ValueError("结束时间必须晚于开始时间")
+        if self.engine.time(value.start) < now - timedelta(minutes=1):
+            raise ValueError("过去发生的事情请记录为经历，不能创建过去的计划")
+        if value.goal_id:
+            goal = self.engine.owned("goal", value.goal_id, session)
+            if goal["status"] != "active":
+                raise ValueError("该目标已结束")
+            if goal.get("steps"):
+                step = next((s for s in goal["steps"] if s["status"] != "completed"), None)
+                if not step or step["id"] != value.goal_step_id:
+                    raise ValueError("请填写当前未完成阶段的 goal_step_id")
         if value.kind == "travel":
             route = self.route(self.projected_location(self.engine.time(value.start), now), value.location)
             if (self.engine.time(value.end) - self.engine.time(value.start)).total_seconds() < route["minutes"] * 60:
                 raise ValueError(f"出行时间不足，这条路线需要 {route['minutes']} 分钟")
+            if not autonomous:
+                self.make_room(self.engine.time(value.start), self.engine.time(value.end), now)
             plan = self.engine.create_plan(value.model_copy(update={"location": route["destination"]}), session, now, autonomous)
             plan["route"] = route
             with self.engine.store.db:
                 self.engine.store.put("plan", plan)
-            return plan
+            self.reconcile(now)
+            return self.engine.store.get("plan", plan["id"])
         if not value.location:
-            return self.engine.create_plan(value, session, now, autonomous)
+            if not autonomous:
+                self.make_room(self.engine.time(value.start), self.engine.time(value.end), now)
+            plan = self.engine.create_plan(value, session, now, autonomous)
+            self.reconcile(now)
+            return self.engine.store.get("plan", plan["id"])
         target = self.place(value.location)
         start = self.engine.time(value.start)
         origin = self.projected_location(start, now)
@@ -171,6 +312,9 @@ class Spatial:
             if travel_start < now:
                 earliest = now + timedelta(minutes=route["minutes"])
                 raise ValueError(f"从{origin}到{target['name']}需要{route['minutes']}分钟，最早{earliest.isoformat()}开始")
+        if not autonomous:
+            self.make_room(travel_start, self.engine.time(value.end), now)
+        if route["minutes"]:
             self.engine._check_interval(travel_start, start)
         value = value.model_copy(update={"location": target["name"]})
         plan = self.engine.create_plan(value, session, now, autonomous)
@@ -182,7 +326,8 @@ class Spatial:
             with self.engine.store.db:
                 self.engine.store.put("plan", travel)
                 self.engine.store.put("plan", plan)
-        return plan
+        self.reconcile(now)
+        return self.engine.store.get("plan", plan["id"])
 
 
 def travel_position(plan: dict, at, engine) -> dict:
