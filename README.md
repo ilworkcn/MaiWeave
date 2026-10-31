@@ -1,0 +1,133 @@
+# MaiWeave
+
+MaiBot 的持续角色生活引擎。对话可以新增、修改和取消安排，时间推进角色活动，已经发生的经历持续影响后续聊天。
+
+## 已实现
+
+- 自然语言工具：查询、新增、改期、取消、暂停与恢复日程。
+- 同一角色共用生活时间线；共同安排保留参与者，结束后等待确认。
+- 独自进行的虚拟活动自动结算为模拟经历，不冒充现实事实。
+- 结构化经历细节、补全、更正和修订历史，重启后保留。
+- 睡眠、精力、饥饿、压力、心情与睡眠债的时间推进。
+- 空闲时根据人格、兴趣、状态和长期目标选择自主活动。
+- 长期目标按关联活动完成次数推进。
+- 与当前用户的熟悉、信任、亲近程度，以及边界和未解决事项。
+- Planner 和 Replyer 共享生活上下文。
+- 根据重要经历请求主动交流，支持时段、间隔和每日请求上限。
+- 通过官方 HTTP 接口查询 A_Memorix、同步非模拟经历，并在更正后更新原生事实。
+- `/maiweave` 或 `/织生活` 查看状态、当前聊天流 ID 和运行错误。
+
+## 环境与安装
+
+接口基线为 MaiBot **1.3.19**、`maibot-plugin-sdk==2.21.0`，宿主要求 Python 3.12 或以上。当前不维护旧版 SDK 兼容分支。源码接口已核对，真实 MaiBot 服务端联调仍需在你的实例完成。
+
+1. 将本项目放到 MaiBot 的 `plugins/MaiWeave/`，目录内直接包含 `plugin.py` 和 `_manifest.json`。
+2. 使用运行 MaiBot 的 Python 安装依赖：
+
+   ```powershell
+   python -m pip install -r plugins/MaiWeave/requirements.txt
+   ```
+
+3. 启动或重载 MaiBot，在插件页启用 MaiWeave。
+4. 在插件配置页设置角色时区、兴趣和生活背景。
+5. 发送 `/maiweave` 检查状态，再通过自然语言操作。
+
+默认启用自主生活；第一次启动即可能调用宿主的 `utils` 模型选择活动。若只想先测试日程，将 `life.autonomous` 关闭。插件不需要单独的模型 Key。
+
+## 使用示例
+
+```text
+明天晚上七点到九点，我们一起看电影。
+把看电影改到八点到十点。
+明晚不看了，取消那个安排。
+你现在在干什么？
+先暂停看书，过一会儿继续。
+昨晚电影看完了，是《……》。
+补充一下，昨天是在家看的。
+给自己定个目标：分五次读完这本书。
+```
+
+这些话由 MaiBot Planner 理解并调用工具。模型需要生成明确的 ISO 日期时间；插件处理明确时间、冲突和记录，不另外实现一套自然语言模型。目标不明确时，Planner 应先查询再追问。只有工具返回成功才表示保存成功。
+
+## 配置
+
+配置由 SDK 自动生成，无需复制完整模板。
+
+| 配置 | 默认 | 作用 |
+| --- | --- | --- |
+| `life.enabled` | `true` | 总开关 |
+| `life.timezone` | `Asia/Shanghai` | 相对日期和生活作息时区 |
+| `life.autonomous` | `true` | 自主安排活动 |
+| `life.tick_seconds` | `60` | 推进间隔 |
+| `life.interests` | 阅读、散步 | 自主活动兴趣 |
+| `life.background` | 空 | 补充生活背景，宿主人格仍参与规划 |
+| `life.sleep_hour` / `wake_hour` | `23` / `7` | 睡眠时间窗 |
+| `life.model_task` | `utils` | 宿主模型任务 |
+| `life.planning_interval_minutes` | `30` | 两次自主规划最小间隔 |
+| `proactive.enabled` | `false` | 主动交流开关 |
+| `proactive.session_ids` | 空列表 | 接收主动请求的真实聊天流 |
+| `proactive.daily_limit` | `2` | 每流每天请求次数 |
+| `proactive.cooldown_minutes` | `180` | 请求间隔 |
+| `proactive.start_hour` / `end_hour` | `9` / `22` | 主动交流时间窗 |
+| `memory.enabled` | `false` | 原生记忆 HTTP 连接 |
+| `memory.base_url` | `http://127.0.0.1:8001` | WebUI 地址 |
+| `memory.session_cookie` | 空 | 当前 WebUI 登录会话 Cookie |
+
+主动交流走 `ctx.maisaka.proactive.trigger()`。每日上限统计的是宿主接受的请求，不是实际发送条数；宿主可以选择沉默。插件不另行补发消息。
+
+## 原生记忆连接
+
+MaiWeave 使用 MaiBot 的 A_Memorix，不创建向量数据库或通用人物记忆库。未启用 HTTP 连接时，宿主原有的记忆查询和人物画像仍正常工作。
+
+启用直接同步的步骤：
+
+1. 在 MaiBot 中启用并配置 A_Memorix。
+2. 登录 WebUI，在浏览器开发工具的 Cookie 存储中取得 `maibot_session` 的值。
+3. 在 MaiWeave 配置页填写 `memory.base_url` 和 `memory.session_cookie`，启用 `memory.enabled`。
+4. 通过对话记录一条用户陈述的经历；工具结果会分别报告本地保存和原生记忆同步状态。
+
+当前官方接口使用登录 Cookie，不接受插件自行假定的 Bearer Token。Cookie 失效会返回 HTTP 401，更新配置即可。Cookie 不应提交到 Git；生成的 `config.toml` 已被忽略。
+
+使用的端点：
+
+- `GET /api/webui/memory/query/aggregate`：查询当前聊天流原生记忆。
+- `POST /api/webui/memory/facts`：以 `chat` 作用域创建带来源的生活记录。
+- `PATCH /api/webui/memory/facts/{claim_id}`：修订后更新，保存返回的新记录 ID。
+
+模拟经历不写入原生事实账本，只保存在生活业务库并参与角色上下文。`reported` 和 `observed` 保留来源和依据。同步错误不撤销已保存的经历，也不自动重试；可通过 `maiweave_sync_memory` 明确重试。
+
+原生事实接口用于长期保存，不等于保证每条记录都会被宿主某一轮对话检索命中，召回由宿主配置和检索策略决定。
+
+## 数据与行为
+
+持久化文件位于 `ctx.paths.data_dir/maiweave.sqlite3`，通常是 `data/plugins/ilworkcn.maiweave/maiweave.sqlite3`。开发目录内不保存运行数据。停止插件后复制该文件即可备份。
+
+- 计划保存稳定 ID，修改和取消保留记录。
+- 当前聊天流创建的安排、经历、目标和关系在该聊天流可见；自主公共活动可被各流看到。
+- 角色的时间和身体状态全局共享，同一时间不能进行两项活动。
+- 计划冲突会明确返回错误，不静默覆盖已有安排。可先取消或暂停原活动。
+- `simulation=true` 且没有参与者的计划自动完成；其他安排到点后标为 `awaiting_confirmation`。
+- 暂停活动保留剩余时间，恢复时重新检查时间段。
+- 离线期间只推进已保存的活动，不凭空生成离线数天的故事。
+- 自主模型失败时保留现有记录并报告错误，不生成假活动兜底。
+- 情绪逐渐回落，关系变化必须有原因。关系状态用于当前角色互动，不替代原生人物画像。
+
+## 当前实现边界
+
+这是完整的第一版生活闭环，采用少量直接模块。尚未实现天气和外部世界感知、复杂空间移动、重复日程规则、梦境、习惯学习和 WebUI 自定义页面。
+
+虚拟活动完成后生成由已有计划确定的简要结果，具体细节可由对话工具补充并持久化；不在后台为每个普通活动写长篇故事。身体和情绪数值是角色规则，不是生理或心理学模型。
+
+模型意图识别、是否调用工具及最终表述依赖 MaiBot 的模型。程序保证记录和状态转换，不声称可以保证每句自由生成的回答都没有幻觉。
+
+## 开发与测试
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install pytest pytest-asyncio
+python -m pytest -q
+```
+
+测试覆盖业务闭环、真实 SDK 组件收集、Hook 载荷和本地 HTTP 请求。测试替身只存在于 `tests/`，不用于运行时。测试通过不等同于真实宿主、QQ 平台或 A_Memorix 服务联调通过。
+
+目录职责与接口来源见 `docs/架构与接口.md`，实例验收步骤见 `docs/实例验收.md`。当前未选择开源许可，Manifest 使用 `UNLICENSED`。
