@@ -23,6 +23,7 @@ from .world import World
 from .spatial import Spatial
 from .rhythm import Rhythm
 from .dreams import Dreams
+from .diary import Diary
 from .feature_tools import FeatureTools
 from .webui import WebUI
 from .continuity import Continuity
@@ -80,7 +81,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             }
         schema["layout"] = {"type": "tabs", "tabs": [
             {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
-            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity"], "order": 1},
+            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
             {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "plugin"], "order": 3},
         ]}
@@ -97,6 +98,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.world = World(self.engine, self.ctx, self.config)
         self.rhythm = Rhythm(self.engine, self.spatial, self.config)
         self.dreams = Dreams(self.engine, self.ctx, self.config)
+        self.diary = Diary(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
         self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
@@ -138,7 +140,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                 self.last_errors[name] = str(error)
                 self.ctx.logger.exception("%s失败", name)
         for name, job in [("外部世界", self.world.refresh), ("生活接续", self.continuity.process), ("动态日程", self.adjust_life), ("梦境生成", self.dreams.process),
-                          ("自主生活", self.living.choose_activity), ("主动交流", self.living.share)]:
+                          ("自主生活", self.living.choose_activity), ("主动交流", self.living.share), ("生活日记", self.diary.process)]:
             try:
                 await job(self.now())
                 self.last_errors.pop(name, None)
@@ -426,7 +428,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.5.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.5.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

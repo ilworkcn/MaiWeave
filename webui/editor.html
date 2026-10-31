@@ -4,19 +4,19 @@
 <title>MaiWeave 编辑工作台</title>
 <style>
 body{margin:0;padding:20px;font-family:var(--maibot-font-body,system-ui);color:var(--maibot-foreground);background:var(--maibot-background)}
-header{margin-bottom:20px}h1{font-size:24px;margin:0 0 8px}p{line-height:1.6}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.toolbar input{flex:1;min-width:160px}.workspace{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,2fr);gap:20px}.panel{padding:18px;border:1px solid var(--maibot-border,#ccc);border-radius:var(--maibot-radius,8px)}#records{display:grid;gap:8px;max-height:620px;overflow:auto}.record{text-align:left;padding:12px}.record small{display:block;margin-top:6px;color:var(--maibot-muted,#777)}.fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:grid;gap:7px;font-size:14px}label.wide{grid-column:1/-1}input,select,textarea{box-sizing:border-box;width:100%}input[type=checkbox]{width:auto;justify-self:start}textarea{min-height:80px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}#status{min-height:24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}.empty{padding:20px;color:var(--maibot-muted,#777)}@media(max-width:720px){.workspace,.fields{grid-template-columns:1fr}label.wide{grid-column:auto}}
+[hidden]{display:none!important}header{margin-bottom:20px}h1{font-size:24px;margin:0 0 8px}p{line-height:1.6}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.toolbar input{flex:1;min-width:160px}.workspace{display:grid;grid-template-columns:minmax(230px,1fr) minmax(0,2fr);gap:20px}.panel{padding:18px;border:1px solid var(--maibot-border,#ccc);border-radius:var(--maibot-radius,8px)}#records{display:grid;gap:8px;max-height:620px;overflow:auto}.record{text-align:left;padding:12px}.record small{display:block;margin-top:6px;color:var(--maibot-muted,#777)}.fields{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:grid;gap:7px;font-size:14px}label.wide{grid-column:1/-1}input,select,textarea{box-sizing:border-box;width:100%}input[type=checkbox]{width:auto;justify-self:start}textarea{min-height:80px;resize:vertical}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}#status{min-height:24px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}.empty{padding:20px;color:var(--maibot-muted,#777)}@media(max-width:720px){.workspace,.fields{grid-template-columns:1fr}label.wide{grid-column:auto}}
 </style></head>
 <body class="maibot-page">
 <header><h1 id="heading">编辑工作台</h1><p class="maibot-muted" id="intro">选中记录，修改表单，再保存。已有内容会自动填入。</p></header>
 <div class="toolbar"><select id="category" class="maibot-select" style="width:auto"></select><input id="query" class="maibot-input" placeholder="搜索标题、姓名或记录内容"><button id="search" class="maibot-button">查找</button><button id="new" class="maibot-button">新建</button></div>
 <p id="status" role="status" aria-live="polite"></p>
-<main class="workspace"><section class="panel"><h2 id="count">记录</h2><div id="records"></div></section><section class="panel"><h2 id="formTitle">编辑内容</h2><form id="form"><div id="fields" class="fields"></div><div class="actions"><button id="save" class="maibot-button maibot-button-primary" type="submit">保存</button><button id="remove" class="maibot-button" type="button">删除</button></div></form><pre id="details" class="maibot-muted"></pre></section></main>
+<main class="workspace"><section class="panel"><h2 id="count">记录</h2><div id="records"></div></section><section class="panel"><h2 id="formTitle">编辑内容</h2><div id="form"><section id="personLink" hidden><label>选择 MaiBot 人物画像（必选）</label><div class="toolbar"><input id="personKeyword" class="maibot-input" placeholder="搜索姓名、昵称或人物 ID"><button id="personSearch" type="button" class="maibot-button">搜索人物</button></div><select id="personChoice" class="maibot-select"><option value="">请选择人物画像</option></select><p id="personHint" class="maibot-muted">沿用「原生记忆连接」配置，选择长期记忆中对应的人物。</p><pre id="personPreview"></pre><label>画像人工补充<textarea id="personOverride" class="maibot-input" placeholder="填写要补充到 MaiBot 人物画像的信息"></textarea></label><button id="personSave" class="maibot-button" type="button">保存到原生画像</button><p class="maibot-muted">人物画像由 MaiBot 管理。下方保存此人的生活备注、提醒聊天流，生日和纪念日在对应分类中填写。</p></section><div id="fields"></div><div class="actions"><button id="save" class="maibot-button maibot-button-primary" type="button">保存</button><button id="remove" class="maibot-button" type="button">删除</button></div></div><pre id="details" class="maibot-muted"></pre></section></main>
 <script type="module">
 const $=id=>document.getElementById(id);
 const kinds={leisure:'休闲',study:'学习',work:'工作',sleep:'睡眠',meal:'用餐',travel:'出行',rest:'休息',social:'社交'};
 // 字段依次声明参数名、标签、控件、初始值和原记录字段。
 const schemas={
- profile:{label:'个人资料',save:'profile',id:'profile_id',remove:'delete_profile',fields:[['name','姓名或称呼','text',''],['session_id','所属聊天流 ID','text',''],['user_id','用户 ID（选填）','text',''],['notes','备注（选填）','textarea','']]},
+ profile:{label:'个人资料',save:'profile',id:'profile_id',remove:'delete_profile',fields:[['session_id','提醒发送到哪个聊天流（必填）','text',''],['notes','生活备注（选填）','textarea','']]},
  anniversary:{label:'生日与纪念日',save:'anniversary',id:'anniversary_id',remove:'delete_anniversary',fields:[['profile_id','所属人物','profiles',''],['title','名称','text','生日'],['calendar','历法',{solar:'公历',lunar:'农历'},'solar'],['month','月份','number',1],['day','日期','number',1],['year','出生或起始年份（未知填0）','number',0],['leap_month','农历闰月','checkbox',false],['enabled','开启当日提醒','checkbox',true]]},
  plan:{label:'生活日程',save:'plan',id:'plan_id',editOnly:true,fields:[['new_title','标题','text','','title'],['new_start','开始时间（ISO格式）','text','','start'],['new_end','结束时间（ISO格式）','text','','end'],['new_location','地点','text','','location']]},
  routine:{label:'重复日程',save:'routine',id:'rule_id',fields:[['title','标题','text',''],['anchor_date','起始日期','date',''],['start_time','开始时间','time','20:00'],['duration_minutes','时长（分钟）','number',30],['frequency','频率',{daily:'每天',weekly:'每周',monthly:'每月'},'weekly'],['interval','间隔','number',1],['weekdays','星期（逗号分隔）','text','周一,周三,周五'],['month_day','每月日期','number',1],['until','截止日期（选填）','text',''],['kind','活动类型',kinds,'leisure'],['location','地点','text',''],['session_id','聊天流（公共活动可留空）','text',''],['participants','参与者（逗号分隔）','text',''],['simulation','角色模拟活动','checkbox',true]]},
@@ -29,7 +29,7 @@ let data={records:[],profiles:[],places:[]},selected=null,category='profile';
 function message(text){$('status').textContent=text}
 function labelFor(row){return row.person ? `${row.person} · ${row.title}` : row.name||row.title||row.summary||`${row.origin} → ${row.destination}`}
 function edit(row){
- selected=row;const schema=schemas[category];$('fields').replaceChildren();$('formTitle').textContent=row?`编辑${schema.label}`:`新建${schema.label}`;
+ selected=row;$('personLink').hidden=category!=='profile';$('personChoice').replaceChildren(new Option('请选择人物画像',''));if(row?.person_id)$('personChoice').add(new Option(`${row.name} · ${row.person_id}`,row.person_id));$('personChoice').value=row?.person_id||'';$('personPreview').textContent='';$('personOverride').value='';$('personSave').disabled=true;if(category==='profile'&&row?.person_id)run(loadPerson);const schema=schemas[category];$('fields').replaceChildren();$('formTitle').textContent=row?`编辑${schema.label}`:`新建${schema.label}`;
  for(const [name,label,type,initial,source] of schema.fields){
   const wrapper=document.createElement('label');wrapper.textContent=label;if(type==='textarea')wrapper.className='wide';
   let value=row?.[source||name]??initial;
@@ -57,17 +57,33 @@ async function refresh(keepId=''){
  edit(data.records.find(row=>row.id===keepId)||null);
 }
 async function run(work){message('处理中…');try{await work()}catch(error){message(error.message)}}
-$('form').onsubmit=event=>{event.preventDefault();run(async()=>{
+$('save').onclick=()=>run(async()=>{
  const schema=schemas[category],args={};
  for(const [name,,type,,source] of schema.fields){const input=$('field_'+name);const value=type==='checkbox'?input.checked:type==='number'?Number(input.value):input.value;
   if(category==='plan'&&value===(selected?.[source]??''))continue;args[name]=value;}
  if(schema.id&&selected)args[schema.id]=selected.id;
+ if(category==='profile'){args.person_id=$('personChoice').value;args.name='';if(!args.person_id){message('请先搜索并选择 MaiBot 人物画像');return}}
  if(category==='plan'&&Object.keys(args).length===1){message('内容与当前记录一致');return}
- $('save').disabled=true;try{const saved=await maibot.action(schema.save,args);await refresh(saved.id||selected?.id||'');message('已保存')}finally{$('save').disabled=false}
- })};
+ $('save').disabled=true;try{const saved=await maibot.action(schema.save,args);$('query').value='';await refresh(saved.id||selected?.id||'');message('已保存')}finally{$('save').disabled=false}
+ });
 $('remove').onclick=()=>run(async()=>{const schema=schemas[category];await maibot.action(schema.remove,{[schema.id]:selected.id});await refresh();message('已删除')});
 $('new').onclick=()=>{edit(null);message('填写后点击保存')};$('search').onclick=()=>run(async()=>{await refresh();message('已更新')});
 $('category').onchange=()=>run(async()=>{category=$('category').value;selected=null;$('query').value='';await refresh();message('')});
+let people=[];
+$('personSearch').onclick=()=>run(async()=>{
+ const result=await maibot.query('people',{query:$('personKeyword').value});people=result.items;
+ const previous=$('personChoice').value;$('personChoice').replaceChildren(new Option('请选择人物画像',''));
+ if(previous&&!people.some(p=>p.person_id===previous))$('personChoice').add(new Option(`已关联 · ${previous}`,previous));
+ for(const person of people)$('personChoice').add(new Option(`${person.person_name||person.user_nickname||'未命名人物'} · ${person.person_id}`,person.person_id));
+ $('personChoice').value=previous;message(`找到 ${people.length} 位人物，请选择对应的人物`);
+});
+async function loadPerson(){
+ const id=$('personChoice').value;$('personSave').disabled=true;
+ if(!id){$('personPreview').textContent='';$('personOverride').value='';return}
+ const person=await maibot.query('person',{person_id:id});$('personPreview').textContent=person.profile_text||'当前画像内容为空';$('personOverride').value=person.override_text;$('personSave').disabled=false;
+}
+$('personChoice').onchange=()=>run(async()=>{await loadPerson();message('已读取原生人物画像')});
+$('personSave').onclick=()=>run(async()=>{await maibot.action('edit_person',{person_id:$('personChoice').value,text:$('personOverride').value});message('已保存到 MaiBot 原生人物画像')});
 await maibot.ready;
 const personalPage=maibot.page.id==='anniversaries';
 if(personalPage){$('heading').textContent='个人资料与纪念日';$('intro').textContent='添加人物资料，再记录生日与纪念日。选中记录即可修改。提醒沿用主动交流设置；农历小月按月底，普通年份的闰月纪念日按同月计算。'}

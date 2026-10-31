@@ -27,6 +27,14 @@ class NativeMemory:
             raise RuntimeError(result.get("error") or result.get("message") or "原生记忆操作失败")
         return result
 
+    async def people(self, query: str = "", person_id: str = "") -> dict:
+        params = urlencode({"person_keyword": query, "person_id": person_id, "limit": 50})
+        return await asyncio.to_thread(self._request, "GET", "/profiles/search?" + params)
+
+    async def edit_person(self, person_id: str, text: str) -> dict:
+        return await asyncio.to_thread(self._request, "POST", "/profiles/override", {
+            "person_id": person_id, "override_text": text, "updated_by": "ilworkcn.maiweave", "source": "webui"})
+
     async def query(self, query: str, session: str) -> dict:
         params = urlencode({"query": query, "chat_id": session, "limit": 5})
         return await asyncio.to_thread(self._request, "GET", "/query/aggregate?" + params)

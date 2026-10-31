@@ -3155,6 +3155,25 @@
               "required": false
             }
           }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
         }
       },
       "actions": {
@@ -3181,6 +3200,9 @@
             "profile_id": {
               "type": "string",
               "required": false
+            },
+            "person_id": {
+              "type": "string"
             }
           }
         },
@@ -3435,6 +3457,21 @@
               "required": false
             }
           }
+        },
+        "edit_person": {
+          "api": "ui_edit_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            },
+            "text": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "confirmation": "将人工补充保存到 MaiBot 的这位人物画像？",
+          "version": "1"
         }
       }
     },
@@ -3460,6 +3497,25 @@
               "required": false
             }
           }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
         }
       },
       "actions": {
@@ -3486,6 +3542,9 @@
             "profile_id": {
               "type": "string",
               "required": false
+            },
+            "person_id": {
+              "type": "string"
             }
           }
         },
@@ -3740,6 +3799,21 @@
               "required": false
             }
           }
+        },
+        "edit_person": {
+          "api": "ui_edit_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            },
+            "text": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "confirmation": "将人工补充保存到 MaiBot 的这位人物画像？",
+          "version": "1"
         }
       }
     },
@@ -3812,6 +3886,10 @@
                 {
                   "value": "all",
                   "label": "全部功能"
+                },
+                {
+                  "label": "生活日记",
+                  "value": "生活日记"
                 }
               ]
             }
@@ -3981,6 +4059,123 @@
           ]
         }
       ]
+    },
+    {
+      "id": "diary",
+      "title": "生活日记",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 0,
+      "queries": {
+        "data": {
+          "api": "ui_diaries",
+          "version": "1",
+          "parameters": {
+            "day": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "actions": {
+        "write": {
+          "api": "ui_write_diary",
+          "version": "1",
+          "parameters": {
+            "day": {
+              "type": "string"
+            }
+          },
+          "confirmation": "根据这个日期的生活记录生成日记？已有日记会重新整理。"
+        }
+      },
+      "content": [
+        {
+          "type": "text",
+          "value": "每天自动回顾前一天。选择日期可查看或重新整理；日期留空时生成今天截至当前的日记。写作在后台进行，点击宿主的重载页面查看最新结果。"
+        },
+        {
+          "type": "date",
+          "name": "day",
+          "label": "日期（留空查看最近90篇）",
+          "value": ""
+        },
+        {
+          "type": "button",
+          "label": "写这一天的日记",
+          "action": "write",
+          "variant": "primary"
+        },
+        {
+          "type": "table",
+          "label": "日记本",
+          "value": {
+            "source": "data",
+            "field": "entries"
+          },
+          "selection": "entry",
+          "detail": "diary_detail",
+          "columns": [
+            {
+              "field": "day",
+              "label": "日期"
+            },
+            {
+              "field": "status",
+              "label": "写作状态"
+            },
+            {
+              "field": "coverage",
+              "label": "记录范围"
+            },
+            {
+              "field": "error",
+              "label": "生成情况"
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "diary_detail",
+          "label": "这一天",
+          "children": [
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "entry",
+                "field": "title"
+              }
+            },
+            {
+              "type": "text",
+              "format": "log",
+              "value": {
+                "scope": "selection",
+                "source": "entry",
+                "field": "content"
+              }
+            },
+            {
+              "type": "collapsible",
+              "label": "当天生活记录",
+              "children": [
+                {
+                  "type": "text",
+                  "format": "log",
+                  "value": {
+                    "scope": "selection",
+                    "source": "entry",
+                    "field": "material_text"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "auto_refresh": true
     }
   ]
 }

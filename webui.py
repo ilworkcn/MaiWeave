@@ -2,7 +2,7 @@
 
 import json
 import math
-from datetime import timedelta
+from datetime import date, timedelta
 
 from maibot_sdk import API
 
@@ -28,6 +28,26 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_diaries", description="按日期查看生活日记")
+    async def ui_diaries(self, day: str = "") -> dict:
+        rows = sorted(self.store.all("diary"), key=lambda row: row["day"], reverse=True)
+        if day:
+            rows = [row for row in rows if row["day"] == day]
+        return {"entries": [{**row, "coverage": "全天记录" if row["complete"] else "截至写作时刻",
+                              "material_text": json.dumps(row["material"], ensure_ascii=False, indent=2)} for row in rows[:90]]}
+
+    @API("ui_write_diary", description="生成或重新整理指定日期的生活日记")
+    async def ui_write_diary(self, day: str = "") -> dict:
+        self.require_life()
+        now = self.now()
+        chosen = date.fromisoformat(day) if day else now.date()
+        if chosen > now.date():
+            raise ValueError("请选择今天或过去的日期")
+        material = self.diary.material(chosen, now)
+        if not any(material[key] for key in ("活动", "经历", "状态变化", "梦境")):
+            raise ValueError("这一天还没有生活记录，积累活动或经历后即可写日记")
+        return self.start_job("生活日记", self.diary.write(chosen.isoformat(), now))
+
     @API("ui_usage", description="模型调用用量与趋势")
     async def ui_usage(self, days: int = 7, feature: str = "") -> dict:
         return usage_summary(self.store, self.now(), days, "" if feature == "all" else feature)
@@ -48,9 +68,38 @@ class WebUI:
     async def ui_anniversaries(self) -> dict:
         return {"profiles": self.store.all("profile"), "anniversaries": self.anniversaries.upcoming(self.now().date())}
 
+    @API("ui_memory_people", description="搜索原生记忆人物画像")
+    async def ui_memory_people(self, query: str = "") -> dict:
+        result = await self.memory.people(query)
+        return {"items": [{key: row.get(key, "") for key in ("person_id", "person_name", "user_nickname", "profile_text")}
+                          for row in result["items"]]}
+
+    @API("ui_memory_person", description="读取选中的原生人物画像")
+    async def ui_memory_person(self, person_id: str) -> dict:
+        result = await self.memory.people(person_id=person_id)
+        row = next((item for item in result["items"] if item["person_id"] == person_id), None)
+        if row is None:
+            raise ValueError("请在原生人物画像中选择已有的人物")
+        override = row.get("manual_override") or ""
+        return {"person_id": person_id, "name": row.get("person_name") or row.get("user_nickname") or person_id,
+                "profile_text": row.get("profile_text", ""),
+                "override_text": (override.get("override_text") or override.get("text", "")) if isinstance(override, dict) else override}
+
+    @API("ui_edit_memory_person", description="保存原生人物画像的人工补充")
+    async def ui_edit_memory_person(self, person_id: str, text: str) -> dict:
+        await self.ui_memory_person(person_id)
+        return await self.memory.edit_person(person_id, text)
+
     @API("ui_save_profile", description="保存个人资料")
-    async def ui_save_profile(self, name: str, session_id: str, user_id: str = "", notes: str = "", profile_id: str = "") -> dict:
-        return self.anniversaries.save_profile(name, session_id, user_id, notes, profile_id)
+    async def ui_save_profile(self, name: str, session_id: str, user_id: str = "", notes: str = "", profile_id: str = "", person_id: str = "") -> dict:
+        if person_id and not profile_id:
+            existing = next((row for row in self.store.all("profile") if row.get("person_id") == person_id and row["session_id"] == session_id), None)
+            profile_id = existing["id"] if existing else ""
+        if person_id:
+            person = await self.ui_memory_person(person_id)
+            name = person["name"]
+            user_id = str(await self.ctx.person.get_value(person_id=person_id, field_name="user_id") or "")
+        return self.anniversaries.save_profile(name, session_id, user_id, notes, profile_id, person_id)
 
     @API("ui_save_anniversary", description="保存生日或纪念日")
     async def ui_save_anniversary(self, profile_id: str, title: str, calendar: str, month: int, day: int,

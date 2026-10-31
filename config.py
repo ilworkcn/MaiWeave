@@ -11,7 +11,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.5.0", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.5.1", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -101,6 +101,14 @@ class ContinuityConfig(PluginConfigBase):
     followup_hours: int = setting("未完成事项跟进间隔（小时）", default=24, ge=1, description="关系中的未解决事项进入一次性跟进队列")
 
 
+class DiaryConfig(PluginConfigBase):
+    """每天回顾前一天的生活，日记保存在生活工作区。"""
+
+    __ui_label__ = "生活日记"
+    enabled: bool = setting("自动写日记", default=True, description="每天根据前一天的活动、经历和心情写一篇日记")
+    write_hour: int = setting("写日记时间（整点）", default=0, ge=0, le=23, description="按生活时区，在这个整点后回顾前一天；默认零点")
+
+
 class MaiWeaveConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     life: LifeConfig = Field(default_factory=LifeConfig)
@@ -109,4 +117,5 @@ class MaiWeaveConfig(PluginConfigBase):
     world: WorldConfig = Field(default_factory=WorldConfig)
     rhythm: RhythmConfig = Field(default_factory=RhythmConfig)
     dreams: DreamConfig = Field(default_factory=DreamConfig)
+    diary: DiaryConfig = Field(default_factory=DiaryConfig)
     continuity: ContinuityConfig = Field(default_factory=ContinuityConfig)

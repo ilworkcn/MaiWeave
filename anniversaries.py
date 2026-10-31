@@ -11,13 +11,13 @@ class Anniversaries:
     def __init__(self, store):
         self.store = store
 
-    def save_profile(self, name, session_id, user_id="", notes="", profile_id=""):
+    def save_profile(self, name, session_id, user_id="", notes="", profile_id="", person_id=None):
         if not name.strip() or not session_id.strip():
             raise ValueError("请填写姓名或称呼，以及所属聊天流 ID")
-        if profile_id:
-            self.store.get("profile", profile_id)
+        previous = self.store.get("profile", profile_id) if profile_id else {}
         record = {"id": profile_id or uuid4().hex, "name": name.strip(), "session_id": session_id.strip(),
-                  "user_id": user_id.strip(), "notes": notes.strip()}
+                  "user_id": user_id.strip(), "notes": notes.strip(),
+                  "person_id": previous.get("person_id", "") if person_id is None else person_id.strip()}
         with self.store.db:
             self.store.put("profile", record)
         return record
