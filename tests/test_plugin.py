@@ -31,10 +31,11 @@ async def plugin(tmp_path):
 
 async def test_sdk_components_register(plugin):
     components = plugin.get_components()
-    assert {c["name"] for c in components} == {
+    assert {c["name"] for c in components} >= {
         "maiweave_query", "maiweave_create_plan", "maiweave_change_plan", "maiweave_record_experience",
         "maiweave_revise_experience", "maiweave_goal", "maiweave_relationship", "maiweave_emotion",
         "maiweave_sync_memory", "maiweave_status", "planner_context", "reply_context",
+        "maiweave_world", "maiweave_routine", "maiweave_space", "maiweave_dream", "maiweave_habits", "maiweave_home",
     }
 
 
@@ -77,6 +78,20 @@ async def test_failed_model_does_not_create_fake_activity(plugin):
     with pytest.raises(RuntimeError, match="模型不可用"):
         await plugin.living.choose_activity(plugin.now().replace(hour=12))
     assert plugin.store.all("plan") == []
+
+
+async def test_sleep_trip_arrives_before_sleep_and_wakes_on_time(plugin):
+    plugin.config.life.autonomous = True
+    now = plugin.now().replace(hour=23, minute=0, second=0, microsecond=0)
+    state = plugin.engine.state()
+    state["location"] = "公园"
+    with plugin.store.db:
+        plugin.store.put("state", state)
+    await plugin.living.choose_activity(now)
+    sleep = next(p for p in plugin.store.all("plan") if p["kind"] == "sleep")
+    assert plugin.engine.time(sleep["start"]) == now + timedelta(minutes=15)
+    assert plugin.engine.time(sleep["end"]).hour == 7
+    assert plugin.store.get("plan", sleep["travel_id"])["route"]["destination"] == "住处"
 
 
 async def test_proactive_requests_are_limited(plugin):

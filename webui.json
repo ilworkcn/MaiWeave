@@ -1,0 +1,2518 @@
+{
+  "schema_version": 2,
+  "required_capabilities": [
+    "declarative_basic"
+  ],
+  "workspace_title": "MaiWeave · 生活",
+  "pages": [
+    {
+      "id": "overview",
+      "title": "此刻生活",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "chart",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_overview",
+          "version": "1"
+        }
+      },
+      "actions": {},
+      "content": [
+        {
+          "type": "grid",
+          "columns": 2,
+          "children": [
+            {
+              "type": "card",
+              "label": "此刻",
+              "children": [
+                {
+                  "type": "text",
+                  "label": "正在做什么",
+                  "value": {
+                    "source": "data",
+                    "field": "activity"
+                  }
+                },
+                {
+                  "type": "text",
+                  "label": "所在地点",
+                  "value": {
+                    "source": "data",
+                    "field": "location"
+                  }
+                },
+                {
+                  "type": "text",
+                  "label": "移动状态",
+                  "value": {
+                    "source": "data",
+                    "field": "travel"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "card",
+              "label": "生活状态",
+              "children": [
+                {
+                  "type": "text",
+                  "label": "睡眠",
+                  "value": {
+                    "source": "data",
+                    "field": "sleep"
+                  }
+                },
+                {
+                  "type": "text",
+                  "label": "心境",
+                  "value": {
+                    "source": "data",
+                    "field": "mood_label"
+                  }
+                },
+                {
+                  "type": "text",
+                  "label": "最后推进",
+                  "value": {
+                    "source": "data",
+                    "field": "updated_at"
+                  }
+                },
+                {
+                  "type": "text",
+                  "label": "生活引擎",
+                  "value": {
+                    "source": "data",
+                    "field": "enabled"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": 3,
+          "children": [
+            {
+              "type": "card",
+              "label": "精力",
+              "children": [
+                {
+                  "type": "stat",
+                  "label": "精力",
+                  "value": {
+                    "source": "data",
+                    "field": "state.energy"
+                  }
+                },
+                {
+                  "type": "progress",
+                  "value": {
+                    "source": "data",
+                    "field": "state.energy"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "card",
+              "label": "饥饿",
+              "children": [
+                {
+                  "type": "stat",
+                  "label": "饥饿",
+                  "value": {
+                    "source": "data",
+                    "field": "state.hunger"
+                  }
+                },
+                {
+                  "type": "progress",
+                  "value": {
+                    "source": "data",
+                    "field": "state.hunger"
+                  }
+                }
+              ]
+            },
+            {
+              "type": "card",
+              "label": "压力",
+              "children": [
+                {
+                  "type": "stat",
+                  "label": "压力",
+                  "value": {
+                    "source": "data",
+                    "field": "state.stress"
+                  }
+                },
+                {
+                  "type": "progress",
+                  "value": {
+                    "source": "data",
+                    "field": "state.stress"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": 4,
+          "children": [
+            {
+              "type": "stat",
+              "label": "心情",
+              "value": {
+                "source": "data",
+                "field": "state.mood"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "睡眠债（小时）",
+              "value": {
+                "source": "data",
+                "field": "state.sleep_debt"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "待进行安排",
+              "value": {
+                "source": "data",
+                "field": "pending_count"
+              }
+            },
+            {
+              "type": "stat",
+              "label": "生活经历",
+              "value": {
+                "source": "data",
+                "field": "experience_count"
+              }
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "接下来的安排",
+          "value": {
+            "source": "data",
+            "field": "next_plans"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "安排"
+            },
+            {
+              "field": "start_label",
+              "label": "开始"
+            },
+            {
+              "field": "end_label",
+              "label": "结束"
+            },
+            {
+              "field": "location",
+              "label": "地点"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": 2,
+          "children": [
+            {
+              "type": "chart",
+              "label": "最近精力变化",
+              "value": {
+                "source": "data",
+                "field": "history"
+              },
+              "x": "label",
+              "y": "energy",
+              "chart_type": "line"
+            },
+            {
+              "type": "chart",
+              "label": "最近心情变化",
+              "value": {
+                "source": "data",
+                "field": "history"
+              },
+              "x": "label",
+              "y": "mood",
+              "chart_type": "line"
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "label": "运行情况",
+          "children": [
+            {
+              "type": "text",
+              "label": "当前错误",
+              "value": {
+                "source": "data",
+                "field": "errors"
+              }
+            },
+            {
+              "type": "table",
+              "label": "后台操作进度",
+              "value": {
+                "source": "data",
+                "field": "jobs"
+              },
+              "columns": [
+                {
+                  "field": "label",
+                  "label": "操作"
+                },
+                {
+                  "field": "status",
+                  "label": "状态"
+                },
+                {
+                  "field": "error",
+                  "label": "错误"
+                },
+                {
+                  "field": "created_at",
+                  "label": "开始时间"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "schedule",
+      "title": "生活日程",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": true,
+      "queries": {
+        "data": {
+          "api": "ui_schedule",
+          "version": "1",
+          "parameters": {
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "start_date": {
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "actions": {
+        "create": {
+          "api": "ui_create_plan",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "start": {
+              "type": "string",
+              "required": true
+            },
+            "end": {
+              "type": "string",
+              "required": true
+            },
+            "kind": {
+              "type": "string",
+              "required": false
+            },
+            "location": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "participants": {
+              "type": "string",
+              "required": false
+            },
+            "simulation": {
+              "type": "boolean",
+              "required": false
+            }
+          }
+        },
+        "operate": {
+          "api": "ui_plan_action",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            },
+            "action": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "plan_id": {
+              "scope": "selection",
+              "source": "plan",
+              "field": "id"
+            }
+          }
+        },
+        "update": {
+          "api": "ui_update_plan",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            },
+            "new_title": {
+              "type": "string",
+              "required": false
+            },
+            "new_start": {
+              "type": "string",
+              "required": false
+            },
+            "new_end": {
+              "type": "string",
+              "required": false
+            },
+            "new_location": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "arguments": {
+            "plan_id": {
+              "scope": "selection",
+              "source": "plan",
+              "field": "id"
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "card",
+          "label": "筛选",
+          "children": [
+            {
+              "type": "input",
+              "name": "session_id",
+              "label": "聊天流（留空查看全部，新建时留空表示公共生活）",
+              "value": ""
+            },
+            {
+              "type": "date",
+              "name": "start_date",
+              "label": "从哪天开始查看",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "value": "时间使用 YYYY-MM-DDTHH:MM，例如 2026-11-01T19:00。移动会自动预留出行时间。点击一行可查看详情。"
+        },
+        {
+          "type": "table",
+          "label": "最近与未来安排（最多200条）",
+          "value": {
+            "source": "data",
+            "field": "plans"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "安排"
+            },
+            {
+              "field": "start_label",
+              "label": "开始"
+            },
+            {
+              "field": "end_label",
+              "label": "结束"
+            },
+            {
+              "field": "kind_label",
+              "label": "类型"
+            },
+            {
+              "field": "location",
+              "label": "地点"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            },
+            {
+              "field": "origin_label",
+              "label": "来源"
+            },
+            {
+              "field": "scope_label",
+              "label": "所属聊天流"
+            }
+          ],
+          "selection": "plan",
+          "detail": "plan_detail"
+        },
+        {
+          "type": "card",
+          "label": "操作所选日程",
+          "children": [
+            {
+              "type": "select",
+              "name": "action",
+              "label": "执行操作",
+              "value": "pause",
+              "options": [
+                {
+                  "value": "pause",
+                  "label": "暂停"
+                },
+                {
+                  "value": "resume",
+                  "label": "继续"
+                },
+                {
+                  "value": "cancel",
+                  "label": "取消"
+                }
+              ]
+            },
+            {
+              "type": "button",
+              "label": "执行所选操作",
+              "action": "operate",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "plan",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "label": "修改所选日程（留空的字段保持不变）",
+          "children": [
+            {
+              "type": "input",
+              "name": "new_title",
+              "label": "新标题",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "new_start",
+              "label": "新开始时间",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "new_end",
+              "label": "新结束时间",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "new_location",
+              "label": "新地点",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "保存修改",
+              "action": "update",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "plan",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "collapsible",
+          "label": "新增安排",
+          "children": [
+            {
+              "type": "input",
+              "name": "title",
+              "label": "安排标题",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "start",
+              "label": "开始时间",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "end",
+              "label": "结束时间",
+              "value": ""
+            },
+            {
+              "type": "select",
+              "name": "kind",
+              "label": "活动类型",
+              "value": "leisure",
+              "options": [
+                {
+                  "value": "leisure",
+                  "label": "休闲"
+                },
+                {
+                  "value": "study",
+                  "label": "学习"
+                },
+                {
+                  "value": "work",
+                  "label": "工作"
+                },
+                {
+                  "value": "sleep",
+                  "label": "睡眠"
+                },
+                {
+                  "value": "meal",
+                  "label": "用餐"
+                },
+                {
+                  "value": "travel",
+                  "label": "出行"
+                },
+                {
+                  "value": "rest",
+                  "label": "休息"
+                },
+                {
+                  "value": "social",
+                  "label": "社交"
+                }
+              ]
+            },
+            {
+              "type": "input",
+              "name": "location",
+              "label": "地点（填写已登记名称）",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "participants",
+              "label": "参与者（逗号分隔，共同安排需确认完成）",
+              "value": ""
+            },
+            {
+              "type": "switch",
+              "name": "simulation",
+              "label": "独自活动允许模拟完成",
+              "value": true
+            },
+            {
+              "type": "button",
+              "label": "新增安排",
+              "action": "create"
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "plan_detail",
+          "label": "日程详情",
+          "children": [
+            {
+              "type": "text",
+              "label": "安排编号",
+              "value": {
+                "scope": "selection",
+                "source": "plan",
+                "field": "id"
+              }
+            },
+            {
+              "type": "text",
+              "label": "安排",
+              "value": {
+                "scope": "selection",
+                "source": "plan",
+                "field": "title"
+              }
+            },
+            {
+              "type": "text",
+              "label": "开始时间",
+              "value": {
+                "scope": "selection",
+                "source": "plan",
+                "field": "start"
+              }
+            },
+            {
+              "type": "text",
+              "label": "结束时间",
+              "value": {
+                "scope": "selection",
+                "source": "plan",
+                "field": "end"
+              }
+            },
+            {
+              "type": "text",
+              "label": "动机",
+              "value": {
+                "scope": "selection",
+                "source": "plan",
+                "field": "motivation"
+              }
+            },
+            {
+              "type": "text",
+              "label": "参与者",
+              "value": {
+                "scope": "selection",
+                "source": "plan",
+                "field": "participants_label"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "routines",
+      "title": "重复日程",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_schedule",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "create": {
+          "api": "ui_save_routine",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "anchor_date": {
+              "type": "string",
+              "required": true
+            },
+            "start_time": {
+              "type": "string",
+              "required": true
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "required": true,
+              "minimum": 1
+            },
+            "frequency": {
+              "type": "string",
+              "required": false
+            },
+            "weekdays": {
+              "type": "string",
+              "required": false
+            },
+            "until": {
+              "type": "string",
+              "required": false
+            },
+            "kind": {
+              "type": "string",
+              "required": false
+            },
+            "location": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "participants": {
+              "type": "string",
+              "required": false
+            },
+            "interval": {
+              "type": "integer",
+              "required": false,
+              "minimum": 1
+            },
+            "month_day": {
+              "type": "integer",
+              "required": false,
+              "minimum": 1,
+              "maximum": 31
+            },
+            "simulation": {
+              "type": "boolean",
+              "required": false
+            }
+          }
+        },
+        "update": {
+          "api": "ui_save_routine",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "anchor_date": {
+              "type": "string",
+              "required": true
+            },
+            "start_time": {
+              "type": "string",
+              "required": true
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "required": true,
+              "minimum": 1
+            },
+            "frequency": {
+              "type": "string",
+              "required": false
+            },
+            "weekdays": {
+              "type": "string",
+              "required": false
+            },
+            "until": {
+              "type": "string",
+              "required": false
+            },
+            "kind": {
+              "type": "string",
+              "required": false
+            },
+            "location": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "participants": {
+              "type": "string",
+              "required": false
+            },
+            "interval": {
+              "type": "integer",
+              "required": false,
+              "minimum": 1
+            },
+            "month_day": {
+              "type": "integer",
+              "required": false,
+              "minimum": 1,
+              "maximum": 31
+            },
+            "simulation": {
+              "type": "boolean",
+              "required": false
+            },
+            "rule_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "rule_id": {
+              "scope": "selection",
+              "source": "rule",
+              "field": "id"
+            }
+          }
+        },
+        "operate": {
+          "api": "ui_routine_action",
+          "version": "1",
+          "parameters": {
+            "rule_id": {
+              "type": "string",
+              "required": true
+            },
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "skip_date": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "arguments": {
+            "rule_id": {
+              "scope": "selection",
+              "source": "rule",
+              "field": "id"
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "table",
+          "label": "重复规则",
+          "value": {
+            "source": "data",
+            "field": "rules"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "安排"
+            },
+            {
+              "field": "frequency_label",
+              "label": "周期"
+            },
+            {
+              "field": "interval",
+              "label": "间隔"
+            },
+            {
+              "field": "start_time",
+              "label": "时间"
+            },
+            {
+              "field": "weekdays_label",
+              "label": "星期"
+            },
+            {
+              "field": "month_day",
+              "label": "每月日期"
+            },
+            {
+              "field": "location",
+              "label": "地点"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            },
+            {
+              "field": "exceptions_label",
+              "label": "跳过日期"
+            }
+          ],
+          "selection": "rule"
+        },
+        {
+          "type": "card",
+          "label": "规则操作",
+          "children": [
+            {
+              "type": "select",
+              "name": "action",
+              "label": "执行操作",
+              "value": "skip",
+              "options": [
+                {
+                  "value": "skip",
+                  "label": "跳过某一天"
+                },
+                {
+                  "value": "cancel",
+                  "label": "停止今后重复"
+                }
+              ]
+            },
+            {
+              "type": "date",
+              "name": "skip_date",
+              "label": "跳过日期",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "执行规则操作",
+              "action": "operate",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "rule",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "label": "新建或修改完整规则",
+          "children": [
+            {
+              "type": "input",
+              "name": "title",
+              "label": "安排标题",
+              "value": ""
+            },
+            {
+              "type": "select",
+              "name": "frequency",
+              "label": "重复周期",
+              "value": "weekly",
+              "options": [
+                {
+                  "value": "daily",
+                  "label": "每天"
+                },
+                {
+                  "value": "weekly",
+                  "label": "每周"
+                },
+                {
+                  "value": "monthly",
+                  "label": "每月"
+                }
+              ]
+            },
+            {
+              "type": "input",
+              "name": "interval",
+              "label": "间隔几个周期",
+              "value": 1
+            },
+            {
+              "type": "date",
+              "name": "anchor_date",
+              "label": "开始日期",
+              "value": ""
+            },
+            {
+              "type": "date",
+              "name": "until",
+              "label": "结束日期（可留空）",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "start_time",
+              "label": "每天开始时间（HH:MM）",
+              "value": "19:00"
+            },
+            {
+              "type": "input",
+              "name": "duration_minutes",
+              "label": "持续时间（分钟）",
+              "value": 60
+            },
+            {
+              "type": "input",
+              "name": "weekdays",
+              "label": "每周星期（逗号分隔）",
+              "value": "周一,周二,周三,周四,周五"
+            },
+            {
+              "type": "input",
+              "name": "month_day",
+              "label": "每月第几日",
+              "value": 1
+            },
+            {
+              "type": "select",
+              "name": "kind",
+              "label": "活动类型",
+              "value": "leisure",
+              "options": [
+                {
+                  "value": "leisure",
+                  "label": "休闲"
+                },
+                {
+                  "value": "study",
+                  "label": "学习"
+                },
+                {
+                  "value": "work",
+                  "label": "工作"
+                },
+                {
+                  "value": "sleep",
+                  "label": "睡眠"
+                },
+                {
+                  "value": "meal",
+                  "label": "用餐"
+                },
+                {
+                  "value": "travel",
+                  "label": "出行"
+                },
+                {
+                  "value": "rest",
+                  "label": "休息"
+                },
+                {
+                  "value": "social",
+                  "label": "社交"
+                }
+              ]
+            },
+            {
+              "type": "input",
+              "name": "location",
+              "label": "地点",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "session_id",
+              "label": "所属聊天流（留空表示公共生活）",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "participants",
+              "label": "参与者（逗号分隔）",
+              "value": ""
+            },
+            {
+              "type": "switch",
+              "name": "simulation",
+              "label": "独自活动允许模拟完成",
+              "value": true
+            },
+            {
+              "type": "button",
+              "label": "创建新规则",
+              "action": "create"
+            },
+            {
+              "type": "button",
+              "label": "用表单更新所选规则",
+              "action": "update",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "rule",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "尚未安排成功的日期",
+          "value": {
+            "source": "data",
+            "field": "issues"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "规则"
+            },
+            {
+              "field": "day",
+              "label": "日期"
+            },
+            {
+              "field": "message",
+              "label": "原因"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "world",
+      "title": "天气与见闻",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "database",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_world",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "refresh": {
+          "api": "ui_refresh_world",
+          "version": "1"
+        },
+        "research": {
+          "api": "ui_research",
+          "version": "1",
+          "parameters": {
+            "query": {
+              "type": "string",
+              "required": false
+            },
+            "url": {
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "card",
+          "label": "此地天气",
+          "children": [
+            {
+              "type": "text",
+              "label": "当前天气",
+              "value": {
+                "source": "data",
+                "field": "summary"
+              }
+            },
+            {
+              "type": "text",
+              "label": "资料时效",
+              "value": {
+                "source": "data",
+                "field": "freshness"
+              }
+            },
+            {
+              "type": "text",
+              "label": "观测时间",
+              "value": {
+                "source": "data",
+                "field": "observed_at"
+              }
+            },
+            {
+              "type": "text",
+              "label": "来源",
+              "value": {
+                "source": "data",
+                "field": "source"
+              }
+            },
+            {
+              "type": "text",
+              "label": "更新错误",
+              "value": {
+                "source": "data",
+                "field": "weather_error"
+              }
+            },
+            {
+              "type": "button",
+              "label": "更新天气与订阅",
+              "action": "refresh"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "三日预报",
+          "value": {
+            "source": "data",
+            "field": "forecast"
+          },
+          "columns": [
+            {
+              "field": "day",
+              "label": "日期"
+            },
+            {
+              "field": "weather",
+              "label": "天气"
+            },
+            {
+              "field": "low",
+              "label": "最低温℃"
+            },
+            {
+              "field": "high",
+              "label": "最高温℃"
+            },
+            {
+              "field": "rain_probability",
+              "label": "降水概率%"
+            },
+            {
+              "field": "sunrise",
+              "label": "日出"
+            },
+            {
+              "field": "sunset",
+              "label": "日落"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "订阅资讯",
+          "value": {
+            "source": "data",
+            "field": "news"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "标题"
+            },
+            {
+              "field": "published_at",
+              "label": "发布时间"
+            },
+            {
+              "field": "source",
+              "label": "订阅来源"
+            },
+            {
+              "field": "url",
+              "label": "原文链接"
+            }
+          ],
+          "selection": "news",
+          "detail": "news_detail"
+        },
+        {
+          "type": "card",
+          "label": "主动了解外部世界",
+          "children": [
+            {
+              "type": "input",
+              "name": "query",
+              "label": "检索词",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "url",
+              "label": "网页地址（有地址时优先读取）",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "开始检索或阅读",
+              "action": "research"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "最近检索",
+          "value": {
+            "source": "data",
+            "field": "research"
+          },
+          "columns": [
+            {
+              "field": "query",
+              "label": "检索词"
+            },
+            {
+              "field": "retrieved_at",
+              "label": "检索时间"
+            },
+            {
+              "field": "results_text",
+              "label": "原始结果"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "已阅读网页",
+          "value": {
+            "source": "data",
+            "field": "readings"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "标题"
+            },
+            {
+              "field": "url",
+              "label": "来源"
+            },
+            {
+              "field": "retrieved_at",
+              "label": "读取时间"
+            }
+          ],
+          "selection": "reading",
+          "detail": "reading_detail"
+        },
+        {
+          "type": "table",
+          "label": "后台操作进度",
+          "value": {
+            "source": "data",
+            "field": "jobs"
+          },
+          "columns": [
+            {
+              "field": "label",
+              "label": "操作"
+            },
+            {
+              "field": "status",
+              "label": "状态"
+            },
+            {
+              "field": "error",
+              "label": "错误"
+            },
+            {
+              "field": "created_at",
+              "label": "开始时间"
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "news_detail",
+          "label": "资讯内容",
+          "children": [
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "news",
+                "field": "summary"
+              }
+            },
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "news",
+                "field": "url"
+              }
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "reading_detail",
+          "label": "网页资料",
+          "children": [
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "reading",
+                "field": "content"
+              },
+              "format": "log"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "space",
+      "title": "地点与移动",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_space",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "add_place": {
+          "api": "ui_save_place",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "outdoor": {
+              "type": "boolean",
+              "required": false
+            },
+            "description": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "edit_place": {
+          "api": "ui_save_place",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "outdoor": {
+              "type": "boolean",
+              "required": false
+            },
+            "description": {
+              "type": "string",
+              "required": false
+            },
+            "place_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "place_id": {
+              "scope": "selection",
+              "source": "place",
+              "field": "id"
+            }
+          }
+        },
+        "route": {
+          "api": "ui_save_route",
+          "version": "1",
+          "parameters": {
+            "origin": {
+              "type": "string",
+              "required": true
+            },
+            "destination": {
+              "type": "string",
+              "required": true
+            },
+            "minutes": {
+              "type": "integer",
+              "required": true,
+              "minimum": 1
+            },
+            "mode": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "move": {
+          "api": "ui_move",
+          "version": "1",
+          "parameters": {
+            "destination": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "grid",
+          "columns": 3,
+          "children": [
+            {
+              "type": "text",
+              "label": "所在地点",
+              "value": {
+                "source": "data",
+                "field": "location"
+              }
+            },
+            {
+              "type": "text",
+              "label": "下一站",
+              "value": {
+                "source": "data",
+                "field": "journey.next"
+              }
+            },
+            {
+              "type": "text",
+              "label": "移动方式",
+              "value": {
+                "source": "data",
+                "field": "journey.mode"
+              }
+            }
+          ]
+        },
+        {
+          "type": "progress",
+          "label": "当前路段进度",
+          "value": {
+            "source": "data",
+            "field": "journey.progress"
+          }
+        },
+        {
+          "type": "table",
+          "label": "正在经过的路线",
+          "value": {
+            "source": "data",
+            "field": "legs"
+          },
+          "columns": [
+            {
+              "field": "origin",
+              "label": "从"
+            },
+            {
+              "field": "destination",
+              "label": "到"
+            },
+            {
+              "field": "minutes",
+              "label": "分钟"
+            },
+            {
+              "field": "mode",
+              "label": "方式"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "value": "下面是角色世界的虚拟地点图，不是现实定位。路线双向连接，出行沿最短耗时路径推进。"
+        },
+        {
+          "type": "table",
+          "label": "地点",
+          "value": {
+            "source": "data",
+            "field": "places"
+          },
+          "columns": [
+            {
+              "field": "name",
+              "label": "名称"
+            },
+            {
+              "field": "outdoor_label",
+              "label": "环境"
+            },
+            {
+              "field": "description",
+              "label": "说明"
+            },
+            {
+              "field": "id",
+              "label": "编号"
+            }
+          ],
+          "selection": "place"
+        },
+        {
+          "type": "collapsible",
+          "label": "添加或修改地点",
+          "children": [
+            {
+              "type": "input",
+              "name": "name",
+              "label": "地点名称",
+              "value": ""
+            },
+            {
+              "type": "switch",
+              "name": "outdoor",
+              "label": "室外地点",
+              "value": false
+            },
+            {
+              "type": "input",
+              "name": "description",
+              "label": "地点说明",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "添加地点",
+              "action": "add_place"
+            },
+            {
+              "type": "button",
+              "label": "修改所选地点",
+              "action": "edit_place",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "place",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "连接路线",
+          "value": {
+            "source": "data",
+            "field": "routes"
+          },
+          "columns": [
+            {
+              "field": "origin_name",
+              "label": "起点"
+            },
+            {
+              "field": "destination_name",
+              "label": "终点"
+            },
+            {
+              "field": "minutes",
+              "label": "耗时（分钟）"
+            },
+            {
+              "field": "mode",
+              "label": "移动方式"
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "label": "路线与出行",
+          "children": [
+            {
+              "type": "input",
+              "name": "origin",
+              "label": "路线起点名称",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "destination",
+              "label": "终点名称",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "minutes",
+              "label": "路段耗时（分钟）",
+              "value": 10
+            },
+            {
+              "type": "input",
+              "name": "mode",
+              "label": "移动方式",
+              "value": "步行"
+            },
+            {
+              "type": "button",
+              "label": "保存双向路线",
+              "action": "route"
+            },
+            {
+              "type": "button",
+              "label": "从当前位置前往终点",
+              "action": "move"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dreams",
+      "title": "睡眠与梦境",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_dreams",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "generate": {
+          "api": "ui_generate_dream",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "plan_id": {
+              "scope": "selection",
+              "source": "sleep",
+              "field": "id"
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "text",
+          "value": "梦境来自睡眠后的模型生成，单独保存；不会成为现实经历或原生事实。"
+        },
+        {
+          "type": "table",
+          "label": "梦境档案",
+          "value": {
+            "source": "data",
+            "field": "dreams"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "梦的标题"
+            },
+            {
+              "field": "sleep_end",
+              "label": "醒来时间"
+            },
+            {
+              "field": "feeling",
+              "label": "醒后感受"
+            },
+            {
+              "field": "status",
+              "label": "状态"
+            },
+            {
+              "field": "error",
+              "label": "错误"
+            }
+          ],
+          "selection": "dream",
+          "detail": "dream_detail"
+        },
+        {
+          "type": "table",
+          "label": "睡眠记录",
+          "value": {
+            "source": "data",
+            "field": "sleeps"
+          },
+          "columns": [
+            {
+              "field": "start_label",
+              "label": "入睡"
+            },
+            {
+              "field": "end_label",
+              "label": "结束"
+            },
+            {
+              "field": "hours",
+              "label": "累计小时"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            }
+          ],
+          "selection": "sleep"
+        },
+        {
+          "type": "button",
+          "label": "为所选睡眠生成梦境／重试失败任务",
+          "action": "generate",
+          "disabled_when": {
+            "reference": {
+              "scope": "selection",
+              "source": "sleep",
+              "field": "id"
+            },
+            "operator": "empty"
+          },
+          "disabled_reason": "请先在表格中选择一条记录"
+        },
+        {
+          "type": "table",
+          "label": "后台操作进度",
+          "value": {
+            "source": "data",
+            "field": "jobs"
+          },
+          "columns": [
+            {
+              "field": "label",
+              "label": "操作"
+            },
+            {
+              "field": "status",
+              "label": "状态"
+            },
+            {
+              "field": "error",
+              "label": "错误"
+            },
+            {
+              "field": "created_at",
+              "label": "开始时间"
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "dream_detail",
+          "label": "梦境详情",
+          "children": [
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "dream",
+                "field": "source_label"
+              }
+            },
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "dream",
+                "field": "story"
+              },
+              "format": "log"
+            },
+            {
+              "type": "text",
+              "label": "感受",
+              "value": {
+                "scope": "selection",
+                "source": "dream",
+                "field": "feeling"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "habits",
+      "title": "习惯与成长",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "list",
+      "poll_interval_seconds": 30,
+      "auto_refresh": false,
+      "queries": {
+        "data": {
+          "api": "ui_habits",
+          "version": "1"
+        }
+      },
+      "actions": {
+        "toggle": {
+          "api": "ui_habit_action",
+          "version": "1",
+          "parameters": {
+            "habit_id": {
+              "type": "string",
+              "required": true
+            },
+            "enabled": {
+              "type": "boolean",
+              "required": true
+            }
+          },
+          "arguments": {
+            "habit_id": {
+              "scope": "selection",
+              "source": "habit",
+              "field": "id"
+            }
+          }
+        },
+        "learn": {
+          "api": "ui_learn_habits",
+          "version": "1"
+        },
+        "create_goal": {
+          "api": "ui_create_goal",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "target_sessions": {
+              "type": "integer",
+              "required": false,
+              "minimum": 1
+            },
+            "reason": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "cancel_goal": {
+          "api": "ui_cancel_goal",
+          "version": "1",
+          "parameters": {
+            "goal_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "goal_id": {
+              "scope": "selection",
+              "source": "goal",
+              "field": "id"
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "text",
+          "value": "习惯由多个不同日期的已完成活动形成。显示依据和时间集中度，可以选择忽略，不强行改变角色生活。"
+        },
+        {
+          "type": "table",
+          "label": "习惯",
+          "value": {
+            "source": "data",
+            "field": "habits"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "活动"
+            },
+            {
+              "field": "time",
+              "label": "常见时间"
+            },
+            {
+              "field": "location",
+              "label": "地点"
+            },
+            {
+              "field": "observed_days",
+              "label": "观察天数"
+            },
+            {
+              "field": "strength",
+              "label": "稳定度%"
+            },
+            {
+              "field": "active_label",
+              "label": "近期表现"
+            },
+            {
+              "field": "enabled_label",
+              "label": "是否参与规划"
+            }
+          ],
+          "selection": "habit",
+          "detail": "habit_detail"
+        },
+        {
+          "type": "card",
+          "label": "习惯操作",
+          "children": [
+            {
+              "type": "switch",
+              "name": "enabled",
+              "label": "让所选习惯参与自主规划",
+              "value": true
+            },
+            {
+              "type": "button",
+              "label": "保存习惯选择",
+              "action": "toggle",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "habit",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            },
+            {
+              "type": "button",
+              "label": "重新分析已完成活动",
+              "action": "learn"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "长期目标",
+          "value": {
+            "source": "data",
+            "field": "goals"
+          },
+          "columns": [
+            {
+              "field": "title",
+              "label": "目标"
+            },
+            {
+              "field": "completed_sessions",
+              "label": "已完成次数"
+            },
+            {
+              "field": "target_sessions",
+              "label": "目标次数"
+            },
+            {
+              "field": "progress",
+              "label": "进度%"
+            },
+            {
+              "field": "status_label",
+              "label": "状态"
+            }
+          ],
+          "selection": "goal"
+        },
+        {
+          "type": "button",
+          "label": "停止所选目标",
+          "action": "cancel_goal",
+          "disabled_when": {
+            "reference": {
+              "scope": "selection",
+              "source": "goal",
+              "field": "id"
+            },
+            "operator": "empty"
+          },
+          "disabled_reason": "请先在表格中选择一条记录"
+        },
+        {
+          "type": "collapsible",
+          "label": "新增目标",
+          "children": [
+            {
+              "type": "input",
+              "name": "title",
+              "label": "目标标题",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "target_sessions",
+              "label": "计划完成次数",
+              "value": 5
+            },
+            {
+              "type": "input",
+              "name": "reason",
+              "label": "为什么想做",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "session_id",
+              "label": "所属聊天流（可留空）",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "创建目标",
+              "action": "create_goal"
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "关系状态",
+          "value": {
+            "source": "data",
+            "field": "relations"
+          },
+          "columns": [
+            {
+              "field": "person_id",
+              "label": "人物"
+            },
+            {
+              "field": "session_id",
+              "label": "聊天流"
+            },
+            {
+              "field": "familiarity",
+              "label": "熟悉"
+            },
+            {
+              "field": "trust",
+              "label": "信任"
+            },
+            {
+              "field": "closeness",
+              "label": "亲近"
+            },
+            {
+              "field": "boundary",
+              "label": "边界"
+            },
+            {
+              "field": "unresolved",
+              "label": "未解决事项"
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "habit_detail",
+          "label": "习惯依据",
+          "children": [
+            {
+              "type": "text",
+              "value": {
+                "scope": "selection",
+                "source": "habit",
+                "field": "evidence"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "records",
+      "title": "经历与记忆",
+      "placement": "workspace",
+      "mode": "declarative",
+      "icon": "database",
+      "poll_interval_seconds": 30,
+      "auto_refresh": true,
+      "queries": {
+        "data": {
+          "api": "ui_records",
+          "version": "1",
+          "parameters": {
+            "query": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "page": {
+              "type": "integer",
+              "required": false,
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "actions": {
+        "revise": {
+          "api": "ui_revise_record",
+          "version": "1",
+          "parameters": {
+            "experience_id": {
+              "type": "string",
+              "required": true
+            },
+            "evidence": {
+              "type": "string",
+              "required": true
+            },
+            "summary": {
+              "type": "string",
+              "required": false
+            },
+            "detail_key": {
+              "type": "string",
+              "required": false
+            },
+            "detail_value": {
+              "type": "string",
+              "required": false
+            }
+          },
+          "arguments": {
+            "experience_id": {
+              "scope": "selection",
+              "source": "record",
+              "field": "id"
+            }
+          }
+        },
+        "sync": {
+          "api": "ui_sync_record",
+          "version": "1",
+          "parameters": {
+            "experience_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "arguments": {
+            "experience_id": {
+              "scope": "selection",
+              "source": "record",
+              "field": "id"
+            }
+          }
+        }
+      },
+      "content": [
+        {
+          "type": "table",
+          "label": "后台操作进度",
+          "value": {
+            "source": "data",
+            "field": "jobs"
+          },
+          "columns": [
+            {
+              "field": "label",
+              "label": "操作"
+            },
+            {
+              "field": "status",
+              "label": "状态"
+            },
+            {
+              "field": "error",
+              "label": "错误"
+            },
+            {
+              "field": "created_at",
+              "label": "开始时间"
+            }
+          ]
+        },
+        {
+          "type": "grid",
+          "columns": 2,
+          "children": [
+            {
+              "type": "input",
+              "name": "query",
+              "label": "搜索经历摘要",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "session_id",
+              "label": "所属聊天流（留空查看全部）",
+              "value": ""
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "label": "生活经历",
+          "value": {
+            "source": "data",
+            "field": "records"
+          },
+          "columns": [
+            {
+              "field": "summary",
+              "label": "经历"
+            },
+            {
+              "field": "time_label",
+              "label": "发生时间"
+            },
+            {
+              "field": "source_label",
+              "label": "来源"
+            },
+            {
+              "field": "revision",
+              "label": "修订版本"
+            },
+            {
+              "field": "memory_label",
+              "label": "原生记忆"
+            }
+          ],
+          "selection": "record",
+          "detail": "record_detail"
+        },
+        {
+          "type": "pagination",
+          "name": "page",
+          "value": {
+            "source": "data",
+            "field": "pagination"
+          }
+        },
+        {
+          "type": "card",
+          "label": "补充或更正所选经历",
+          "children": [
+            {
+              "type": "input",
+              "name": "summary",
+              "label": "新的完整摘要（留空保留）",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "detail_key",
+              "label": "细节名称",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "detail_value",
+              "label": "细节内容",
+              "value": ""
+            },
+            {
+              "type": "input",
+              "name": "evidence",
+              "label": "本次补充或更正的依据",
+              "value": ""
+            },
+            {
+              "type": "button",
+              "label": "保存修订",
+              "action": "revise",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "record",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            },
+            {
+              "type": "button",
+              "label": "同步所选经历到原生记忆",
+              "action": "sync",
+              "disabled_when": {
+                "reference": {
+                  "scope": "selection",
+                  "source": "record",
+                  "field": "id"
+                },
+                "operator": "empty"
+              },
+              "disabled_reason": "请先在表格中选择一条记录"
+            }
+          ]
+        },
+        {
+          "type": "dialog",
+          "name": "record_detail",
+          "label": "经历详情与历史",
+          "children": [
+            {
+              "type": "text",
+              "label": "经历",
+              "value": {
+                "scope": "selection",
+                "source": "record",
+                "field": "summary"
+              },
+              "format": "log"
+            },
+            {
+              "type": "text",
+              "label": "来源性质",
+              "value": {
+                "scope": "selection",
+                "source": "record",
+                "field": "source_label"
+              },
+              "format": "log"
+            },
+            {
+              "type": "text",
+              "label": "结构化细节",
+              "value": {
+                "scope": "selection",
+                "source": "record",
+                "field": "details_text"
+              },
+              "format": "log"
+            },
+            {
+              "type": "text",
+              "label": "依据",
+              "value": {
+                "scope": "selection",
+                "source": "record",
+                "field": "evidence"
+              },
+              "format": "log"
+            },
+            {
+              "type": "text",
+              "label": "修订历史",
+              "value": {
+                "scope": "selection",
+                "source": "record",
+                "field": "history_text"
+              },
+              "format": "log"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

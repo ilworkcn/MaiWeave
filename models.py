@@ -87,3 +87,26 @@ class PlanPatch(BaseModel):
         if any(getattr(self, field) is None for field in self.model_fields_set):
             raise ValueError("修改字段不能为 null")
         return self
+
+
+class RoutineInput(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    frequency: Literal["daily", "weekly", "monthly"] = "weekly"
+    interval: int = Field(default=1, ge=1, le=52)
+    anchor_date: str
+    start_time: str
+    duration_minutes: int = Field(ge=1, le=1440)
+    weekdays: list[int] = Field(default_factory=list, description="周一为0，周日为6")
+    month_day: int = Field(default=1, ge=1, le=31)
+    until: str = ""
+    kind: Kind = "leisure"
+    location: str = ""
+    participants: list[str] = Field(default_factory=list)
+    simulation: bool = True
+
+
+class DreamContent(BaseModel):
+    title: str = Field(min_length=1, max_length=80)
+    story: str = Field(min_length=1, max_length=1600)
+    feeling: str = Field(min_length=1, max_length=160)
+    mood_delta: float = Field(default=0, ge=-3, le=3)

@@ -32,3 +32,6 @@ class Store:
 
     def close(self):
         self.db.close()
+
+    def delete(self, category: str, record_id: str):
+        self.db.execute("DELETE FROM records WHERE category=? AND id=?", (category, record_id))

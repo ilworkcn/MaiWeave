@@ -1,0 +1,59 @@
+"""睡后梦境独立保存，不作为实际经历或原生事实。"""
+
+import json
+
+from .models import DreamContent
+
+
+class Dreams:
+    def __init__(self, engine, context, config):
+        self.engine, self.ctx, self.config = engine, context, config
+
+    async def process(self, now):
+        if not self.config.dreams.enabled:
+            return
+        for plan in self.engine.store.all("plan"):
+            if (plan["status"] == "completed" and plan["kind"] == "sleep"
+                    and plan["elapsed_seconds"] >= self.config.dreams.minimum_hours * 3600
+                    and 0 <= (now - self.engine.time(plan["end"])).total_seconds() < 86400
+                    and self.engine.store.find("dream", plan["id"]) is None):
+                await self.generate(plan["id"], now)
+
+    async def generate(self, plan_id: str, now) -> dict:
+        plan = self.engine.store.get("plan", plan_id)
+        if plan["kind"] != "sleep" or plan["status"] != "completed":
+            raise ValueError("只能为已完成的睡眠生成梦境")
+        old = self.engine.store.find("dream", plan_id)
+        if old and old["status"] == "已生成":
+            return old
+        recent = [{"summary": e["summary"], "source": e["source"]} for e in self.engine.experiences(plan["session_id"], limit=5)]
+        record = {"id": plan_id, "session_id": plan["session_id"], "sleep_end": plan["end"],
+                  "created_at": now.isoformat(), "source": "dream", "status": "生成中", "error": ""}
+        with self.engine.store.db:
+            self.engine.store.put("dream", record)
+        prompt = (
+            "为虚拟角色写一段睡梦。梦可以重组最近经历，但不能把梦声称为现实。"
+            "不要新增真实用户的行为或隐私。只返回 JSON：title（简短标题）、story（150到400字）、"
+            "feeling（醒后感受）、mood_delta（-3到3）。"
+            f"当前状态：{json.dumps(self.engine.state(), ensure_ascii=False)}；"
+            f"最近经历：{json.dumps(recent, ensure_ascii=False)}"
+        )
+        try:
+            response = await self.ctx.llm.generate(prompt, task_name=self.config.life.model_task)
+            if not response["success"]:
+                raise RuntimeError(response.get("error") or "梦境模型调用失败")
+            text = response["response"].strip()
+            if text.startswith("```"):
+                text = "\n".join(text.splitlines()[1:-1])
+            content = DreamContent.model_validate_json(text)
+            record.update(content.model_dump(), status="已生成")
+            with self.engine.store.db:
+                self.engine.store.put("dream", record)
+                if self.config.dreams.mood_effect:
+                    self.engine.affect(content.mood_delta, 0, "梦醒后的感受：" + content.feeling, now)
+            return record
+        except Exception as error:
+            record.update(status="生成失败", error=str(error))
+            with self.engine.store.db:
+                self.engine.store.put("dream", record)
+            raise

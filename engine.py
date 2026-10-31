@@ -46,7 +46,8 @@ class LifeEngine:
         if end <= start:
             raise ValueError("结束时间必须晚于开始时间")
         for plan in self.store.all("plan"):
-            if plan["id"] != exclude and plan["status"] in ACTIVE:
+            excluded = {exclude} if isinstance(exclude, str) else exclude
+            if plan["id"] not in excluded and plan["status"] in ACTIVE:
                 if start < self.time(plan["end"]) and end > self.time(plan["start"]):
                     raise ValueError("这段时间已有安排，请选择其他时间或先调整原安排")
 
@@ -77,7 +78,7 @@ class LifeEngine:
             raise ValueError("不能把计划改到过去")
         if end <= now:
             raise ValueError("结束时间必须在当前时间之后")
-        self._check_interval(start, end, record_id)
+        self._check_interval(start, end, {record_id, plan.get("travel_id", "")})
         updated.update(start=start.isoformat(), end=end.isoformat())
         updated["changes"].append({"at": now.isoformat(), "before": {k: plan[k] for k in changes}, "after": changes})
         if "start" in changes:
@@ -105,6 +106,11 @@ class LifeEngine:
         plan["changes"].append({"at": now.isoformat(), "action": action, "before": previous})
         with self.store.db:
             self.store.put("plan", plan)
+            if action == "cancel" and plan.get("travel_id"):
+                travel = self.store.get("plan", plan["travel_id"])
+                if travel["status"] in ACTIVE | {"paused"}:
+                    travel["status"] = "cancelled"
+                    self.store.put("plan", travel)
         return plan
 
     def plans(self, session: str, start: str = "", end: str = "") -> list[dict]:
@@ -256,8 +262,14 @@ class LifeEngine:
                 self._evolve(state, seconds / 3600, current["kind"] if current else "idle")
                 if current:
                     current["elapsed_seconds"] += seconds
-                    if current["location"]:
+                    if current.get("route"):
+                        from .spatial import travel_position
+                        position = travel_position(current, right, self)
+                        state["location"] = position["location"]
+                        state["journey"] = position
+                    elif current["location"]:
                         state["location"] = current["location"]
+                        state["journey"] = None
                 for plan in plans:
                     if plan["status"] in ACTIVE and self.time(plan["end"]) <= right:
                         if plan["simulation"] and not plan["participants"]:
