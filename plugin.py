@@ -53,6 +53,17 @@ def operation(function):
 class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     config_model = MaiWeaveConfig
 
+    @classmethod
+    def build_config_schema(cls, **kwargs):
+        schema = super().build_config_schema(**kwargs)
+        schema["layout"] = {"type": "tabs", "tabs": [
+            {"id": "life", "title": "角色与作息", "sections": ["life", "dreams"], "order": 0},
+            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity"], "order": 1},
+            {"id": "world", "title": "天气与见闻", "sections": ["world"], "order": 2},
+            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "memory", "plugin"], "order": 3},
+        ]}
+        return schema
+
     def now(self) -> datetime:
         return datetime.now(ZoneInfo(self.config.life.timezone))
 
@@ -335,7 +346,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.3.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.3.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
