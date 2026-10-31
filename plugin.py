@@ -56,11 +56,31 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @classmethod
     def build_config_schema(cls, **kwargs):
         schema = super().build_config_schema(**kwargs)
+        # 展示分组仍指向原配置节，保存时沿用原有配置键。
+        groups = [
+            ("life", "life", "生活开关", "控制生活推进与自主活动。", ["enabled", "autonomous"]),
+            ("profile", "life", "角色设定", "时区已有默认值，背景和兴趣按需补充。", ["timezone", "interests", "background"]),
+            ("sleep", "life", "日常作息", "使用 24 小时制；默认晚上 23 点入睡、早上 7 点起床。", ["sleep_hour", "wake_hour"]),
+            ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
+            ("weather", "world", "实时天气", "填写城市后获取天气；城市不预填，以免使用错误地点。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
+            ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
+            ("search", "world", "联网搜索", "复用宿主已配置的搜索服务。", ["search_enabled"]),
+            ("proactive", "proactive", "主动交流对象", "开启后指定接收聊天流；关闭时无需填写。", ["enabled", "session_ids"]),
+            ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
+        ]
+        original = schema["sections"]
+        schema["sections"] = {key: value for key, value in original.items() if key not in {"life", "world", "proactive"}}
+        for key, source, title, description, fields in groups:
+            schema["sections"][key] = {
+                **original[source], "name": source, "title": title, "description": description,
+                "fields": {name: {**original[source]["fields"][name], "order": order} for order, name in enumerate(fields)},
+                "collapsed": key == "planning",
+            }
         schema["layout"] = {"type": "tabs", "tabs": [
-            {"id": "life", "title": "角色与作息", "sections": ["life", "dreams"], "order": 0},
+            {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "dreams", "planning"], "order": 0},
             {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity"], "order": 1},
-            {"id": "world", "title": "天气与见闻", "sections": ["world"], "order": 2},
-            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "memory", "plugin"], "order": 3},
+            {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
+            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "plugin"], "order": 3},
         ]}
         return schema
 
@@ -346,7 +366,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.3.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.3.3\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

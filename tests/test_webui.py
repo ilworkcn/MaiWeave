@@ -17,8 +17,30 @@ def test_config_labels_and_controls_are_chinese():
         for field in section["fields"].values():
             assert any("\u4e00" <= c <= "\u9fff" for c in field["label"])
     assert sections["life"]["fields"]["enabled"]["ui_type"] == "switch"
-    assert sections["life"]["fields"]["tick_seconds"]["ui_type"] == "number"
-    assert sections["life"]["fields"]["interests"]["ui_type"] == "list"
+    assert sections["planning"]["fields"]["tick_seconds"]["ui_type"] == "number"
+    assert sections["profile"]["fields"]["interests"]["ui_type"] == "list"
+
+
+def test_display_groups_preserve_config_paths_and_values():
+    instance = create_plugin()
+    config = instance.get_default_config()
+    config["life"].update(timezone="Asia/Tokyo", interests=["画画"], background="住在海边")
+    instance.set_plugin_config(config)
+    schema = instance.get_webui_config_schema()
+    paths = [(section["name"], name) for section in schema["sections"].values() for name in section["fields"]]
+    assert len(paths) == len(set(paths))
+    assert set(paths) == {(section, name) for section, fields in config.items() for name in fields}
+    for section in schema["sections"].values():
+        for name, field in section["fields"].items():
+            assert field["hint"]
+            assert name in config[section["name"]]
+    profile = schema["sections"]["profile"]
+    config[profile["name"]]["background"] = "住在山间"
+    normalized, _ = instance.normalize_plugin_config(config)
+    assert normalized["life"]["background"] == "住在山间"
+    assert normalized["life"]["interests"] == ["画画"]
+    assert normalized["life"]["timezone"] == "Asia/Tokyo"
+    assert schema["sections"]["memory"]["fields"]["session_cookie"]["ui_type"] == "password"
 
 
 def test_old_config_keeps_values_and_loads_new_defaults():
