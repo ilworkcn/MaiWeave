@@ -62,7 +62,7 @@ async function refresh(keepId=''){
  if(!data.records.length){const p=document.createElement('p');p.className='empty';p.textContent='这里还没有记录，可以先新建一条。';$('records').append(p)}
  await edit(data.records.find(row=>row.id===keepId)||null);
 }
-async function run(work){message('处理中…');try{await work()}catch(error){message(error.message)}}
+async function run(work){message('处理中…');try{await work();if($('status').textContent==='处理中…')message('已加载')}catch(error){message(error.message)}}
 $('save').onclick=()=>run(async()=>{
  const schema=schemas[category],args={};
  for(const [name,,type,,source] of schema.fields){const input=$('field_'+name);const value=type==='checkbox'?input.checked:type==='weekdays'?Array.from(input.selectedOptions).map(o=>o.value).join(','):type==='number'||['month','day','month_day','intimacy'].includes(name)?Number(input.value):input.value;
@@ -145,6 +145,12 @@ function drawView(host){
    let type=item.type,options=item.options||[];
    if(item.name.includes('location')||item.name==='destination'){type='select';options=[{label:'当前地点',value:''},...data.places.map(p=>({label:p.name,value:p.name}))]}
    if(item.name==='session_id'){type='select';options=[{label:'公共生活',value:''},...chatChoices.map(p=>({label:p.name,value:p.id}))]}
+   if(pageMeta.view?.id==='schedule'&&item.name==='action'){
+    const state=viewSelection.plan?.status;
+    const allowed=state==='active'?['pause','cancel']:state==='paused'?['resume','cancel']:['scheduled','blocked','awaiting_confirmation'].includes(state)?['cancel']:[];
+    options=options.filter(option=>allowed.includes(option.value));
+    if(!options.some(option=>option.value===viewInputs.action))viewInputs.action=options[0]?.value||'';
+   }
    const input=document.createElement(type==='select'?'select':'input');input.className=type==='select'?'maibot-select':'maibot-input';
    if(type==='select'){for(const option of options)input.add(new Option(option.label,option.value))}else input.type=type==='switch'?'checkbox':type==='date'?'date':typeof item.value==='number'?'number':/^(new_)?(start|end)$|due_at|unavailable_until/.test(item.name)?'datetime-local':'text';
    input.name=item.name;
@@ -153,7 +159,10 @@ function drawView(host){
   }
   if(item.type==='button'){
    const button=document.createElement('button');button.className='maibot-button';button.style.margin='8px';button.textContent=item.label;
-   button.disabled=Boolean(item.disabled_when&&condition(item.disabled_when));button.title=item.disabled_reason||'';
+   button.disabled=Boolean(item.disabled_when&&condition(item.disabled_when))||(pageMeta.view?.id==='schedule'&&item.action==='operate'&&!viewInputs.action);button.title=item.disabled_reason||'';
+   if(item.action==='sync'&&viewSelection.record?.source==='simulated'){
+    button.disabled=true;button.title='角色模拟经历保存在生活档案中';
+   }
    button.onclick=()=>run(async()=>{const binding=pageMeta.view.actions[item.action],args={};
     for(const key of Object.keys(binding.parameters||{})){const value=binding.arguments?.[key]?valueOf(binding.arguments[key]):viewInputs[key];if(value!==undefined&&value!==null)args[key]=value}
     const result=binding.api==='ui_sync_record'?await reviewed('sync',args):await maibot.action('view_'+item.action,args);

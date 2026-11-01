@@ -239,6 +239,8 @@ class WebUI:
             summary = "尚无天气数据；请先配置天气城市" if not self.config.world.city else "尚未获取天气"
             freshness = "尚无观测"
         return {"summary": summary, "freshness": freshness,
+                "search_enabled": self.config.world.search_enabled,
+                "search_status": "联网搜索已启用" if self.config.world.search_enabled else "请在插件配置的「天气与见闻」中开启宿主联网搜索，再检索或阅读网页。",
                 "observed_at": display_time(weather["observed_at"]) if weather else "—",
                 "source": "Open-Meteo", "forecast": weather["forecast"] if weather else [],
                 "weather_error": status["error"] if status and status["error"] else "无",

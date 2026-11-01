@@ -1621,6 +1621,14 @@
       },
       "content": [
         {
+          "type": "text",
+          "label": "联网配置",
+          "value": {
+            "source": "data",
+            "field": "search_status"
+          }
+        },
+        {
           "type": "card",
           "label": "此地天气",
           "children": [
@@ -1756,7 +1764,16 @@
             {
               "type": "button",
               "label": "开始检索或阅读",
-              "action": "research"
+              "action": "research",
+              "disabled_when": {
+                "reference": {
+                  "source": "data",
+                  "field": "search_enabled"
+                },
+                "operator": "equals",
+                "expected": false
+              },
+              "disabled_reason": "请先在插件配置中开启宿主联网搜索"
             }
           ]
         },
@@ -2171,6 +2188,14 @@
                 {
                   "label": "生活日记",
                   "value": "生活日记"
+                },
+                {
+                  "value": "资料核对",
+                  "label": "资料核对"
+                },
+                {
+                  "value": "日记安排",
+                  "label": "日记安排"
                 }
               ]
             }

@@ -101,3 +101,17 @@ async def test_ui_review_returns_before_model_finishes(plugin):
     assert (await plugin.ui_change_status(queued["review_id"]))["status"]=="检查中"
     gate.set();await asyncio.gather(*list(plugin.jobs))
     assert (await plugin.ui_change_status(queued["review_id"]))["status"]=="已保存"
+
+
+async def test_auto_profile_reviews_native_identity_and_infers_relationship(plugin):
+    plugin.ctx.person = SimpleNamespace(get_value=AsyncMock(return_value='u'))
+    plugin.memory.people = AsyncMock(return_value={"items": [{"person_id": "p", "person_name": "小明", "profile_text": "当前恋人"}]})
+    decision(plugin, level=3)
+    result = await plugin.reviews.submit("profile", {"person_id": "p", "session_id": "a", "name": "",
+        "intimacy_mode": "auto", "intimacy": 0, "relationship": "普通关系"})
+    assert result["status"] == "已保存"
+    assert result["payload"]["name"] == "小明"
+    assert "intimacy" not in result["payload"] and "relationship" not in result["payload"]
+    person = plugin.store.all("profile")[0]
+    assert person["name"] == "小明" and person["intimacy"] == 3
+

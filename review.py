@@ -57,6 +57,11 @@ class Reviews:
                     if record["action"] == "profile":
                         payload["person_id"] = candidate
             native = await p.ui_memory_person(person_id) if person_id else {}
+            if record["action"] == "profile":
+                payload["name"] = native.get("name") or payload.get("name") or profile.get("name", "")
+                if payload.get("intimacy_mode", "auto") == "auto":
+                    payload.pop("intimacy", None)
+                    payload.pop("relationship", None)
             related_ids = {row["id"] for row in p.store.all("profile") if row["id"] == profile_id or (person_id and row.get("person_id") == person_id)}
             dates = [d for d in p.store.all("anniversary") if d["profile_id"] in related_ids]
             if record["action"] == "sync":
@@ -71,6 +76,7 @@ class Reviews:
             prompt = (
                 "核对拟写入的个人资料、日期或原生记忆与已有记录是否矛盾。输出 JSON：conflicts（具体冲突说明数组，兼容的补充填空数组）、"
                 "relationship（当前用户与角色的关系称呼）、level（0普通、1熟悉、2亲近、3亲密）、reason（判断依据）。"
+                "intimacy_mode 为 auto 时，根据已有画像与互动推断关系和等级；新增档案的姓名沿用所选画像。"
                 "比较同一人物、同一事件的日期、身份和事实。明确改正已有值也列出差异，交由用户确认。"
                 "区分公历农历、不同纪念日、转述和用户自己的信息。关系结合主体、时间和语境理解，"
                 "现任恋人可为亲密关系；前任、别人的恋人和引用的话按实际主体判断。删除有内容的记录时列出将删除的内容。"

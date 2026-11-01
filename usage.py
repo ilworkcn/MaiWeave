@@ -20,6 +20,10 @@ async def _once(ctx, store, config, feature, prompt):
                       status="成功" if result["success"] else "失败", error=result.get("error", ""))
         for key in ("prompt_tokens", "completion_tokens", "total_tokens", "prompt_cache_hit_tokens"):
             record[key] = result.get(key)
+        if result["success"] and result.get("response") and not any(
+                record[key] for key in ("prompt_tokens", "completion_tokens", "total_tokens")):
+            for key in ("prompt_tokens", "completion_tokens", "total_tokens", "prompt_cache_hit_tokens"):
+                record[key] = None
         return result
     except Exception as error:
         record["error"] = str(error)
@@ -62,6 +66,10 @@ def summary(store, now, days=7, feature=""):
     start = now.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)
     rows = [r for r in store.all("model_usage") if start <= datetime.fromisoformat(r["at"]) <= now
             and (not feature or r["feature"] == feature)]
+
+    # 已有记录中的全零成功调用来自未提供用量的模型服务。
+    rows = [{**r, "total_tokens": None} if r["status"] == "成功" and not any(
+        r.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")) else r for r in rows]
 
     def totals(items):
         known = [r for r in items if r["total_tokens"] is not None]

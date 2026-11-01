@@ -158,3 +158,17 @@ async def test_editor_reads_saved_form_values(plugin):
     assert result["records"][0]["notes"] == "喜欢散步"
     await plugin.ui_save_profile("小明", "a", notes="喜欢读书", profile_id=person["id"])
     assert (await plugin.ui_editor_records("profile"))["records"][0]["notes"] == "喜欢读书"
+
+
+async def test_zero_provider_usage_is_unreported(plugin):
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": "实际生成内容",
+        "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "prompt_cache_hit_tokens": 0}
+    await generate(plugin.ctx, plugin.store, plugin.config, "资料核对", "核对资料")
+    result = await plugin.ui_usage(1)
+    assert result["totals"]["missing_calls"] == 1
+    assert result["recent"][0]["usage_label"] == "用量未返回"
+    row = plugin.store.all("model_usage")[0]
+    row.update(prompt_tokens=0, completion_tokens=0, total_tokens=0)
+    with plugin.store.db:
+        plugin.store.put("model_usage", row)
+    assert (await plugin.ui_usage(1))["totals"]["missing_calls"] == 1
