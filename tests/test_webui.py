@@ -144,3 +144,28 @@ async def test_goal_stage_shows_running_plan(plugin):
     with plugin.store.db:
         plugin.store.put("plan", {"id": "plan", "goal_step_id": "step", "status": "cancelled"})
     assert (await plugin.ui_continuity())["steps"][0]["status_label"] == "未开始"
+
+
+async def test_operation_progress_tracks_job_outcome(plugin):
+    plugin.store.put("job", {"id": "search", "label": "联网阅读", "status": "进行中", "error": ""})
+    assert not (await plugin.ui_operation_status(task_id="search"))["done"]
+    plugin.store.put("job", {"id": "search", "label": "联网阅读", "status": "失败", "error": "服务连接失败"})
+    result = await plugin.ui_operation_status(task_id="search")
+    assert result["done"] and result["error"] == "服务连接失败"
+    plugin.store.put("job", {"id": "search", "label": "联网阅读", "status": "已完成", "error": ""})
+    assert (await plugin.ui_operation_status(task_id="search"))["message"] == "联网阅读：已完成"
+
+
+async def test_diary_progress_matches_current_writing_plan(plugin):
+    from datetime import timedelta
+    start = plugin.now()
+    plugin.store.put("plan", {"id": "writing", "start": start.isoformat(), "status": "active"})
+    plugin.store.put("diary", {"id": "old", "plan_id": "previous", "status": "已生成"})
+    assert not (await plugin.ui_operation_status(plan_id="writing"))["done"]
+    plugin.store.put("diary", {"id": "new", "plan_id": "writing", "status": "生成中"})
+    assert (await plugin.ui_operation_status(plan_id="writing"))["message"] == "模型正在写日记…"
+    plugin.store.put("diary", {"id": "new", "plan_id": "writing", "status": "已生成"})
+    assert (await plugin.ui_operation_status(plan_id="writing"))["done"]
+    plugin.store.put("plan", {"id": "later", "start": (start + timedelta(hours=1)).isoformat(), "status": "planned"})
+    result = await plugin.ui_operation_status(plan_id="later")
+    assert result["done"] and "开始时间" in result["message"]

@@ -393,6 +393,20 @@
         "place_discovery": {
           "api": "ui_place_discovery",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
@@ -847,6 +861,20 @@
         "memory_connection": {
           "api": "ui_memory_connection",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
@@ -964,6 +992,20 @@
         "memory_connection": {
           "api": "ui_memory_connection",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
@@ -1128,6 +1170,20 @@
         "view_habit_data": {
           "api": "ui_habits",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
@@ -1335,11 +1391,12 @@
       "id": "diary",
       "title": "日记与梦境",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "list",
-      "poll_interval_seconds": 0,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "view_data": {
           "api": "ui_diaries",
           "version": "1",
           "parameters": {
@@ -1348,23 +1405,36 @@
             }
           }
         },
-        "dream_data": {
+        "view_dream_data": {
           "api": "ui_dreams",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
-        "write": {
+        "view_write": {
           "api": "ui_write_diary",
           "version": "1",
           "parameters": {
             "day": {
               "type": "string"
             }
-          },
-          "confirmation": "现在为这一天安排15分钟写日记？"
+          }
         },
-        "dream_generate": {
+        "view_dream_generate": {
           "api": "ui_generate_dream",
           "version": "1",
           "parameters": {
@@ -1372,273 +1442,44 @@
               "type": "string",
               "required": true
             }
-          },
-          "arguments": {
-            "plan_id": {
-              "scope": "selection",
-              "source": "sleep",
-              "field": "id"
-            }
           }
         }
-      },
-      "content": [
-        {
-          "type": "collapsible",
-          "label": "生活日记",
-          "default_open": true,
-          "children": [
-            {
-              "type": "text",
-              "value": "日记由模型安排为生活日程，到写作窗口后生成。选择日期可阅读；点击“现在安排写日记”会留出15分钟写作时间。"
-            },
-            {
-              "type": "date",
-              "name": "day",
-              "label": "日期（留空查看最近90篇）",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "现在安排写日记",
-              "action": "write",
-              "variant": "primary"
-            },
-            {
-              "type": "table",
-              "label": "日记本",
-              "value": {
-                "source": "data",
-                "field": "entries"
-              },
-              "selection": "entry",
-              "detail": "diary_detail",
-              "columns": [
-                {
-                  "field": "day",
-                  "label": "日期"
-                },
-                {
-                  "field": "status",
-                  "label": "写作状态"
-                },
-                {
-                  "field": "coverage",
-                  "label": "记录范围"
-                },
-                {
-                  "field": "error",
-                  "label": "生成情况"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "collapsible",
-          "label": "睡眠与梦境",
-          "default_open": false,
-          "children": [
-            {
-              "type": "text",
-              "value": "看看角色醒来后记住了什么梦，以及梦境带来的心情变化。"
-            },
-            {
-              "type": "table",
-              "label": "梦境档案",
-              "value": {
-                "source": "dream_data",
-                "field": "dreams"
-              },
-              "columns": [
-                {
-                  "field": "title",
-                  "label": "梦的标题"
-                },
-                {
-                  "field": "sleep_end",
-                  "label": "醒来时间"
-                },
-                {
-                  "field": "feeling",
-                  "label": "醒后感受"
-                },
-                {
-                  "field": "status",
-                  "label": "状态"
-                },
-                {
-                  "field": "error",
-                  "label": "错误"
-                }
-              ],
-              "selection": "dream",
-              "detail": "dream_detail"
-            },
-            {
-              "type": "table",
-              "label": "睡眠记录",
-              "value": {
-                "source": "dream_data",
-                "field": "sleeps"
-              },
-              "columns": [
-                {
-                  "field": "start_label",
-                  "label": "入睡"
-                },
-                {
-                  "field": "end_label",
-                  "label": "结束"
-                },
-                {
-                  "field": "hours",
-                  "label": "累计小时"
-                },
-                {
-                  "field": "status_label",
-                  "label": "状态"
-                }
-              ],
-              "selection": "sleep"
-            },
-            {
-              "type": "button",
-              "label": "为所选睡眠生成梦境／重试失败任务",
-              "action": "dream_generate",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "sleep",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            },
-            {
-              "type": "table",
-              "label": "后台操作进度",
-              "value": {
-                "source": "dream_data",
-                "field": "jobs"
-              },
-              "columns": [
-                {
-                  "field": "label",
-                  "label": "操作"
-                },
-                {
-                  "field": "status",
-                  "label": "状态"
-                },
-                {
-                  "field": "error",
-                  "label": "错误"
-                },
-                {
-                  "field": "created_at",
-                  "label": "开始时间"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "dialog",
-          "name": "diary_detail",
-          "label": "这一天",
-          "children": [
-            {
-              "type": "text",
-              "value": {
-                "scope": "selection",
-                "source": "entry",
-                "field": "title"
-              }
-            },
-            {
-              "type": "text",
-              "format": "log",
-              "value": {
-                "scope": "selection",
-                "source": "entry",
-                "field": "content"
-              }
-            },
-            {
-              "type": "collapsible",
-              "label": "当天生活记录",
-              "children": [
-                {
-                  "type": "text",
-                  "format": "log",
-                  "value": {
-                    "scope": "selection",
-                    "source": "entry",
-                    "field": "material_text"
-                  }
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "dialog",
-          "name": "dream_detail",
-          "label": "梦境详情",
-          "children": [
-            {
-              "type": "text",
-              "value": {
-                "scope": "selection",
-                "source": "dream",
-                "field": "source_label"
-              }
-            },
-            {
-              "type": "text",
-              "value": {
-                "scope": "selection",
-                "source": "dream",
-                "field": "story"
-              },
-              "format": "log"
-            },
-            {
-              "type": "text",
-              "label": "感受",
-              "value": {
-                "scope": "selection",
-                "source": "dream",
-                "field": "feeling"
-              }
-            }
-          ]
-        }
-      ],
-      "auto_refresh": true
+      }
     },
     {
       "id": "world",
       "title": "天气与见闻",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "database",
-      "poll_interval_seconds": 30,
-      "auto_refresh": false,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "view_data": {
           "api": "ui_world",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
-        "refresh": {
+        "view_refresh": {
           "api": "ui_refresh_world",
           "version": "1"
         },
-        "research": {
+        "view_research": {
           "api": "ui_research",
           "version": "1",
           "parameters": {
@@ -1652,277 +1493,7 @@
             }
           }
         }
-      },
-      "content": [
-        {
-          "type": "text",
-          "label": "联网配置",
-          "value": {
-            "source": "data",
-            "field": "search_status"
-          }
-        },
-        {
-          "type": "card",
-          "label": "此地天气",
-          "children": [
-            {
-              "type": "text",
-              "label": "当前天气",
-              "value": {
-                "source": "data",
-                "field": "summary"
-              }
-            },
-            {
-              "type": "text",
-              "label": "资料时效",
-              "value": {
-                "source": "data",
-                "field": "freshness"
-              }
-            },
-            {
-              "type": "text",
-              "label": "观测时间",
-              "value": {
-                "source": "data",
-                "field": "observed_at"
-              }
-            },
-            {
-              "type": "text",
-              "label": "来源",
-              "value": {
-                "source": "data",
-                "field": "source"
-              }
-            },
-            {
-              "type": "text",
-              "label": "更新错误",
-              "value": {
-                "source": "data",
-                "field": "weather_error"
-              }
-            },
-            {
-              "type": "button",
-              "label": "更新天气与订阅",
-              "action": "refresh"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "三日预报",
-          "value": {
-            "source": "data",
-            "field": "forecast"
-          },
-          "columns": [
-            {
-              "field": "day",
-              "label": "日期"
-            },
-            {
-              "field": "weather",
-              "label": "天气"
-            },
-            {
-              "field": "low",
-              "label": "最低温℃"
-            },
-            {
-              "field": "high",
-              "label": "最高温℃"
-            },
-            {
-              "field": "rain_probability",
-              "label": "降水概率%"
-            },
-            {
-              "field": "sunrise",
-              "label": "日出"
-            },
-            {
-              "field": "sunset",
-              "label": "日落"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "订阅资讯",
-          "value": {
-            "source": "data",
-            "field": "news"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "标题"
-            },
-            {
-              "field": "published_at",
-              "label": "发布时间"
-            },
-            {
-              "field": "source",
-              "label": "订阅来源"
-            },
-            {
-              "field": "url",
-              "label": "原文链接"
-            }
-          ],
-          "selection": "news",
-          "detail": "news_detail"
-        },
-        {
-          "type": "card",
-          "label": "主动了解外部世界",
-          "children": [
-            {
-              "type": "input",
-              "name": "query",
-              "label": "检索词",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "url",
-              "label": "网页地址（有地址时优先读取）",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "开始检索或阅读",
-              "action": "research",
-              "disabled_when": {
-                "reference": {
-                  "source": "data",
-                  "field": "search_enabled"
-                },
-                "operator": "equals",
-                "expected": false
-              },
-              "disabled_reason": "请先在插件配置中开启宿主联网搜索"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "最近检索",
-          "value": {
-            "source": "data",
-            "field": "research"
-          },
-          "columns": [
-            {
-              "field": "query",
-              "label": "检索词"
-            },
-            {
-              "field": "retrieved_at",
-              "label": "检索时间"
-            },
-            {
-              "field": "results_text",
-              "label": "原始结果"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "已阅读网页",
-          "value": {
-            "source": "data",
-            "field": "readings"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "标题"
-            },
-            {
-              "field": "url",
-              "label": "来源"
-            },
-            {
-              "field": "retrieved_at",
-              "label": "读取时间"
-            }
-          ],
-          "selection": "reading",
-          "detail": "reading_detail"
-        },
-        {
-          "type": "table",
-          "label": "后台操作进度",
-          "value": {
-            "source": "data",
-            "field": "jobs"
-          },
-          "columns": [
-            {
-              "field": "label",
-              "label": "操作"
-            },
-            {
-              "field": "status",
-              "label": "状态"
-            },
-            {
-              "field": "error",
-              "label": "错误"
-            },
-            {
-              "field": "created_at",
-              "label": "开始时间"
-            }
-          ]
-        },
-        {
-          "type": "dialog",
-          "name": "news_detail",
-          "label": "资讯内容",
-          "children": [
-            {
-              "type": "text",
-              "value": {
-                "scope": "selection",
-                "source": "news",
-                "field": "summary"
-              }
-            },
-            {
-              "type": "text",
-              "value": {
-                "scope": "selection",
-                "source": "news",
-                "field": "url"
-              }
-            }
-          ]
-        },
-        {
-          "type": "dialog",
-          "name": "reading_detail",
-          "label": "网页资料",
-          "children": [
-            {
-              "type": "text",
-              "value": {
-                "scope": "selection",
-                "source": "reading",
-                "field": "content"
-              },
-              "format": "log"
-            }
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "space",
@@ -1988,6 +1559,20 @@
         "place_discovery": {
           "api": "ui_place_discovery",
           "version": "1"
+        },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       },
       "actions": {

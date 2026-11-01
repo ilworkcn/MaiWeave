@@ -28,6 +28,33 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_operation_status", description="查看后台操作与日记写作进度")
+    async def ui_operation_status(self, task_id: str = "", plan_id: str = "") -> dict:
+        if task_id:
+            job = self.store.get("job", task_id)
+            status = job["status"]
+            message = job["label"] + "：" + status
+            if status == "已完成" and job["label"] == "搜索城市地点":
+                message = "地点搜索：" + self.world.place_status()["status"]
+            return {"done": status != "进行中", "error": job["error"] if status == "失败" else "",
+                    "message": message}
+        plan = self.store.get("plan", plan_id)
+        diary = next((row for row in self.store.all("diary") if row.get("plan_id") == plan_id), None)
+        if diary and diary["status"] == "已生成":
+            return {"done": True, "error": "", "message": "日记已生成，可在日记本中阅读"}
+        if diary and diary["status"] == "生成失败":
+            return {"done": True, "error": diary["error"], "message": "日记生成失败"}
+        if diary and diary["status"] == "生成中":
+            return {"done": False, "error": "", "message": "模型正在写日记…"}
+        if plan["status"] == "cancelled":
+            return {"done": True, "error": "", "message": "写日记的安排已取消"}
+        start = self.engine.time(plan["start"])
+        if start > self.now():
+            return {"done": True, "error": "", "message": "已安排写日记，开始时间：" + display_time(plan["start"])}
+        if plan["status"] in {"completed", "awaiting_confirmation"}:
+            return {"done": True, "error": "写作窗口已结束，本次尚未生成日记，请重新安排写作", "message": "写作窗口已结束"}
+        return {"done": False, "error": "", "message": "日记已安排，等待生活时钟进入写作窗口…"}
+
     @API("ui_change_begin", description="异步核对资料修改")
     async def ui_change_begin(self, action: str, payload: str) -> dict:
         record = self.reviews.create(action, json.loads(payload))
