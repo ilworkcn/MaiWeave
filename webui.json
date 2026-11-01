@@ -389,6 +389,10 @@
               "required": false
             }
           }
+        },
+        "place_discovery": {
+          "api": "ui_place_discovery",
+          "version": "1"
         }
       },
       "actions": {
@@ -766,6 +770,10 @@
               "required": false
             }
           }
+        },
+        "discover_places": {
+          "api": "ui_discover_places",
+          "version": "1"
         }
       }
     },
@@ -825,6 +833,10 @@
           "api": "ui_chat_choices",
           "version": "1",
           "parameters": {}
+        },
+        "memory_connection": {
+          "api": "ui_memory_connection",
+          "version": "1"
         }
       },
       "actions": {
@@ -856,6 +868,10 @@
               "required": true
             }
           }
+        },
+        "check_memory": {
+          "api": "ui_check_memory",
+          "version": "1"
         }
       }
     },
@@ -934,6 +950,10 @@
               "minimum": 1
             }
           }
+        },
+        "memory_connection": {
+          "api": "ui_memory_connection",
+          "version": "1"
         }
       },
       "actions": {
@@ -1027,6 +1047,10 @@
               "required": true
             }
           }
+        },
+        "check_memory": {
+          "api": "ui_check_memory",
+          "version": "1"
         }
       }
     },
@@ -1950,6 +1974,10 @@
         "view_data": {
           "api": "ui_space",
           "version": "1"
+        },
+        "place_discovery": {
+          "api": "ui_place_discovery",
+          "version": "1"
         }
       },
       "actions": {
@@ -2098,6 +2126,10 @@
               "required": true
             }
           }
+        },
+        "discover_places": {
+          "api": "ui_discover_places",
+          "version": "1"
         }
       }
     },
@@ -2196,6 +2228,10 @@
                 {
                   "value": "日记安排",
                   "label": "日记安排"
+                },
+                {
+                  "label": "城市地点",
+                  "value": "城市地点"
                 }
               ]
             }

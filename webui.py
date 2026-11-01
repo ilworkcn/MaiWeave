@@ -92,6 +92,28 @@ class WebUI:
     async def ui_anniversaries(self) -> dict:
         return {"profiles": self.store.all("profile"), "anniversaries": self.anniversaries.upcoming(self.now().date())}
 
+    @API("ui_memory_connection", description="原生记忆实际连接状态")
+    async def ui_memory_connection(self) -> dict:
+        info = self.memory.connection_info()
+        if info["checked_at"]:
+            info["checked_at"] = self.engine.time(info["checked_at"]).astimezone(self.now().tzinfo).strftime("%Y-%m-%d %H:%M:%S")
+        return info
+
+    @API("ui_check_memory", description="检查原生记忆连接")
+    async def ui_check_memory(self) -> dict:
+        self.memory.connection["status"] = "检查中"
+        return self.start_job("检查原生记忆连接", self.memory.check_connection())
+
+    @API("ui_place_discovery", description="城市地点搜索状态")
+    async def ui_place_discovery(self) -> dict:
+        return self.world.place_status()
+
+    @API("ui_discover_places", description="按天气城市搜索并收录生活地点")
+    async def ui_discover_places(self) -> dict:
+        if not self.config.world.places_enabled:
+            raise ValueError("请在天气与见闻配置中开启按城市自动搜索生活地点")
+        return self.start_job("搜索城市地点", self.world.discover_places(self.spatial, self.now(), force=True))
+
     @API("ui_memory_people", description="搜索原生记忆人物画像")
     async def ui_memory_people(self, query: str = "") -> dict:
         result = await self.memory.people(query)

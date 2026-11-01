@@ -5,6 +5,7 @@ import json
 import time
 from urllib.error import HTTPError, URLError
 from pathlib import Path
+from datetime import datetime, timezone
 from urllib.parse import urlencode, quote
 from urllib.request import Request, urlopen
 
@@ -15,6 +16,7 @@ class NativeMemory:
     def __init__(self, config: MemoryConfig):
         self.config = config
         self.root = Path.cwd()
+        self.connection = {"status": "尚未检查", "checked_at": "", "error": ""}
 
     def cookie(self):
         for path in (self.root / "webui.json", self.root / "data" / "webui.json"):
@@ -40,7 +42,27 @@ class NativeMemory:
             raise RuntimeError(result.get("error") or result.get("message") or "原生记忆操作失败")
         return result
 
+    def connection_info(self):
+        return {**self.connection, "address": self.config.base_url, "status": self.connection["status"] if self.config.enabled else "未启用"}
+
+    async def check_connection(self):
+        if self.config.enabled:
+            try:
+                await self.people()
+            except Exception:
+                return self.connection_info()
+        return self.connection_info()
+
     def _request(self, method, path, payload=None):
+        try:
+            result = self._request_retry(method, path, payload)
+        except Exception as error:
+            self.connection = {"status": "连接失败", "checked_at": datetime.now(timezone.utc).isoformat(), "error": str(error)}
+            raise
+        self.connection = {"status": "已连接", "checked_at": datetime.now(timezone.utc).isoformat(), "error": ""}
+        return result
+
+    def _request_retry(self, method, path, payload=None):
         for attempt in range(3):
             try:
                 return self._once(method, path, payload)

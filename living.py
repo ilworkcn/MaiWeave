@@ -231,7 +231,7 @@ class Living:
             personality = await self.ctx.config.get("personality")
             recent = [{"summary": e["summary"], "source": e["source"]} for e in engine.store.all("experience")[-8:]]
             environment = self.world.context(now)
-            places = engine.store.all("place")
+            places = self.world.planning_places()
             prompt = (
                 "为角色选择接下来独自进行的一件小活动，输出 JSON 对象。"
                 "根据人格、兴趣、精力和长期目标，在角色的生活空间中安排活动。"
@@ -242,6 +242,7 @@ class Living:
                 f"兴趣：{config.interests}；状态：{json.dumps(state, ensure_ascii=False)}；"
                 f"目标：{json.dumps(goals, ensure_ascii=False)}；最近经历：{json.dumps(recent, ensure_ascii=False)}"
                 f"；持续影响、偏好和接续内容：{json.dumps(self.continuity.context('', now), ensure_ascii=False)}"
+                "优先从当前城市已收录的真实地点中选择合适地点。"
                 f"；可选地点名称：{json.dumps(places, ensure_ascii=False)}；"
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"

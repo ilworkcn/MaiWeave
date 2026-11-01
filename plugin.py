@@ -68,7 +68,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
-            ("search", "world", "联网搜索", "复用宿主已配置的搜索服务。", ["search_enabled"]),
+            ("search", "world", "联网搜索", "复用宿主已配置的搜索服务。", ["search_enabled", "places_enabled"]),
             ("proactive", "proactive", "主动交流对象", "开启后指定接收聊天流；关闭时无需填写。", ["enabled", "session_ids"]),
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
@@ -148,7 +148,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             except Exception as error:
                 self.last_errors[name] = str(error)
                 self.ctx.logger.exception("%s失败", name)
-        for name, job in [("外部世界", self.world.refresh),
+        for name, job in [("外部世界", self.world.refresh), ("城市地点", self.discover_places),
                           ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
                           ("主动交流", self.living.share), ("生活日记", self.diary.process)]:
@@ -178,6 +178,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def arrange_diary(self, now):
         if self.config.life.autonomous:
             await self.diary.arrange(now, self.spatial)
+
+    async def discover_places(self, now):
+        await self.world.discover_places(self.spatial, now)
 
     async def plan_life(self, now):
         await self.living.choose_activity(now)
@@ -222,7 +225,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         relationships = [r for r in self.store.all("relationship") if r["session_id"] == session]
         snapshot["relationships"] = [{k: v for k, v in r.items() if k != "history"} for r in relationships]
         snapshot["environment"] = self.world.context(self.now())
-        snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.store.all("place")]
+        snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.world.planning_places()]
         snapshot["habits"] = [h for h in self.store.all("habit") if h["active"] and h["enabled"] and self.engine.visible(h, session)]
         snapshot["dreams"] = [d for d in self.store.all("dream") if d["status"] == "已生成" and self.engine.visible(d, session)][-2:]
         snapshot["continuity"] = self.continuity.context(session, self.now())
@@ -474,7 +477,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.6.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.6.5\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

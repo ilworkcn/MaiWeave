@@ -46,7 +46,7 @@ def test_display_groups_preserve_config_paths_and_values():
 def test_old_config_keeps_values_and_loads_new_defaults():
     config = MaiWeaveConfig.model_validate({"plugin": {"config_version": "0.1.0"}, "life": {"interests": ["画画"], "autonomous": False}})
     assert config.life.interests == ["画画"] and not config.life.autonomous
-    assert config.world.city == "" and config.rhythm.habits_enabled and config.dreams.enabled
+    assert config.world.city == "大庆" and config.rhythm.habits_enabled and config.dreams.enabled
 
 
 def test_all_page_bindings_match_real_registered_api():

@@ -17,6 +17,7 @@ async def plugin(tmp_path):
     plugin = create_plugin()
     config = MaiWeaveConfig()
     config.life.autonomous = False
+    config.world.weather_enabled = False
     plugin.set_plugin_config(config.model_dump())
     context = SimpleNamespace(paths=SimpleNamespace(data_dir=tmp_path), logger=logging.getLogger("test"),
                               send=SimpleNamespace(text=AsyncMock(return_value=True)),

@@ -41,7 +41,7 @@ class Spatial:
         if existing:
             raise ValueError("已有同名地点")
         old = self.engine.store.get("place", place_id) if place_id else None
-        record = {"id": place_id or uid(), "name": name, "outdoor": outdoor, "description": description}
+        record = {**(old or {}), "id": place_id or uid(), "name": name, "outdoor": outdoor, "description": description}
         with self.engine.store.db:
             self.engine.store.put("place", record)
             if old:
