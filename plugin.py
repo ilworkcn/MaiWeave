@@ -148,7 +148,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             except Exception as error:
                 self.last_errors[name] = str(error)
                 self.ctx.logger.exception("%s失败", name)
-        for name, job in [("外部世界", self.world.refresh), ("城市地点", self.discover_places),
+        for name, job in [("外部世界", self.world.refresh),
                           ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
                           ("主动交流", self.living.share), ("生活日记", self.diary.process)]:
@@ -178,9 +178,6 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def arrange_diary(self, now):
         if self.config.life.autonomous:
             await self.diary.arrange(now, self.spatial)
-
-    async def discover_places(self, now):
-        await self.world.discover_places(self.spatial, now)
 
     async def plan_life(self, now):
         await self.living.choose_activity(now)
@@ -477,7 +474,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.6.5\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.6.7\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

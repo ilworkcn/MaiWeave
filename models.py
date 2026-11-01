@@ -50,6 +50,7 @@ class ActivityChoice(BaseModel):
     motivation: str
     goal_id: str = ""
     goal_step_id: str = ""
+    place_query: str = ""
 
 
 class LifeState(BaseModel):

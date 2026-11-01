@@ -1,6 +1,5 @@
 """真实天气、订阅资讯和宿主联网资料。"""
 
-from typing import Literal
 from pydantic import BaseModel, Field
 from .usage import generate
 
@@ -63,7 +62,8 @@ def parse_feed(data: bytes, source_url: str, now: str) -> list[dict]:
 
 class CityPlace(BaseModel):
     name: str
-    category: Literal["park", "library"]
+    category: str = Field(min_length=1)
+    outdoor: bool = False
     description: str
     source_index: int = Field(ge=0)
 
@@ -160,6 +160,7 @@ class World:
         return {"enabled": cfg.places_enabled, "city": cfg.city, "country_code": cfg.country_code,
                 "status": (record.get("status", "尚未搜索") if current else "尚未搜索") if cfg.places_enabled else "已关闭",
                 "error": record.get("error", "") if current else "", "checked_at": record.get("attempted_at", "") if current else "",
+                "activity": record.get("activity", "") if current else "",
                 "count": sum(p.get("city_key") == cfg.city + "|" + cfg.country_code for p in self.engine.store.all("place"))}
 
     def planning_places(self):
@@ -169,55 +170,78 @@ class World:
         categories = {p["category"] for p in local} if cfg.places_enabled else set()
         return [p for p in places if not p.get("city_key") and p["id"] not in categories] + (local if cfg.places_enabled else [])
 
-    async def discover_places(self, spatial, now, force=False):
+    async def discover_places(self, spatial, now, force=False, activity=""):
         cfg, store = self.config.world, self.engine.store
         if not cfg.places_enabled:
-            return
+            return []
         if not cfg.city.strip():
             raise ValueError("请填写天气城市后搜索生活地点")
+        activity = activity.strip()
+        if not activity:
+            current = self.engine.current(now)
+            activity = current["title"] if current else "、".join(self.config.life.interests) or "日常休闲活动"
         city_key = cfg.city + "|" + cfg.country_code
-        previous = store.find("world_status", "places")
-        if not force and previous and previous.get("city_key") == city_key:
-            if previous["status"] == "已收录" or not self.due("places", now, 30, False):
-                return
-        status = {"id": "places", "city_key": city_key, "attempted_at": now.isoformat(), "status": "搜索中", "error": ""}
+        keyword = re.sub(r"[\W_]+", "", activity.casefold())
+        cache_id = hashlib.sha256((city_key + "|" + keyword).encode()).hexdigest()[:20]
+        cached = store.find("place_search", cache_id)
+        if cached is None:
+            known = [p for p in store.all("place") if p.get("city_key") == city_key
+                     and re.sub(r"[\W_]+", "", p.get("search_request", "").casefold()) == keyword]
+            if known:
+                cached = {"id": cache_id, "place_ids": [p["id"] for p in known],
+                          "searched_at": min(p["retrieved_at"] for p in known)}
+                with store.db:
+                    store.put("place_search", cached)
+        if cached and not force:
+            lifetime = 30 * 86400 if cached["place_ids"] else 6 * 3600
+            if (now - self.engine.time(cached["searched_at"])).total_seconds() < lifetime:
+                places = [store.find("place", place_id) for place_id in cached["place_ids"]]
+                places = [p for p in places if p and p.get("city_key") == city_key]
+                if places or not cached["place_ids"]:
+                    with store.db:
+                        store.put("world_status", {"id": "places", "city_key": city_key, "activity": activity,
+                                  "attempted_at": now.isoformat(), "status": "已使用缓存" if places else "暂无地点（缓存）", "error": ""})
+                    return places
+        status = {"id": "places", "city_key": city_key, "activity": activity, "attempted_at": now.isoformat(), "status": "搜索中", "error": ""}
         with store.db:
             store.put("world_status", status)
         try:
-            queries = [f"{cfg.city} {cfg.country_code} {kind} 名称 地址" for kind in ("公园", "公共图书馆")]
-            results = await asyncio.gather(*(self.ctx.web.search(query, max_results=5) for query in queries))
-            sources = [source for result in results for source in result["results"]]
-            query = "；".join(queries)
-            prompt = ("从以下联网搜索结果中提取该城市适合角色日常活动的具体公园和公共图书馆，最多各两处，优先面向市民开放的地点。"
-                      "输出 JSON places 数组，每项包含 name（来源中出现的完整地点名）、category（park或library）、"
-                      "description（简短地点介绍）、source_index（依据结果的从0开始序号）。地点属于指定城市，"
-                      "名称与说明依据搜索资料；结果为空时 places 填空数组。"
-                      f"城市：{cfg.city}；国家地区：{cfg.country_code}；搜索资料：{json.dumps(sources, ensure_ascii=False)}")
+            query = f"{cfg.city} {cfg.country_code} {activity} 地点 名称 地址"
+            result = await self.ctx.web.search(query, max_results=8)
+            sources = result["results"]
+            prompt = ("根据活动需求，从联网搜索结果中选择最多三处适合前往的当地具体地点，按适合程度排序。"
+                      "输出 JSON places 数组，每项包含 name（来源中出现的完整地点名）、category（自由填写地点类别）、"
+                      "outdoor（活动是否主要在室外）、description（根据来源简述适合本次活动的原因）、"
+                      "source_index（依据结果的从0开始序号）。类别可随活动变化，例如餐厅、咖啡馆、商场、展馆、运动场等。"
+                      "选择指定城市的具体场所，名称和介绍依据搜索资料；结果为空时 places 填空数组。"
+                      f"活动需求：{activity}；城市：{cfg.city}；国家地区：{cfg.country_code}；搜索资料：{json.dumps(sources, ensure_ascii=False)}")
             def validate(value):
                 for item in value.places:
                     if item.source_index >= len(sources) or item.name not in json.dumps(sources[item.source_index], ensure_ascii=False):
                         raise ValueError("地点名称和来源序号需对应搜索结果中的原文")
             selected = await generate(self.ctx, store, self.config, "城市地点", prompt, CityPlaces, validate)
+            collected = []
             for item in selected.places:
                 existing = next((p for p in store.all("place") if p["name"] == item.name), None)
-                place = spatial.save_place(item.name, item.category == "park", item.description, existing["id"] if existing else "")
+                place = spatial.save_place(item.name, item.outdoor, item.description, existing["id"] if existing else "")
                 place.update(city_key=city_key, category=item.category, source_url=sources[item.source_index]["url"],
-                             retrieved_at=now.isoformat(), source_query=query)
+                             retrieved_at=now.isoformat(), source_query=query, search_request=activity)
                 with store.db:
                     store.put("place", place)
                 if not existing:
-                    for route in store.all("route"):
-                        if item.category in {route["origin"], route["destination"]}:
-                            other = route["destination"] if route["origin"] == item.category else route["origin"]
-                            spatial.save_route(place["id"], other, route["minutes"], route["mode"])
-            status["status"] = "已收录" if selected.places else "未找到地点"
+                    spatial.save_route(place["id"], "street", 15, "步行")
+                collected.append(place)
+            with store.db:
+                store.put("place_search", {"id": cache_id, "place_ids": [p["id"] for p in collected],
+                          "searched_at": now.isoformat()})
+            status["status"] = "已收录" if collected else "未找到地点"
         except Exception as error:
             status.update(status="搜索失败", error=str(error))
             raise
         finally:
             with store.db:
                 store.put("world_status", status)
-        return self.place_status()
+        return collected
 
     async def search(self, query: str, now):
         if not self.config.world.search_enabled:

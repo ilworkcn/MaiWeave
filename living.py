@@ -191,6 +191,7 @@ class Living:
         goal_id = ""
         goal_step_id = ""
         continuation_id = ""
+        place_query = ""
         habit = self.rhythm.candidate(now)
         if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
             habit = None
@@ -203,6 +204,8 @@ class Living:
             minutes = free
         elif state["hunger"] >= 65:
             title, kind, location, motivation, minutes = "吃饭", "meal", state["location"], "有些饿了", min(free, 30)
+            if self.config.world.places_enabled and state["location"] not in {self.spatial.place("home")["name"], self.spatial.place("kitchen")["name"]} and free >= 30:
+                place_query = "餐厅"
         elif state["energy"] <= 25:
             title, kind, location, motivation, minutes = "休息一会儿", "rest", state["location"], "精力不足", min(free, 45)
         elif habit:
@@ -235,28 +238,38 @@ class Living:
             prompt = (
                 "为角色选择接下来独自进行的一件小活动，输出 JSON 对象。"
                 "根据人格、兴趣、精力和长期目标，在角色的生活空间中安排活动。"
-                "读书、工作、休闲和休息都可以。kind 从 study/work/leisure/rest 中选择，出行由地点路线自动安排。"
+                "读书、工作、休闲和休息都可以。kind 从 study/work/leisure/rest/meal/social 中选择，出行由地点路线自动安排。"
                 "字段 title、kind、minutes（10到120）、location、motivation、goal_id（无关联填空字符串）。"
                 f"当前时间：{now.isoformat()}；可用分钟：{free}；"
                 f"人格：{json.dumps(personality, ensure_ascii=False)}；补充背景：{config.background}；"
                 f"兴趣：{config.interests}；状态：{json.dumps(state, ensure_ascii=False)}；"
                 f"目标：{json.dumps(goals, ensure_ascii=False)}；最近经历：{json.dumps(recent, ensure_ascii=False)}"
                 f"；持续影响、偏好和接续内容：{json.dumps(self.continuity.context('', now), ensure_ascii=False)}"
-                "优先从当前城市已收录的真实地点中选择合适地点。"
+                "location 填已有地点名称；想去的新场所用 place_query 填简短稳定的地点搜索词，location 可留空。"
+                "同类需求复用相同搜索词，例如咖啡馆、东北菜餐厅、安静的咖啡馆；保留菜系、环境等具体要求。"
+                "根据本次活动决定是否需要新地点，例如喝咖啡找咖啡馆、吃饭找餐厅、购物找商场，类别自由选择。"
+                f"城市地点搜索开关：{self.config.world.places_enabled}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
+                "外出时优先复用当前城市已收录的合适地点；居家活动使用住处或厨房。"
                 f"；可选地点名称：{json.dumps(places, ensure_ascii=False)}；"
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
             choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice)
-            if choice.kind not in {"study", "work", "leisure", "rest"}:
+            if choice.kind not in {"study", "work", "leisure", "rest", "meal", "social"}:
                 raise ValueError("自主规划返回了未允许的活动类型")
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation
             minutes = min(choice.minutes, free)
+            place_query = choice.place_query
             goal_id = choice.goal_id
             goal_step_id = choice.goal_step_id
             if goal_id:
                 goal = engine.store.get("goal", goal_id)
                 session = goal["session_id"]
+        if place_query and self.config.world.places_enabled:
+            found = await self.world.discover_places(self.spatial, now, activity=place_query)
+            if not found:
+                raise ValueError(f"本次活动尚未找到合适地点：{place_query}")
+            location = found[0]["name"]
         engine.advance(now)
         if engine.current(now):
             return

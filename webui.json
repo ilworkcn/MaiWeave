@@ -773,7 +773,13 @@
         },
         "discover_places": {
           "api": "ui_discover_places",
-          "version": "1"
+          "version": "1",
+          "parameters": {
+            "activity": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       }
     },
@@ -2129,7 +2135,13 @@
         },
         "discover_places": {
           "api": "ui_discover_places",
-          "version": "1"
+          "version": "1",
+          "parameters": {
+            "activity": {
+              "type": "string",
+              "required": false
+            }
+          }
         }
       }
     },
