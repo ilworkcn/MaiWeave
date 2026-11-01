@@ -56,7 +56,7 @@ def test_all_page_bindings_match_real_registered_api():
     raw = (Path(__file__).parents[1] / "webui.json").read_bytes()
     assert len(raw) <= 128 * 1024
     pages = json.loads(raw)["pages"]
-    assert len(pages) == 12
+    assert len(pages) == 9
     for page in pages:
         for binding in [*page["queries"].values(), *page["actions"].values()]:
             component = components[binding["api"]]
@@ -87,3 +87,43 @@ async def test_page_actions_persist_then_queries_show_results(plugin):
     place = await plugin.ui_save_place("咖啡馆", False, "角色生活地点")
     await plugin.ui_save_route("楼下街道", place["id"], 8)
     assert any(p["name"] == "咖啡馆" for p in (await plugin.ui_space())["places"])
+
+
+def test_merged_pages_keep_action_selections_and_data_sources():
+    """分组后，查询引用、详情窗口和按钮选择仍指向页面内组件。"""
+    import re
+    root = Path(__file__).parents[1]
+    pages = json.loads((root / "webui.json").read_text(encoding="utf-8"))["pages"]
+    metadata = json.loads(re.search(r"const PAGE_METADATA=(.*);", (root / "webui/editor.html").read_text(encoding="utf-8")).group(1))
+    assert {p["id"] for p in pages} == {"overview", "schedule", "world", "space", "records", "continuity", "anniversaries", "usage", "diary"}
+    def objects(value):
+        if isinstance(value, dict):
+            yield value
+            for item in value.values():
+                yield from objects(item)
+        elif isinstance(value, list):
+            for item in value:
+                yield from objects(item)
+    for page in pages:
+        meta = metadata.get(page["id"], {})
+        for category in meta.get("categories", []):
+            alias = {"experience": "experience"}.get(category, category)
+            if category not in {"profile", "anniversary"}:
+                assert alias in page["actions"], (page["id"], category)
+        view = meta.get("view") or page
+        content = list(objects(view.get("content", [])))
+        selections = {item["selection"] for item in content if "selection" in item}
+        inputs = {item["name"] for item in content if item.get("type") in {"input", "date", "select", "switch"}}
+        dialogs = {item["name"] for item in content if item.get("type") == "dialog"}
+        for item in objects(view):
+            if item.get("scope") == "selection":
+                assert item["source"] in selections, (page["id"], item)
+            elif item.get("scope") == "input":
+                assert item["source"] in inputs
+            elif isinstance(item.get("source"), str):
+                assert item["source"] in view["queries"], (page["id"], item)
+        for item in content:
+            if item.get("type") == "button":
+                assert item["action"] in view["actions"]
+            if item.get("detail"):
+                assert item["detail"] in dialogs
