@@ -56,7 +56,7 @@ def test_all_page_bindings_match_real_registered_api():
     raw = (Path(__file__).parents[1] / "webui.json").read_bytes()
     assert len(raw) <= 128 * 1024
     pages = json.loads(raw)["pages"]
-    assert len(pages) == 13
+    assert len(pages) == 12
     for page in pages:
         for binding in [*page["queries"].values(), *page["actions"].values()]:
             component = components[binding["api"]]

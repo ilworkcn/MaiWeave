@@ -37,6 +37,9 @@ async def test_all_day_preserves_explicit_sleep_plan(plugin):
 
 
 async def test_keyword_wakes_extends_and_returns_to_sleep(plugin):
+    person = plugin.anniversaries.save_profile("亲密对象", "chat-a", "")
+    with plugin.store.db:
+        plugin.store.put("profile", {**person, "intimacy": 3, "intimacy_mode": "manual", "relationship": "恋人"})
     now, plan = sleep_plan(plugin)
     plugin.config.life.autonomous = True
     when = now + timedelta(minutes=20)
@@ -48,11 +51,11 @@ async def test_keyword_wakes_extends_and_returns_to_sleep(plugin):
     await plugin.living.choose_activity(when + timedelta(minutes=1))
     assert plugin.engine.current(when + timedelta(minutes=1)) is None
     assert plugin.living.wake_for_message("还是难过", "chat-a", when + timedelta(minutes=50))
-    assert plugin.living.awake_until(when + timedelta(minutes=61)) == when + timedelta(minutes=110)
+    assert plugin.living.awake_until(when + timedelta(minutes=61)) == when + timedelta(minutes=170)
     await plugin.on_unload()
     await plugin.on_load()
-    assert plugin.living.awake_until(when + timedelta(minutes=61)) == when + timedelta(minutes=110)
-    await plugin.living.choose_activity(when + timedelta(minutes=111))
+    assert plugin.living.awake_until(when + timedelta(minutes=61)) == when + timedelta(minutes=170)
+    await plugin.living.choose_activity(when + timedelta(minutes=171))
     assert any(p["kind"] == "sleep" and p["status"] in {"active", "scheduled"} for p in plugin.store.all("plan"))
 
 
@@ -77,6 +80,9 @@ async def test_non_waking_messages_preserve_sleep(plugin, mode):
 
 
 async def test_custom_keyword(plugin):
+    person = plugin.anniversaries.save_profile("亲密对象", "chat-a", "")
+    with plugin.store.db:
+        plugin.store.put("profile", {**person, "intimacy": 3, "intimacy_mode": "manual", "relationship": "恋人"})
     now, _ = sleep_plan(plugin)
     plugin.config.life.wake_keywords = ["请醒来"]
     assert plugin.living.wake_for_message("请醒来，我想聊天", "chat-a", now)

@@ -24,6 +24,21 @@ class Living:
         self.spatial, self.rhythm, self.world = spatial, rhythm, world
         self.continuity = continuity
 
+    def intimacy(self, session, user):
+        profile = next((p for p in self.engine.store.all("profile") if p["session_id"] == session and p["user_id"] == user), {})
+        level = profile.get("intimacy", 0)
+        if profile.get("intimacy_mode") != "manual":
+            score = self.engine.relationship(session, user)["closeness"]
+            level = max(level, 3 if score >= 80 else 2 if score >= 50 else 1 if score >= 20 else 0)
+        return level
+
+    def check_influence(self, session, user, plans):
+        level = self.intimacy(session, user)
+        permitted = {0: set(), 1: {"leisure", "rest"}, 2: {"leisure", "rest", "study", "work", "diary"}, 3: {"leisure", "rest", "study", "work", "diary", "sleep"}}[level]
+        plans = [self.engine.store.get("plan", p["activity_id"]) if p.get("activity_id") else p for p in plans]
+        if any(p["autonomous"] and p["kind"] not in permitted for p in plans):
+            raise ValueError("当前关系优先在空闲时间安排陪伴，请选择活动结束后的时间")
+
     def awake_until(self, now):
         record = self.engine.store.find("runtime", "awakening")
         return self.engine.time(record["until"]) if record and self.engine.time(record["until"]) > now else None
@@ -45,10 +60,12 @@ class Living:
         if not (current and current["kind"] == "sleep") and not self.awake_until(now):
             return False
         if current and current["kind"] == "sleep":
+            if self.intimacy(session, user_id) < 3:
+                return False
             self.engine.advance(now)
             self.spatial.transition(current["id"], "cancel", current["session_id"], now)
         with self.engine.store.db:
-            self.engine.store.put("runtime", {"id": "awakening", "until": (now + timedelta(minutes=config.wake_minutes)).isoformat(),
+            self.engine.store.put("runtime", {"id": "awakening", "until": (now + timedelta(minutes=config.wake_minutes * (1 + self.intimacy(session, user_id) / 3))).isoformat(),
                                              "reason": reason, "session_id": session, "user_id": user_id})
         self.ctx.logger.info("MaiWeave 已醒来，留出 %s 分钟聊天", config.wake_minutes)
         return True
@@ -229,13 +246,7 @@ class Living:
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
-            result = await generate(self.ctx, engine.store, self.config, "自主活动", prompt)
-            if not result["success"]:
-                raise RuntimeError(result.get("error") or "自主规划模型调用失败")
-            text = result["response"].strip()
-            if text.startswith("```"):
-                text = "\n".join(text.splitlines()[1:-1])
-            choice = ActivityChoice.model_validate_json(text)
+            choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice)
             if choice.kind not in {"study", "work", "leisure", "rest"}:
                 raise ValueError("自主规划返回了未允许的活动类型")
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation

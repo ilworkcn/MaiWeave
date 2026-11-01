@@ -14,13 +14,7 @@ class Continuity:
         self.engine, self.ctx, self.config = engine, context, config
 
     async def ask(self, prompt, model, feature):
-        result = await generate(self.ctx, self.engine.store, self.config, feature, prompt)
-        if not result["success"]:
-            raise RuntimeError(result.get("error") or "生活模型调用失败")
-        text = result["response"].strip()
-        if text.startswith("```"):
-            text = "\n".join(text.splitlines()[1:-1])
-        return model.model_validate_json(text)
+        return await generate(self.ctx, self.engine.store, self.config, feature, prompt, model)
 
     def context(self, session, now):
         store = self.engine.store
@@ -33,14 +27,14 @@ class Continuity:
         }
 
     async def process(self, now):
-        """每轮处理少量新记录；失败留在页面，由明确操作重试。"""
+        """每轮处理少量新记录；模型请求按重试规则执行，结果保存在页面。"""
         store = self.engine.store
         if self.config.continuity.goal_planning:
             pending = [g for g in store.all("goal") if g["status"] == "active" and not g.get("steps")
                        and g.get("outline_status", "待分解") == "待分解"]
             if pending:
                 await self.outline(pending[0]["id"], now)
-        pending = [p for p in store.all("plan") if p["status"] == "completed" and p["kind"] not in {"travel", "sleep"}
+        pending = [p for p in store.all("plan") if p["status"] == "completed" and p["kind"] not in {"travel", "sleep", "diary"}
                    and 0 <= (now - self.engine.time(p["end"])).total_seconds() < self.config.rhythm.learning_days * 86400
                    and not store.find("reflection", p["id"])]
         for plan in pending[:3]:
@@ -49,7 +43,7 @@ class Continuity:
     async def reflect(self, plan_id, now):
         store = self.engine.store
         plan = store.get("plan", plan_id)
-        if plan["status"] != "completed" or plan["kind"] in {"travel", "sleep"}:
+        if plan["status"] != "completed" or plan["kind"] in {"travel", "sleep", "diary"}:
             raise ValueError("请选择已完成的非睡眠、非出行活动")
         event = store.get("experience", plan["experience_id"])
         old = store.find("reflection", plan_id)

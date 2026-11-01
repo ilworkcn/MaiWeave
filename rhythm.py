@@ -28,7 +28,7 @@ class Rhythm:
     def __init__(self, engine, spatial, config):
         self.engine, self.spatial, self.config = engine, spatial, config
 
-    def save(self, value: RoutineInput, session: str, now, rule_id: str = "") -> dict:
+    def save(self, value: RoutineInput, session: str, now, rule_id: str = "", user_id=None) -> dict:
         anchor = date.fromisoformat(value.anchor_date)
         time.fromisoformat(value.start_time)
         if value.until and date.fromisoformat(value.until) < anchor:
@@ -37,7 +37,7 @@ class Rhythm:
             raise ValueError("每周规则需填写星期，周一为0，周日为6")
         old = self.engine.owned("routine", rule_id, session) if rule_id else None
         record = {"id": rule_id or uid(), **value.model_dump(), "session_id": session, "status": "active",
-                  "revision": old["revision"] + 1 if old else 1, "exceptions": old["exceptions"] if old else [], "updated_at": now.isoformat()}
+                  "request_user_id": user_id, "revision": old["revision"] + 1 if old else 1, "exceptions": old["exceptions"] if old else [], "updated_at": now.isoformat()}
         with self.engine.store.db:
             if old:
                 self._cancel_future(old["id"], now)
@@ -98,7 +98,7 @@ class Rhythm:
                 value = PlanInput(title=rule["title"], start=start.isoformat(), end=(start + timedelta(minutes=rule["duration_minutes"])).isoformat(),
                                   kind=rule["kind"], location=rule["location"], participants=rule["participants"], simulation=rule["simulation"], motivation="重复日程")
                 try:
-                    plan = self.spatial.schedule(value, rule["session_id"], now)
+                    plan = self.spatial.schedule(value, rule["session_id"], now, user_id=rule.get("request_user_id"))
                 except ValueError as error:
                     with self.engine.store.db:
                         self.engine.store.put("routine_issue", {"id": key, "routine_id": rule["id"], "day": day.isoformat(), "title": rule["title"], "message": str(error)})

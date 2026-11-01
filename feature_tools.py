@@ -30,6 +30,10 @@ class FeatureTools:
         if action == "replan":
             if not reason.strip() or not unavailable_until:
                 raise ValueError("临时调整需说明具体原因和结束时间")
+            until = self.engine.time(unavailable_until)
+            affected = [p for p in self.store.all("plan") if p["status"] in {"scheduled", "active"}
+                        and self.engine.time(p["start"]) < until and self.engine.time(p["end"]) > now]
+            self.living.check_influence(session, kwargs.get("user_id", ""), affected)
             return self.living.adjust(now, reason, unavailable_until)
         if action == "save_thread":
             return self.continuity.save_thread(title, context, session, due_at, now, record_id)
@@ -64,7 +68,7 @@ class FeatureTools:
         if action == "list":
             return [r for r in self.store.all("routine") if self.engine.visible(r, session)]
         if action == "save":
-            result = self.rhythm.save(RoutineInput.model_validate(routine or {}), session, now, rule_id)
+            result = self.rhythm.save(RoutineInput.model_validate(routine or {}), session, now, rule_id, user_id=kwargs.get("user_id", ""))
             self.rhythm.materialize(now)
             return {"rule": result, "issues": [i for i in self.store.all("routine_issue") if i["routine_id"] == result["id"]]}
         if action == "skip":

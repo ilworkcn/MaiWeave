@@ -323,12 +323,60 @@
       "id": "schedule",
       "title": "生活日程",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "list",
-      "poll_interval_seconds": 30,
-      "auto_refresh": true,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
+        },
+        "change_status": {
+          "api": "ui_change_status",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "chats": {
+          "api": "ui_chat_choices",
+          "version": "1",
+          "parameters": {}
+        },
+        "view_data": {
           "api": "ui_schedule",
           "version": "1",
           "parameters": {
@@ -344,7 +392,62 @@
         }
       },
       "actions": {
-        "create": {
+        "plan": {
+          "api": "ui_update_plan",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            },
+            "new_title": {
+              "type": "string",
+              "required": false
+            },
+            "new_start": {
+              "type": "string",
+              "required": false
+            },
+            "new_end": {
+              "type": "string",
+              "required": false
+            },
+            "new_location": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "change": {
+          "api": "ui_change_begin",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "payload": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
+        },
+        "decide": {
+          "api": "ui_change_decide",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            },
+            "accept": {
+              "type": "boolean",
+              "required": true
+            }
+          }
+        },
+        "view_create": {
           "api": "ui_create_plan",
           "version": "1",
           "parameters": {
@@ -386,7 +489,7 @@
             }
           }
         },
-        "operate": {
+        "view_operate": {
           "api": "ui_plan_action",
           "version": "1",
           "parameters": {
@@ -398,16 +501,9 @@
               "type": "string",
               "required": true
             }
-          },
-          "arguments": {
-            "plan_id": {
-              "scope": "selection",
-              "source": "plan",
-              "field": "id"
-            }
           }
         },
-        "update": {
+        "view_update": {
           "api": "ui_update_plan",
           "version": "1",
           "parameters": {
@@ -431,397 +527,169 @@
               "type": "string",
               "required": false
             }
-          },
-          "arguments": {
-            "plan_id": {
-              "scope": "selection",
-              "source": "plan",
-              "field": "id"
-            }
           }
         }
-      },
-      "content": [
-        {
-          "type": "table",
-          "label": "需要调整的固定安排",
-          "value": {
-            "source": "data",
-            "field": "schedule_issues"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "安排"
-            },
-            {
-              "field": "reason",
-              "label": "原因"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "环境与临时事件提醒",
-          "value": {
-            "source": "data",
-            "field": "notices"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "安排"
-            },
-            {
-              "field": "reason",
-              "label": "提醒"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "最近自动调整",
-          "value": {
-            "source": "data",
-            "field": "adjustments"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "安排"
-            },
-            {
-              "field": "reason",
-              "label": "调整原因"
-            },
-            {
-              "field": "at",
-              "label": "时间"
-            }
-          ]
-        },
-        {
-          "type": "card",
-          "label": "筛选",
-          "children": [
-            {
-              "type": "input",
-              "name": "session_id",
-              "label": "聊天流（留空查看全部，新建时留空表示公共生活）",
-              "value": ""
-            },
-            {
-              "type": "date",
-              "name": "start_date",
-              "label": "从哪天开始查看",
-              "value": ""
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "value": "时间使用 YYYY-MM-DDTHH:MM，例如 2026-11-01T19:00。移动会自动预留出行时间。点击一行可查看详情。"
-        },
-        {
-          "type": "table",
-          "label": "最近与未来安排（最多200条）",
-          "value": {
-            "source": "data",
-            "field": "plans"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "安排"
-            },
-            {
-              "field": "start_label",
-              "label": "开始"
-            },
-            {
-              "field": "end_label",
-              "label": "结束"
-            },
-            {
-              "field": "kind_label",
-              "label": "类型"
-            },
-            {
-              "field": "location",
-              "label": "地点"
-            },
-            {
-              "field": "status_label",
-              "label": "状态"
-            },
-            {
-              "field": "origin_label",
-              "label": "来源"
-            },
-            {
-              "field": "scope_label",
-              "label": "所属聊天流"
-            }
-          ],
-          "selection": "plan",
-          "detail": "plan_detail"
-        },
-        {
-          "type": "card",
-          "label": "操作所选日程",
-          "children": [
-            {
-              "type": "select",
-              "name": "action",
-              "label": "执行操作",
-              "value": "pause",
-              "options": [
-                {
-                  "value": "pause",
-                  "label": "暂停"
-                },
-                {
-                  "value": "resume",
-                  "label": "继续"
-                },
-                {
-                  "value": "cancel",
-                  "label": "取消"
-                }
-              ]
-            },
-            {
-              "type": "button",
-              "label": "执行所选操作",
-              "action": "operate",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "plan",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "card",
-          "label": "修改所选日程（填写要修改的项目）",
-          "children": [
-            {
-              "type": "input",
-              "name": "new_title",
-              "label": "新标题",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "new_start",
-              "label": "新开始时间",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "new_end",
-              "label": "新结束时间",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "new_location",
-              "label": "新地点",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "保存修改",
-              "action": "update",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "plan",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "collapsible",
-          "label": "新增安排",
-          "children": [
-            {
-              "type": "input",
-              "name": "title",
-              "label": "安排标题",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "start",
-              "label": "开始时间",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "end",
-              "label": "结束时间",
-              "value": ""
-            },
-            {
-              "type": "select",
-              "name": "kind",
-              "label": "活动类型",
-              "value": "leisure",
-              "options": [
-                {
-                  "value": "leisure",
-                  "label": "休闲"
-                },
-                {
-                  "value": "study",
-                  "label": "学习"
-                },
-                {
-                  "value": "work",
-                  "label": "工作"
-                },
-                {
-                  "value": "sleep",
-                  "label": "睡眠"
-                },
-                {
-                  "value": "meal",
-                  "label": "用餐"
-                },
-                {
-                  "value": "travel",
-                  "label": "出行"
-                },
-                {
-                  "value": "rest",
-                  "label": "休息"
-                },
-                {
-                  "value": "social",
-                  "label": "社交"
-                }
-              ]
-            },
-            {
-              "type": "input",
-              "name": "location",
-              "label": "地点（填写已登记名称）",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "participants",
-              "label": "参与者（逗号分隔，共同安排需确认完成）",
-              "value": ""
-            },
-            {
-              "type": "switch",
-              "name": "simulation",
-              "label": "独自活动允许模拟完成",
-              "value": true
-            },
-            {
-              "type": "switch",
-              "name": "flexible",
-              "label": "允许根据环境和前序安排自动调整",
-              "value": false
-            },
-            {
-              "type": "button",
-              "label": "新增安排",
-              "action": "create"
-            }
-          ]
-        },
-        {
-          "type": "dialog",
-          "name": "plan_detail",
-          "label": "日程详情",
-          "children": [
-            {
-              "type": "text",
-              "label": "安排编号",
-              "value": {
-                "scope": "selection",
-                "source": "plan",
-                "field": "id"
-              }
-            },
-            {
-              "type": "text",
-              "label": "安排",
-              "value": {
-                "scope": "selection",
-                "source": "plan",
-                "field": "title"
-              }
-            },
-            {
-              "type": "text",
-              "label": "开始时间",
-              "value": {
-                "scope": "selection",
-                "source": "plan",
-                "field": "start"
-              }
-            },
-            {
-              "type": "text",
-              "label": "结束时间",
-              "value": {
-                "scope": "selection",
-                "source": "plan",
-                "field": "end"
-              }
-            },
-            {
-              "type": "text",
-              "label": "动机",
-              "value": {
-                "scope": "selection",
-                "source": "plan",
-                "field": "motivation"
-              }
-            },
-            {
-              "type": "text",
-              "label": "参与者",
-              "value": {
-                "scope": "selection",
-                "source": "plan",
-                "field": "participants_label"
-              }
-            }
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "routines",
       "title": "重复日程",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "list",
-      "poll_interval_seconds": 30,
-      "auto_refresh": false,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
+        },
+        "change_status": {
+          "api": "ui_change_status",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "chats": {
+          "api": "ui_chat_choices",
+          "version": "1",
+          "parameters": {}
+        },
+        "view_data": {
           "api": "ui_schedule",
           "version": "1"
         }
       },
       "actions": {
-        "create": {
+        "routine": {
+          "api": "ui_save_routine",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "anchor_date": {
+              "type": "string",
+              "required": true
+            },
+            "start_time": {
+              "type": "string",
+              "required": true
+            },
+            "duration_minutes": {
+              "type": "integer",
+              "required": true
+            },
+            "frequency": {
+              "type": "string",
+              "required": false
+            },
+            "interval": {
+              "type": "integer",
+              "required": false
+            },
+            "weekdays": {
+              "type": "string",
+              "required": false
+            },
+            "month_day": {
+              "type": "integer",
+              "required": false
+            },
+            "until": {
+              "type": "string",
+              "required": false
+            },
+            "kind": {
+              "type": "string",
+              "required": false
+            },
+            "location": {
+              "type": "string",
+              "required": false
+            },
+            "session_id": {
+              "type": "string",
+              "required": false
+            },
+            "participants": {
+              "type": "string",
+              "required": false
+            },
+            "simulation": {
+              "type": "boolean",
+              "required": false
+            },
+            "rule_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "change": {
+          "api": "ui_change_begin",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "payload": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
+        },
+        "decide": {
+          "api": "ui_change_decide",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            },
+            "accept": {
+              "type": "boolean",
+              "required": true
+            }
+          }
+        },
+        "view_create": {
           "api": "ui_save_routine",
           "version": "1",
           "parameters": {
@@ -887,7 +755,7 @@
             }
           }
         },
-        "update": {
+        "view_update": {
           "api": "ui_save_routine",
           "version": "1",
           "parameters": {
@@ -955,16 +823,9 @@
               "type": "string",
               "required": true
             }
-          },
-          "arguments": {
-            "rule_id": {
-              "scope": "selection",
-              "source": "rule",
-              "field": "id"
-            }
           }
         },
-        "operate": {
+        "view_operate": {
           "api": "ui_routine_action",
           "version": "1",
           "parameters": {
@@ -980,286 +841,9 @@
               "type": "string",
               "required": false
             }
-          },
-          "arguments": {
-            "rule_id": {
-              "scope": "selection",
-              "source": "rule",
-              "field": "id"
-            }
           }
         }
-      },
-      "content": [
-        {
-          "type": "table",
-          "label": "重复规则",
-          "value": {
-            "source": "data",
-            "field": "rules"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "安排"
-            },
-            {
-              "field": "frequency_label",
-              "label": "周期"
-            },
-            {
-              "field": "interval",
-              "label": "间隔"
-            },
-            {
-              "field": "start_time",
-              "label": "时间"
-            },
-            {
-              "field": "weekdays_label",
-              "label": "星期"
-            },
-            {
-              "field": "month_day",
-              "label": "每月日期"
-            },
-            {
-              "field": "location",
-              "label": "地点"
-            },
-            {
-              "field": "status_label",
-              "label": "状态"
-            },
-            {
-              "field": "exceptions_label",
-              "label": "跳过日期"
-            }
-          ],
-          "selection": "rule"
-        },
-        {
-          "type": "card",
-          "label": "规则操作",
-          "children": [
-            {
-              "type": "select",
-              "name": "action",
-              "label": "执行操作",
-              "value": "skip",
-              "options": [
-                {
-                  "value": "skip",
-                  "label": "跳过某一天"
-                },
-                {
-                  "value": "cancel",
-                  "label": "停止今后重复"
-                }
-              ]
-            },
-            {
-              "type": "date",
-              "name": "skip_date",
-              "label": "跳过日期",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "执行规则操作",
-              "action": "operate",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "rule",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "card",
-          "label": "新建或修改完整规则",
-          "children": [
-            {
-              "type": "input",
-              "name": "title",
-              "label": "安排标题",
-              "value": ""
-            },
-            {
-              "type": "select",
-              "name": "frequency",
-              "label": "重复周期",
-              "value": "weekly",
-              "options": [
-                {
-                  "value": "daily",
-                  "label": "每天"
-                },
-                {
-                  "value": "weekly",
-                  "label": "每周"
-                },
-                {
-                  "value": "monthly",
-                  "label": "每月"
-                }
-              ]
-            },
-            {
-              "type": "input",
-              "name": "interval",
-              "label": "间隔几个周期",
-              "value": 1
-            },
-            {
-              "type": "date",
-              "name": "anchor_date",
-              "label": "开始日期",
-              "value": ""
-            },
-            {
-              "type": "date",
-              "name": "until",
-              "label": "结束日期（可留空）",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "start_time",
-              "label": "每天开始时间（HH:MM）",
-              "value": "19:00"
-            },
-            {
-              "type": "input",
-              "name": "duration_minutes",
-              "label": "持续时间（分钟）",
-              "value": 60
-            },
-            {
-              "type": "input",
-              "name": "weekdays",
-              "label": "每周星期（逗号分隔）",
-              "value": "周一,周二,周三,周四,周五"
-            },
-            {
-              "type": "input",
-              "name": "month_day",
-              "label": "每月第几日",
-              "value": 1
-            },
-            {
-              "type": "select",
-              "name": "kind",
-              "label": "活动类型",
-              "value": "leisure",
-              "options": [
-                {
-                  "value": "leisure",
-                  "label": "休闲"
-                },
-                {
-                  "value": "study",
-                  "label": "学习"
-                },
-                {
-                  "value": "work",
-                  "label": "工作"
-                },
-                {
-                  "value": "sleep",
-                  "label": "睡眠"
-                },
-                {
-                  "value": "meal",
-                  "label": "用餐"
-                },
-                {
-                  "value": "travel",
-                  "label": "出行"
-                },
-                {
-                  "value": "rest",
-                  "label": "休息"
-                },
-                {
-                  "value": "social",
-                  "label": "社交"
-                }
-              ]
-            },
-            {
-              "type": "input",
-              "name": "location",
-              "label": "地点",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "session_id",
-              "label": "所属聊天流（留空表示公共生活）",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "participants",
-              "label": "参与者（逗号分隔）",
-              "value": ""
-            },
-            {
-              "type": "switch",
-              "name": "simulation",
-              "label": "独自活动允许模拟完成",
-              "value": true
-            },
-            {
-              "type": "button",
-              "label": "创建新规则",
-              "action": "create"
-            },
-            {
-              "type": "button",
-              "label": "用表单更新所选规则",
-              "action": "update",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "rule",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "尚未安排成功的日期",
-          "value": {
-            "source": "data",
-            "field": "issues"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "规则"
-            },
-            {
-              "field": "day",
-              "label": "日期"
-            },
-            {
-              "field": "message",
-              "label": "原因"
-            }
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "world",
@@ -1553,36 +1137,66 @@
       "id": "space",
       "title": "地点与移动",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "list",
-      "poll_interval_seconds": 30,
-      "auto_refresh": false,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
+        },
+        "change_status": {
+          "api": "ui_change_status",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "chats": {
+          "api": "ui_chat_choices",
+          "version": "1",
+          "parameters": {}
+        },
+        "view_data": {
           "api": "ui_space",
           "version": "1"
         }
       },
       "actions": {
-        "add_place": {
-          "api": "ui_save_place",
-          "version": "1",
-          "parameters": {
-            "name": {
-              "type": "string",
-              "required": true
-            },
-            "outdoor": {
-              "type": "boolean",
-              "required": false
-            },
-            "description": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "edit_place": {
+        "place": {
           "api": "ui_save_place",
           "version": "1",
           "parameters": {
@@ -1600,18 +1214,102 @@
             },
             "place_id": {
               "type": "string",
-              "required": true
-            }
-          },
-          "arguments": {
-            "place_id": {
-              "scope": "selection",
-              "source": "place",
-              "field": "id"
+              "required": false
             }
           }
         },
         "route": {
+          "api": "ui_save_route",
+          "version": "1",
+          "parameters": {
+            "origin": {
+              "type": "string",
+              "required": true
+            },
+            "destination": {
+              "type": "string",
+              "required": true
+            },
+            "minutes": {
+              "type": "integer",
+              "required": true
+            },
+            "mode": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "change": {
+          "api": "ui_change_begin",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "payload": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
+        },
+        "decide": {
+          "api": "ui_change_decide",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            },
+            "accept": {
+              "type": "boolean",
+              "required": true
+            }
+          }
+        },
+        "view_add_place": {
+          "api": "ui_save_place",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "outdoor": {
+              "type": "boolean",
+              "required": false
+            },
+            "description": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "view_edit_place": {
+          "api": "ui_save_place",
+          "version": "1",
+          "parameters": {
+            "name": {
+              "type": "string",
+              "required": true
+            },
+            "outdoor": {
+              "type": "boolean",
+              "required": false
+            },
+            "description": {
+              "type": "string",
+              "required": false
+            },
+            "place_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_route": {
           "api": "ui_save_route",
           "version": "1",
           "parameters": {
@@ -1634,7 +1332,7 @@
             }
           }
         },
-        "move": {
+        "view_move": {
           "api": "ui_move",
           "version": "1",
           "parameters": {
@@ -1644,213 +1342,7 @@
             }
           }
         }
-      },
-      "content": [
-        {
-          "type": "grid",
-          "columns": 3,
-          "children": [
-            {
-              "type": "text",
-              "label": "所在地点",
-              "value": {
-                "source": "data",
-                "field": "location"
-              }
-            },
-            {
-              "type": "text",
-              "label": "下一站",
-              "value": {
-                "source": "data",
-                "field": "journey.next"
-              }
-            },
-            {
-              "type": "text",
-              "label": "移动方式",
-              "value": {
-                "source": "data",
-                "field": "journey.mode"
-              }
-            }
-          ]
-        },
-        {
-          "type": "progress",
-          "label": "当前路段进度",
-          "value": {
-            "source": "data",
-            "field": "journey.progress"
-          }
-        },
-        {
-          "type": "table",
-          "label": "正在经过的路线",
-          "value": {
-            "source": "data",
-            "field": "legs"
-          },
-          "columns": [
-            {
-              "field": "origin",
-              "label": "从"
-            },
-            {
-              "field": "destination",
-              "label": "到"
-            },
-            {
-              "field": "minutes",
-              "label": "分钟"
-            },
-            {
-              "field": "mode",
-              "label": "方式"
-            }
-          ]
-        },
-        {
-          "type": "text",
-          "value": "在这里设置角色生活中的地点和路线。连接两个地点后，角色会按路程所需时间往返。"
-        },
-        {
-          "type": "table",
-          "label": "地点",
-          "value": {
-            "source": "data",
-            "field": "places"
-          },
-          "columns": [
-            {
-              "field": "name",
-              "label": "名称"
-            },
-            {
-              "field": "outdoor_label",
-              "label": "环境"
-            },
-            {
-              "field": "description",
-              "label": "说明"
-            },
-            {
-              "field": "id",
-              "label": "编号"
-            }
-          ],
-          "selection": "place"
-        },
-        {
-          "type": "collapsible",
-          "label": "添加或修改地点",
-          "children": [
-            {
-              "type": "input",
-              "name": "name",
-              "label": "地点名称",
-              "value": ""
-            },
-            {
-              "type": "switch",
-              "name": "outdoor",
-              "label": "室外地点",
-              "value": false
-            },
-            {
-              "type": "input",
-              "name": "description",
-              "label": "地点说明",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "添加地点",
-              "action": "add_place"
-            },
-            {
-              "type": "button",
-              "label": "修改所选地点",
-              "action": "edit_place",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "place",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "连接路线",
-          "value": {
-            "source": "data",
-            "field": "routes"
-          },
-          "columns": [
-            {
-              "field": "origin_name",
-              "label": "起点"
-            },
-            {
-              "field": "destination_name",
-              "label": "终点"
-            },
-            {
-              "field": "minutes",
-              "label": "耗时（分钟）"
-            },
-            {
-              "field": "mode",
-              "label": "移动方式"
-            }
-          ]
-        },
-        {
-          "type": "card",
-          "label": "路线与出行",
-          "children": [
-            {
-              "type": "input",
-              "name": "origin",
-              "label": "路线起点名称",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "destination",
-              "label": "终点名称",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "minutes",
-              "label": "路段耗时（分钟）",
-              "value": 10
-            },
-            {
-              "type": "input",
-              "name": "mode",
-              "label": "移动方式",
-              "value": "步行"
-            },
-            {
-              "type": "button",
-              "label": "保存双向路线",
-              "action": "route"
-            },
-            {
-              "type": "button",
-              "label": "从当前位置前往终点",
-              "action": "move"
-            }
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "dreams",
@@ -2320,12 +1812,60 @@
       "id": "records",
       "title": "经历与记忆",
       "placement": "workspace",
-      "mode": "declarative",
-      "icon": "database",
-      "poll_interval_seconds": 30,
-      "auto_refresh": true,
+      "mode": "custom",
+      "icon": "list",
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
+        },
+        "change_status": {
+          "api": "ui_change_status",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "chats": {
+          "api": "ui_chat_choices",
+          "version": "1",
+          "parameters": {}
+        },
+        "view_data": {
           "api": "ui_records",
           "version": "1",
           "parameters": {
@@ -2346,7 +1886,62 @@
         }
       },
       "actions": {
-        "revise": {
+        "experience": {
+          "api": "ui_revise_record",
+          "version": "1",
+          "parameters": {
+            "experience_id": {
+              "type": "string",
+              "required": true
+            },
+            "evidence": {
+              "type": "string",
+              "required": true
+            },
+            "detail_key": {
+              "type": "string",
+              "required": false
+            },
+            "detail_value": {
+              "type": "string",
+              "required": false
+            },
+            "summary": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "change": {
+          "api": "ui_change_begin",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "payload": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
+        },
+        "decide": {
+          "api": "ui_change_decide",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            },
+            "accept": {
+              "type": "boolean",
+              "required": true
+            }
+          }
+        },
+        "view_revise": {
           "api": "ui_revise_record",
           "version": "1",
           "parameters": {
@@ -2370,16 +1965,9 @@
               "type": "string",
               "required": false
             }
-          },
-          "arguments": {
-            "experience_id": {
-              "scope": "selection",
-              "source": "record",
-              "field": "id"
-            }
           }
         },
-        "sync": {
+        "view_sync": {
           "api": "ui_sync_record",
           "version": "1",
           "parameters": {
@@ -2387,305 +1975,73 @@
               "type": "string",
               "required": true
             }
-          },
-          "arguments": {
-            "experience_id": {
-              "scope": "selection",
-              "source": "record",
-              "field": "id"
-            }
           }
         }
-      },
-      "content": [
-        {
-          "type": "table",
-          "label": "后台操作进度",
-          "value": {
-            "source": "data",
-            "field": "jobs"
-          },
-          "columns": [
-            {
-              "field": "label",
-              "label": "操作"
-            },
-            {
-              "field": "status",
-              "label": "状态"
-            },
-            {
-              "field": "error",
-              "label": "错误"
-            },
-            {
-              "field": "created_at",
-              "label": "开始时间"
-            }
-          ]
-        },
-        {
-          "type": "grid",
-          "columns": 2,
-          "children": [
-            {
-              "type": "input",
-              "name": "query",
-              "label": "搜索经历摘要",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "session_id",
-              "label": "所属聊天流（留空查看全部）",
-              "value": ""
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "生活经历",
-          "value": {
-            "source": "data",
-            "field": "records"
-          },
-          "columns": [
-            {
-              "field": "summary",
-              "label": "经历"
-            },
-            {
-              "field": "time_label",
-              "label": "发生时间"
-            },
-            {
-              "field": "source_label",
-              "label": "来源"
-            },
-            {
-              "field": "revision",
-              "label": "修订版本"
-            },
-            {
-              "field": "memory_label",
-              "label": "原生记忆"
-            }
-          ],
-          "selection": "record",
-          "detail": "record_detail"
-        },
-        {
-          "type": "pagination",
-          "name": "page",
-          "value": {
-            "source": "data",
-            "field": "pagination"
-          }
-        },
-        {
-          "type": "card",
-          "label": "补充或更正所选经历",
-          "children": [
-            {
-              "type": "input",
-              "name": "summary",
-              "label": "新的完整摘要（留空保留）",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "detail_key",
-              "label": "细节名称",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "detail_value",
-              "label": "细节内容",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "evidence",
-              "label": "本次补充或更正的依据",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "保存修订",
-              "action": "revise",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "record",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            },
-            {
-              "type": "button",
-              "label": "同步所选经历到原生记忆",
-              "action": "sync",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "record",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "dialog",
-          "name": "record_detail",
-          "label": "经历详情与历史",
-          "children": [
-            {
-              "type": "text",
-              "label": "经历",
-              "value": {
-                "scope": "selection",
-                "source": "record",
-                "field": "summary"
-              },
-              "format": "log"
-            },
-            {
-              "type": "text",
-              "label": "来源性质",
-              "value": {
-                "scope": "selection",
-                "source": "record",
-                "field": "source_label"
-              },
-              "format": "log"
-            },
-            {
-              "type": "text",
-              "label": "结构化细节",
-              "value": {
-                "scope": "selection",
-                "source": "record",
-                "field": "details_text"
-              },
-              "format": "log"
-            },
-            {
-              "type": "text",
-              "label": "依据",
-              "value": {
-                "scope": "selection",
-                "source": "record",
-                "field": "evidence"
-              },
-              "format": "log"
-            },
-            {
-              "type": "text",
-              "label": "修订历史",
-              "value": {
-                "scope": "selection",
-                "source": "record",
-                "field": "history_text"
-              },
-              "format": "log"
-            }
-          ]
-        }
-      ]
+      }
     },
     {
       "id": "continuity",
       "title": "生活接续",
       "placement": "workspace",
-      "mode": "declarative",
+      "mode": "custom",
       "icon": "list",
-      "poll_interval_seconds": 30,
-      "auto_refresh": false,
+      "entry": "webui/editor.html",
+      "layout": "document",
       "queries": {
-        "data": {
+        "records": {
+          "api": "ui_editor_records",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "query": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "people": {
+          "api": "ui_memory_people",
+          "parameters": {
+            "query": {
+              "type": "string"
+            }
+          },
+          "version": "1"
+        },
+        "person": {
+          "api": "ui_memory_person",
+          "parameters": {
+            "person_id": {
+              "type": "string",
+              "required": true
+            }
+          },
+          "version": "1"
+        },
+        "change_status": {
+          "api": "ui_change_status",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "chats": {
+          "api": "ui_chat_choices",
+          "version": "1",
+          "parameters": {}
+        },
+        "view_data": {
           "api": "ui_continuity",
           "version": "1"
         }
       },
       "actions": {
-        "reflect": {
-          "api": "ui_reflect",
-          "version": "1",
-          "parameters": {
-            "plan_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "arguments": {
-            "plan_id": {
-              "scope": "selection",
-              "source": "reflection",
-              "field": "id"
-            }
-          }
-        },
-        "outline": {
-          "api": "ui_outline",
-          "version": "1",
-          "parameters": {
-            "goal_id": {
-              "type": "string",
-              "required": true
-            },
-            "revise": {
-              "type": "boolean",
-              "required": false
-            }
-          },
-          "arguments": {
-            "goal_id": {
-              "scope": "selection",
-              "source": "outline_goal",
-              "field": "id"
-            }
-          }
-        },
-        "resolve_effect": {
-          "api": "ui_resolve_effect",
-          "version": "1",
-          "parameters": {
-            "effect_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "arguments": {
-            "effect_id": {
-              "scope": "selection",
-              "source": "effect",
-              "field": "id"
-            }
-          }
-        },
-        "resolve": {
-          "api": "ui_resolve_thread",
-          "version": "1",
-          "parameters": {
-            "thread_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "arguments": {
-            "thread_id": {
-              "scope": "selection",
-              "source": "thread",
-              "field": "id"
-            }
-          }
-        },
         "thread": {
           "api": "ui_save_thread",
           "version": "1",
@@ -2705,10 +2061,109 @@
             "session_id": {
               "type": "string",
               "required": true
+            },
+            "thread_id": {
+              "type": "string",
+              "required": false
             }
           }
         },
-        "update_thread": {
+        "change": {
+          "api": "ui_change_begin",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "payload": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
+        },
+        "decide": {
+          "api": "ui_change_decide",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            },
+            "accept": {
+              "type": "boolean",
+              "required": true
+            }
+          }
+        },
+        "view_reflect": {
+          "api": "ui_reflect",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_outline": {
+          "api": "ui_outline",
+          "version": "1",
+          "parameters": {
+            "goal_id": {
+              "type": "string",
+              "required": true
+            },
+            "revise": {
+              "type": "boolean",
+              "required": false
+            }
+          }
+        },
+        "view_resolve_effect": {
+          "api": "ui_resolve_effect",
+          "version": "1",
+          "parameters": {
+            "effect_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_resolve": {
+          "api": "ui_resolve_thread",
+          "version": "1",
+          "parameters": {
+            "thread_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_thread": {
+          "api": "ui_save_thread",
+          "version": "1",
+          "parameters": {
+            "title": {
+              "type": "string",
+              "required": true
+            },
+            "context": {
+              "type": "string",
+              "required": true
+            },
+            "due_at": {
+              "type": "string",
+              "required": true
+            },
+            "session_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_update_thread": {
           "api": "ui_save_thread",
           "version": "1",
           "parameters": {
@@ -2732,16 +2187,9 @@
               "type": "string",
               "required": true
             }
-          },
-          "arguments": {
-            "thread_id": {
-              "scope": "selection",
-              "source": "thread",
-              "field": "id"
-            }
           }
         },
-        "replan": {
+        "view_replan": {
           "api": "ui_replan",
           "version": "1",
           "parameters": {
@@ -2755,729 +2203,11 @@
             }
           }
         }
-      },
-      "content": [
-        {
-          "type": "text",
-          "value": "上次做到了哪里，下次接着做什么，都记在这里。也可以查看目标进度和待跟进的话题。"
-        },
-        {
-          "type": "table",
-          "label": "活动结果整理",
-          "value": {
-            "source": "data",
-            "field": "reflections"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "活动"
-            },
-            {
-              "field": "activity",
-              "label": "归并类别"
-            },
-            {
-              "field": "status",
-              "label": "状态"
-            },
-            {
-              "field": "error",
-              "label": "错误"
-            }
-          ],
-          "selection": "reflection"
-        },
-        {
-          "type": "button",
-          "label": "重试所选活动结果",
-          "action": "reflect",
-          "disabled_when": {
-            "reference": {
-              "scope": "selection",
-              "source": "reflection",
-              "field": "id"
-            },
-            "operator": "empty"
-          },
-          "disabled_reason": "请先在表格中选择一条记录"
-        },
-        {
-          "type": "table",
-          "label": "作品进度与接续",
-          "value": {
-            "source": "data",
-            "field": "continuations"
-          },
-          "columns": [
-            {
-              "field": "activity",
-              "label": "活动"
-            },
-            {
-              "field": "subject",
-              "label": "具体对象"
-            },
-            {
-              "field": "progress_status",
-              "label": "完成情况"
-            },
-            {
-              "field": "next_action",
-              "label": "接下来做什么"
-            },
-            {
-              "field": "details_text",
-              "label": "已有具体结果"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "逐步形成的偏好",
-          "value": {
-            "source": "data",
-            "field": "preferences"
-          },
-          "columns": [
-            {
-              "field": "activity",
-              "label": "活动"
-            },
-            {
-              "field": "score",
-              "label": "体验评分（负5到正5）"
-            },
-            {
-              "field": "samples",
-              "label": "经历次数"
-            },
-            {
-              "field": "evidence",
-              "label": "依据经历"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "阶段目标",
-          "value": {
-            "source": "data",
-            "field": "goals"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "目标"
-            },
-            {
-              "field": "status_label",
-              "label": "目标状态"
-            },
-            {
-              "field": "outline_status",
-              "label": "阶段规划"
-            },
-            {
-              "field": "outline_error",
-              "label": "错误"
-            }
-          ],
-          "selection": "outline_goal"
-        },
-        {
-          "type": "switch",
-          "name": "revise",
-          "label": "根据现有进度重新分解剩余阶段",
-          "value": false
-        },
-        {
-          "type": "button",
-          "label": "分解目标／重试／调整剩余阶段",
-          "action": "outline",
-          "disabled_when": {
-            "reference": {
-              "scope": "selection",
-              "source": "outline_goal",
-              "field": "id"
-            },
-            "operator": "empty"
-          },
-          "disabled_reason": "请先在表格中选择一条记录"
-        },
-        {
-          "type": "table",
-          "label": "阶段进度",
-          "value": {
-            "source": "data",
-            "field": "steps"
-          },
-          "columns": [
-            {
-              "field": "goal_title",
-              "label": "目标"
-            },
-            {
-              "field": "title",
-              "label": "阶段"
-            },
-            {
-              "field": "criterion",
-              "label": "完成依据"
-            },
-            {
-              "field": "completed_sessions",
-              "label": "有效进展次数"
-            },
-            {
-              "field": "sessions",
-              "label": "计划次数"
-            },
-            {
-              "field": "status_label",
-              "label": "状态"
-            },
-            {
-              "field": "note",
-              "label": "上次结果与下一步"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "持续影响的事情",
-          "value": {
-            "source": "data",
-            "field": "effects"
-          },
-          "columns": [
-            {
-              "field": "reason",
-              "label": "原因"
-            },
-            {
-              "field": "mood",
-              "label": "心情影响"
-            },
-            {
-              "field": "stress",
-              "label": "压力影响"
-            },
-            {
-              "field": "expires_at",
-              "label": "自然消退时间"
-            },
-            {
-              "field": "status_label",
-              "label": "状态"
-            }
-          ],
-          "selection": "effect"
-        },
-        {
-          "type": "button",
-          "label": "结束所选持续影响",
-          "action": "resolve_effect",
-          "disabled_when": {
-            "reference": {
-              "scope": "selection",
-              "source": "effect",
-              "field": "id"
-            },
-            "operator": "empty"
-          },
-          "disabled_reason": "请先在表格中选择一条记录"
-        },
-        {
-          "type": "table",
-          "label": "待接续的话题",
-          "value": {
-            "source": "data",
-            "field": "threads"
-          },
-          "columns": [
-            {
-              "field": "title",
-              "label": "话题"
-            },
-            {
-              "field": "context",
-              "label": "上下文"
-            },
-            {
-              "field": "due_at",
-              "label": "跟进时间"
-            },
-            {
-              "field": "status_label",
-              "label": "状态"
-            },
-            {
-              "field": "request_label",
-              "label": "主动跟进"
-            }
-          ],
-          "selection": "thread"
-        },
-        {
-          "type": "button",
-          "label": "标记所选事项已解决",
-          "action": "resolve",
-          "disabled_when": {
-            "reference": {
-              "scope": "selection",
-              "source": "thread",
-              "field": "id"
-            },
-            "operator": "empty"
-          },
-          "disabled_reason": "请先在表格中选择一条记录"
-        },
-        {
-          "type": "collapsible",
-          "label": "新增或更新跟进事项",
-          "children": [
-            {
-              "type": "input",
-              "name": "title",
-              "label": "话题标题",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "context",
-              "label": "具体上下文",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "due_at",
-              "label": "跟进时间（ISO格式）",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "session_id",
-              "label": "所属聊天流",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "新增跟进",
-              "action": "thread"
-            },
-            {
-              "type": "button",
-              "label": "更新所选跟进",
-              "action": "update_thread",
-              "disabled_when": {
-                "reference": {
-                  "scope": "selection",
-                  "source": "thread",
-                  "field": "id"
-                },
-                "operator": "empty"
-              },
-              "disabled_reason": "请先在表格中选择一条记录"
-            }
-          ]
-        },
-        {
-          "type": "collapsible",
-          "label": "临时事件",
-          "children": [
-            {
-              "type": "input",
-              "name": "reason",
-              "label": "临时事件原因",
-              "value": ""
-            },
-            {
-              "type": "input",
-              "name": "unavailable_until",
-              "label": "忙到什么时间（ISO格式）",
-              "value": ""
-            },
-            {
-              "type": "button",
-              "label": "重排可变动安排",
-              "action": "replan"
-            }
-          ]
-        },
-        {
-          "type": "table",
-          "label": "后台操作进度",
-          "value": {
-            "source": "data",
-            "field": "jobs"
-          },
-          "columns": [
-            {
-              "field": "label",
-              "label": "操作"
-            },
-            {
-              "field": "status",
-              "label": "状态"
-            },
-            {
-              "field": "error",
-              "label": "错误"
-            },
-            {
-              "field": "created_at",
-              "label": "开始时间"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "anniversaries",
-      "title": "个人资料与纪念日",
-      "placement": "workspace",
-      "mode": "custom",
-      "icon": "list",
-      "entry": "webui/editor.html",
-      "layout": "document",
-      "queries": {
-        "records": {
-          "api": "ui_editor_records",
-          "version": "1",
-          "parameters": {
-            "category": {
-              "type": "string",
-              "required": true
-            },
-            "query": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "people": {
-          "api": "ui_memory_people",
-          "parameters": {
-            "query": {
-              "type": "string"
-            }
-          },
-          "version": "1"
-        },
-        "person": {
-          "api": "ui_memory_person",
-          "parameters": {
-            "person_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "version": "1"
-        }
-      },
-      "actions": {
-        "profile": {
-          "api": "ui_save_profile",
-          "version": "1",
-          "parameters": {
-            "name": {
-              "type": "string",
-              "required": true
-            },
-            "session_id": {
-              "type": "string",
-              "required": true
-            },
-            "user_id": {
-              "type": "string",
-              "required": false
-            },
-            "notes": {
-              "type": "string",
-              "required": false
-            },
-            "profile_id": {
-              "type": "string",
-              "required": false
-            },
-            "person_id": {
-              "type": "string"
-            }
-          }
-        },
-        "anniversary": {
-          "api": "ui_save_anniversary",
-          "version": "1",
-          "parameters": {
-            "profile_id": {
-              "type": "string",
-              "required": true
-            },
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "calendar": {
-              "type": "string",
-              "required": true
-            },
-            "month": {
-              "type": "integer",
-              "required": true
-            },
-            "day": {
-              "type": "integer",
-              "required": true
-            },
-            "year": {
-              "type": "integer",
-              "required": false
-            },
-            "leap_month": {
-              "type": "boolean",
-              "required": false
-            },
-            "enabled": {
-              "type": "boolean",
-              "required": false
-            },
-            "anniversary_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "delete_profile": {
-          "api": "ui_delete_profile",
-          "version": "1",
-          "parameters": {
-            "profile_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "confirmation": "删除这份个人资料及关联的纪念日？"
-        },
-        "delete_anniversary": {
-          "api": "ui_delete_anniversary",
-          "version": "1",
-          "parameters": {
-            "anniversary_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "confirmation": "删除这个纪念日？"
-        },
-        "plan": {
-          "api": "ui_update_plan",
-          "version": "1",
-          "parameters": {
-            "plan_id": {
-              "type": "string",
-              "required": true
-            },
-            "new_title": {
-              "type": "string",
-              "required": false
-            },
-            "new_start": {
-              "type": "string",
-              "required": false
-            },
-            "new_end": {
-              "type": "string",
-              "required": false
-            },
-            "new_location": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "routine": {
-          "api": "ui_save_routine",
-          "version": "1",
-          "parameters": {
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "anchor_date": {
-              "type": "string",
-              "required": true
-            },
-            "start_time": {
-              "type": "string",
-              "required": true
-            },
-            "duration_minutes": {
-              "type": "integer",
-              "required": true
-            },
-            "frequency": {
-              "type": "string",
-              "required": false
-            },
-            "interval": {
-              "type": "integer",
-              "required": false
-            },
-            "weekdays": {
-              "type": "string",
-              "required": false
-            },
-            "month_day": {
-              "type": "integer",
-              "required": false
-            },
-            "until": {
-              "type": "string",
-              "required": false
-            },
-            "kind": {
-              "type": "string",
-              "required": false
-            },
-            "location": {
-              "type": "string",
-              "required": false
-            },
-            "session_id": {
-              "type": "string",
-              "required": false
-            },
-            "participants": {
-              "type": "string",
-              "required": false
-            },
-            "simulation": {
-              "type": "boolean",
-              "required": false
-            },
-            "rule_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "place": {
-          "api": "ui_save_place",
-          "version": "1",
-          "parameters": {
-            "name": {
-              "type": "string",
-              "required": true
-            },
-            "outdoor": {
-              "type": "boolean",
-              "required": false
-            },
-            "description": {
-              "type": "string",
-              "required": false
-            },
-            "place_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "route": {
-          "api": "ui_save_route",
-          "version": "1",
-          "parameters": {
-            "origin": {
-              "type": "string",
-              "required": true
-            },
-            "destination": {
-              "type": "string",
-              "required": true
-            },
-            "minutes": {
-              "type": "integer",
-              "required": true
-            },
-            "mode": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "experience": {
-          "api": "ui_revise_record",
-          "version": "1",
-          "parameters": {
-            "experience_id": {
-              "type": "string",
-              "required": true
-            },
-            "evidence": {
-              "type": "string",
-              "required": true
-            },
-            "detail_key": {
-              "type": "string",
-              "required": false
-            },
-            "detail_value": {
-              "type": "string",
-              "required": false
-            },
-            "summary": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "thread": {
-          "api": "ui_save_thread",
-          "version": "1",
-          "parameters": {
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "context": {
-              "type": "string",
-              "required": true
-            },
-            "due_at": {
-              "type": "string",
-              "required": true
-            },
-            "session_id": {
-              "type": "string",
-              "required": true
-            },
-            "thread_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "edit_person": {
-          "api": "ui_edit_memory_person",
-          "parameters": {
-            "person_id": {
-              "type": "string",
-              "required": true
-            },
-            "text": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "confirmation": "将人工补充保存到 MaiBot 的这位人物画像？",
-          "version": "1"
-        }
       }
     },
     {
-      "id": "editor",
-      "title": "编辑工作台",
+      "id": "anniversaries",
+      "title": "人物与纪念日",
       "placement": "workspace",
       "mode": "custom",
       "icon": "list",
@@ -3516,304 +2246,52 @@
             }
           },
           "version": "1"
+        },
+        "change_status": {
+          "api": "ui_change_status",
+          "version": "1",
+          "parameters": {
+            "review_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "chats": {
+          "api": "ui_chat_choices",
+          "version": "1",
+          "parameters": {}
         }
       },
       "actions": {
-        "profile": {
-          "api": "ui_save_profile",
+        "change": {
+          "api": "ui_change_begin",
           "version": "1",
           "parameters": {
-            "name": {
+            "action": {
               "type": "string",
               "required": true
             },
-            "session_id": {
+            "payload": {
               "type": "string",
-              "required": true
-            },
-            "user_id": {
-              "type": "string",
-              "required": false
-            },
-            "notes": {
-              "type": "string",
-              "required": false
-            },
-            "profile_id": {
-              "type": "string",
-              "required": false
-            },
-            "person_id": {
-              "type": "string"
+              "required": true,
+              "max_length": 65536
             }
           }
         },
-        "anniversary": {
-          "api": "ui_save_anniversary",
+        "decide": {
+          "api": "ui_change_decide",
           "version": "1",
           "parameters": {
-            "profile_id": {
+            "review_id": {
               "type": "string",
               "required": true
             },
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "calendar": {
-              "type": "string",
-              "required": true
-            },
-            "month": {
-              "type": "integer",
-              "required": true
-            },
-            "day": {
-              "type": "integer",
-              "required": true
-            },
-            "year": {
-              "type": "integer",
-              "required": false
-            },
-            "leap_month": {
+            "accept": {
               "type": "boolean",
-              "required": false
-            },
-            "enabled": {
-              "type": "boolean",
-              "required": false
-            },
-            "anniversary_id": {
-              "type": "string",
-              "required": false
+              "required": true
             }
           }
-        },
-        "delete_profile": {
-          "api": "ui_delete_profile",
-          "version": "1",
-          "parameters": {
-            "profile_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "confirmation": "删除这份个人资料及关联的纪念日？"
-        },
-        "delete_anniversary": {
-          "api": "ui_delete_anniversary",
-          "version": "1",
-          "parameters": {
-            "anniversary_id": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "confirmation": "删除这个纪念日？"
-        },
-        "plan": {
-          "api": "ui_update_plan",
-          "version": "1",
-          "parameters": {
-            "plan_id": {
-              "type": "string",
-              "required": true
-            },
-            "new_title": {
-              "type": "string",
-              "required": false
-            },
-            "new_start": {
-              "type": "string",
-              "required": false
-            },
-            "new_end": {
-              "type": "string",
-              "required": false
-            },
-            "new_location": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "routine": {
-          "api": "ui_save_routine",
-          "version": "1",
-          "parameters": {
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "anchor_date": {
-              "type": "string",
-              "required": true
-            },
-            "start_time": {
-              "type": "string",
-              "required": true
-            },
-            "duration_minutes": {
-              "type": "integer",
-              "required": true
-            },
-            "frequency": {
-              "type": "string",
-              "required": false
-            },
-            "interval": {
-              "type": "integer",
-              "required": false
-            },
-            "weekdays": {
-              "type": "string",
-              "required": false
-            },
-            "month_day": {
-              "type": "integer",
-              "required": false
-            },
-            "until": {
-              "type": "string",
-              "required": false
-            },
-            "kind": {
-              "type": "string",
-              "required": false
-            },
-            "location": {
-              "type": "string",
-              "required": false
-            },
-            "session_id": {
-              "type": "string",
-              "required": false
-            },
-            "participants": {
-              "type": "string",
-              "required": false
-            },
-            "simulation": {
-              "type": "boolean",
-              "required": false
-            },
-            "rule_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "place": {
-          "api": "ui_save_place",
-          "version": "1",
-          "parameters": {
-            "name": {
-              "type": "string",
-              "required": true
-            },
-            "outdoor": {
-              "type": "boolean",
-              "required": false
-            },
-            "description": {
-              "type": "string",
-              "required": false
-            },
-            "place_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "route": {
-          "api": "ui_save_route",
-          "version": "1",
-          "parameters": {
-            "origin": {
-              "type": "string",
-              "required": true
-            },
-            "destination": {
-              "type": "string",
-              "required": true
-            },
-            "minutes": {
-              "type": "integer",
-              "required": true
-            },
-            "mode": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "experience": {
-          "api": "ui_revise_record",
-          "version": "1",
-          "parameters": {
-            "experience_id": {
-              "type": "string",
-              "required": true
-            },
-            "evidence": {
-              "type": "string",
-              "required": true
-            },
-            "detail_key": {
-              "type": "string",
-              "required": false
-            },
-            "detail_value": {
-              "type": "string",
-              "required": false
-            },
-            "summary": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "thread": {
-          "api": "ui_save_thread",
-          "version": "1",
-          "parameters": {
-            "title": {
-              "type": "string",
-              "required": true
-            },
-            "context": {
-              "type": "string",
-              "required": true
-            },
-            "due_at": {
-              "type": "string",
-              "required": true
-            },
-            "session_id": {
-              "type": "string",
-              "required": true
-            },
-            "thread_id": {
-              "type": "string",
-              "required": false
-            }
-          }
-        },
-        "edit_person": {
-          "api": "ui_edit_memory_person",
-          "parameters": {
-            "person_id": {
-              "type": "string",
-              "required": true
-            },
-            "text": {
-              "type": "string",
-              "required": true
-            }
-          },
-          "confirmation": "将人工补充保存到 MaiBot 的这位人物画像？",
-          "version": "1"
         }
       }
     },
@@ -3831,7 +2309,7 @@
           "version": "1",
           "parameters": {
             "days": {
-              "type": "integer",
+              "type": "string",
               "required": false
             },
             "feature": {
@@ -3852,10 +2330,24 @@
           "columns": 2,
           "children": [
             {
-              "type": "input",
+              "type": "select",
               "name": "days",
               "label": "统计天数（1、7 或30）",
-              "value": 7
+              "value": "7",
+              "options": [
+                {
+                  "label": "今天",
+                  "value": "1"
+                },
+                {
+                  "label": "近7天",
+                  "value": "7"
+                },
+                {
+                  "label": "近30天",
+                  "value": "30"
+                }
+              ]
             },
             {
               "type": "select",
@@ -4087,13 +2579,13 @@
               "type": "string"
             }
           },
-          "confirmation": "根据这个日期的生活记录生成日记？已有日记会重新整理。"
+          "confirmation": "现在为这一天安排15分钟写日记？"
         }
       },
       "content": [
         {
           "type": "text",
-          "value": "每天自动回顾前一天。选择日期可查看或重新整理；日期留空时生成今天截至当前的日记。写作在后台进行，点击宿主的重载页面查看最新结果。"
+          "value": "日记由模型安排为生活日程，到写作窗口后生成。选择日期可阅读；点击“现在安排写日记”会留出15分钟写作时间。"
         },
         {
           "type": "date",
@@ -4103,7 +2595,7 @@
         },
         {
           "type": "button",
-          "label": "写这一天的日记",
+          "label": "现在安排写日记",
           "action": "write",
           "variant": "primary"
         },

@@ -11,6 +11,7 @@ from .models import PlanInput
 class Spatial:
     def __init__(self, engine):
         self.engine = engine
+        self.check_influence = None
         store = engine.store
         if not store.all("place"):
             with store.db:
@@ -271,12 +272,20 @@ class Spatial:
         self.reconcile(now)
         return self.engine.store.get("plan", plan_id)
 
-    def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False) -> dict:
+    def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False, user_id=None) -> dict:
         """地点变化时，在活动前显式安排出行时间。"""
         if self.engine.time(value.end) <= self.engine.time(value.start):
             raise ValueError("结束时间必须晚于开始时间")
         if self.engine.time(value.start) < now - timedelta(minutes=1):
             raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
+        if user_id is not None:
+            start, end = self.engine.time(value.start), self.engine.time(value.end)
+            if value.location and value.kind != "travel":
+                origin = self.projected_location(start, now)
+                start -= timedelta(minutes=self.route(origin, value.location)["minutes"])
+            overlaps = [p for p in self.engine.store.all("plan") if p["status"] in ACTIVE
+                        and self.engine.time(p["start"]) < end and self.engine.time(p["end"]) > start]
+            self.check_influence(session, user_id, overlaps)
         if value.goal_id:
             goal = self.engine.owned("goal", value.goal_id, session)
             if goal["status"] != "active":

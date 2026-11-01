@@ -10,6 +10,7 @@ from test_memory import server
 
 
 async def test_native_person_binding_and_conversation_share_record(plugin):
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"conflicts":[],"level":1,"relationship":"朋友","reason":"测试关系"}'}
     plugin.memory.people = AsyncMock(return_value={"items": [{"person_id": "p1", "person_name": "小明", "profile_text": "喜欢读书", "manual_override": {"override_text": "住在上海"}}]})
     plugin.ctx.person = SimpleNamespace(get_value=AsyncMock(return_value="123"))
     plugin.memory.edit_person = AsyncMock(return_value={"success": True})
@@ -21,7 +22,7 @@ async def test_native_person_binding_and_conversation_share_record(plugin):
     await plugin.personal("profile", notes="喜欢散步", stream_id="chat-a", user_id="123")
     assert plugin.store.get("profile", person["id"])["person_id"] == "p1"
     birthday = await plugin.personal("save_date", month=8, day=3, stream_id="chat-a", user_id="123")
-    assert birthday["content"]["profile_id"] == person["id"]
+    assert birthday["content"]["result"]["profile_id"] == person["id"]
     loaded = await plugin.ui_memory_person("p1")
     assert loaded["override_text"] == "住在上海"
     await plugin.ui_edit_memory_person("p1", "喜欢摄影")

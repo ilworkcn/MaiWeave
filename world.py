@@ -3,6 +3,8 @@
 import asyncio
 import hashlib
 import json
+import time
+from urllib.error import HTTPError, URLError
 import re
 from html import unescape
 from urllib.parse import urlencode
@@ -12,8 +14,14 @@ from xml.etree import ElementTree
 
 def download(url: str) -> bytes:
     request = Request(url, headers={"User-Agent": "MaiWeave/0.3"})
-    with urlopen(request, timeout=20) as response:
-        return response.read()
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=20) as response:
+                return response.read()
+        except (URLError, TimeoutError, ConnectionError) as error:
+            if attempt == 2 or (isinstance(error, HTTPError) and error.code not in {408, 429, 500, 502, 503, 504}):
+                raise
+            time.sleep(2 ** attempt)
 
 
 def weather_label(code: int) -> str:

@@ -15,16 +15,17 @@ async def test_usage_records_host_tokens_and_survives_reload(plugin):
         "prompt_tokens": 100, "completion_tokens": 25, "total_tokens": 125, "prompt_cache_hit_tokens": 40}
     await generate(plugin.ctx, plugin.store, plugin.config, "梦境", "提示")
     plugin.ctx.llm.generate.return_value = {"success": False, "error": "模型繁忙"}
-    await generate(plugin.ctx, plugin.store, plugin.config, "自主活动", "提示")
+    with pytest.raises(RuntimeError, match="模型繁忙"):
+        await generate(plugin.ctx, plugin.store, plugin.config, "自主活动", "提示")
     plugin.ctx.llm.generate.side_effect = RuntimeError("连接中断")
     with pytest.raises(RuntimeError, match="连接中断"):
         await generate(plugin.ctx, plugin.store, plugin.config, "目标分解", "提示")
     result = await plugin.ui_usage(1)
-    assert result["totals"]["calls"] == 3
+    assert result["totals"]["calls"] == 7
     assert result["totals"]["total"] == 125
     assert result["totals"]["cached"] == 40
-    assert result["totals"]["missing_calls"] == 2
-    assert result["totals"]["success_rate"] == 33.3
+    assert result["totals"]["missing_calls"] == 6
+    assert result["totals"]["success_rate"] == 14.3
     assert (await plugin.ui_usage(7, "梦境"))["totals"]["calls"] == 1
     await plugin.on_unload()
     await plugin.on_load()
@@ -51,16 +52,22 @@ async def test_recovered_mood_keeps_sleep(plugin, text):
 
 
 async def test_chat_extends_wake_and_goodnight_releases_it(plugin):
+    person = plugin.anniversaries.save_profile("亲密对象", "chat-a", "u1")
+    with plugin.store.db:
+        plugin.store.put("profile", {**person, "intimacy": 3, "intimacy_mode": "manual", "relationship": "恋人"})
     now, _ = sleep_plan(plugin)
     assert plugin.living.wake_for_message("陪陪我", "chat-a", now, "u1")
     assert plugin.living.wake_for_message("今天发生了一件事", "chat-a", now + timedelta(minutes=40), "u1")
-    assert plugin.living.awake_until(now + timedelta(minutes=65)) == now + timedelta(minutes=100)
+    assert plugin.living.awake_until(now + timedelta(minutes=65)) == now + timedelta(minutes=160)
     assert not plugin.living.wake_for_message("普通消息", "chat-a", now + timedelta(minutes=60), "u2")
     assert plugin.living.wake_for_message("先聊到这里，晚安", "chat-a", now + timedelta(minutes=70), "u1")
     assert plugin.living.awake_until(now + timedelta(minutes=70)) is None
 
 
 async def test_planner_wake_tool_uses_current_session(plugin):
+    person = plugin.anniversaries.save_profile("亲密对象", "a", "u")
+    with plugin.store.db:
+        plugin.store.put("profile", {**person, "intimacy": 3, "intimacy_mode": "manual", "relationship": "恋人"})
     now, plan = sleep_plan(plugin)
     plugin.now = lambda: now
     result = await plugin.wake("用户说今天独自承受了很多，希望有人陪伴", stream_id="a", user_id="u")
@@ -70,13 +77,14 @@ async def test_planner_wake_tool_uses_current_session(plugin):
 
 
 async def test_conversation_personal_data_round_trip(plugin):
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"conflicts":[],"level":1,"relationship":"朋友","reason":"测试关系"}'}
     person = await plugin.personal("profile", name="小明", notes="喜欢散步", stream_id="a", user_id="u")
-    person_id = person["content"]["id"]
+    person_id = person["content"]["result"]["id"]
     created = await plugin.personal("save_date", title="生日", calendar="lunar", month=8, day=3, stream_id="a", user_id="u")
-    date_id = created["content"]["id"]
-    assert created["content"]["profile_id"] == person_id
+    date_id = created["content"]["result"]["id"]
+    assert created["content"]["result"]["profile_id"] == person_id
     changed = await plugin.personal("save_date", anniversary_id=date_id, month=8, day=5, calendar="lunar", stream_id="a", user_id="u")
-    assert changed["content"]["day"] == 5
+    assert changed["content"]["result"]["day"] == 5
     assert (await plugin.ui_anniversaries())["anniversaries"][0]["day"] == 5
     other = await plugin.personal("delete_date", anniversary_id=date_id, stream_id="b", user_id="u")
     assert other["success"] is False
@@ -111,7 +119,7 @@ async def test_unchanged_failed_planning_waits_for_interval(plugin):
     with pytest.raises(RuntimeError):
         await plugin.living.choose_activity(now)
     await plugin.living.choose_activity(now + timedelta(minutes=1))
-    assert plugin.ctx.llm.generate.await_count == 1
+    assert plugin.ctx.llm.generate.await_count == 3
 
 
 async def test_next_day_continuation_uses_saved_subject_and_progress(plugin):

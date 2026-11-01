@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, model_validator
 
-Kind = Literal["sleep", "meal", "work", "study", "leisure", "travel", "rest", "social"]
+Kind = Literal["sleep", "meal", "work", "study", "leisure", "travel", "rest", "social", "diary"]
 Source = Literal["reported", "observed", "simulated"]
 
 
@@ -28,6 +28,7 @@ class PlanInput(BaseModel):
     goal_id: str = ""
     goal_step_id: str = ""
     continuation_id: str = ""
+    diary_day: str = ""
     flexible: bool = False
 
 

@@ -174,7 +174,7 @@ async def test_dream_failure_can_be_explicitly_retried(life):
     with pytest.raises(RuntimeError, match="模型不可用"):
         await x.dreams.process(end)
     await x.dreams.process(end)
-    assert x.ctx.llm.generate.await_count == 1
+    assert x.ctx.llm.generate.await_count == 3
     assert x.store.get("dream", plan["id"])["status"] == "生成失败"
 
 

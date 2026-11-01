@@ -28,6 +28,7 @@ from .feature_tools import FeatureTools
 from .webui import WebUI
 from .continuity import Continuity
 from .anniversaries import Anniversaries
+from .review import Reviews
 
 
 def schema(properties: dict, required: list[str]) -> dict:
@@ -72,6 +73,11 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
         original = schema["sections"]
+        from zoneinfo import available_timezones
+        original["life"]["fields"]["timezone"].update(choices=sorted(available_timezones()), ui_type="select")
+        for section, keys in (("life", ("sleep_hour", "wake_hour")), ("proactive", ("start_hour", "end_hour"))):
+            for key in keys:
+                original[section]["fields"][key].update(choices=list(range(24)), ui_type="select")
         schema["sections"] = {key: value for key, value in original.items() if key not in {"life", "world", "proactive"}}
         for key, source, title, description, fields in groups:
             schema["sections"][key] = {
@@ -93,6 +99,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def on_load(self):
         self.store = Store(Path(self.ctx.paths.data_dir) / "maiweave.sqlite3")
         self.anniversaries = Anniversaries(self.store)
+        self.reviews = Reviews(self)
         self.engine = LifeEngine(self.store, self.config.life.timezone, self.now())
         self.spatial = Spatial(self.engine)
         self.world = World(self.engine, self.ctx, self.config)
@@ -102,10 +109,12 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
         self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
+        self.spatial.check_influence = self.living.check_influence
         self.living.apply_schedule(self.now())
         self.last_error = ""
         self.last_errors = {}
         self.jobs = set()
+        self.background = {}
         self.worker = asyncio.create_task(self.run_life(), name="maiweave-life")
         self.ctx.logger.info("MaiWeave 已加载")
 
@@ -132,21 +141,22 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def tick(self):
         now = self.now()
         self.living.apply_schedule(now)
-        for name, job in [("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn)]:
+        for name, job in [("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn), ("生活调整", self.living.adjust)]:
             try:
                 job(now)
                 self.last_errors.pop(name, None)
             except Exception as error:
                 self.last_errors[name] = str(error)
                 self.ctx.logger.exception("%s失败", name)
-        for name, job in [("外部世界", self.world.refresh), ("生活接续", self.continuity.process), ("动态日程", self.adjust_life), ("梦境生成", self.dreams.process),
-                          ("自主生活", self.living.choose_activity), ("主动交流", self.living.share), ("生活日记", self.diary.process)]:
-            try:
-                await job(self.now())
-                self.last_errors.pop(name, None)
-            except Exception as error:
-                self.last_errors[name] = str(error)
-                self.ctx.logger.exception("%s失败", name)
+        for name, job in [("外部世界", self.world.refresh),
+                          ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
+                          ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
+                          ("主动交流", self.living.share), ("生活日记", self.diary.process)]:
+            if name not in self.background or self.background[name].done():
+                task = asyncio.create_task(self.run_background(name, job), name="maiweave-" + name)
+                self.background[name] = task
+                self.jobs.add(task)
+                task.add_done_callback(self.jobs.discard)
         self.last_error = "；".join(f"{name}：{error}" for name, error in self.last_errors.items())
         state = self.engine.state()
         key = now.strftime("%Y-%m-%dT%H:") + f"{now.minute // 10 * 10:02d}"
@@ -155,6 +165,22 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             for row in self.store.all("state_history"):
                 if self.engine.time(row["at"]) < now - timedelta(days=7):
                     self.store.delete("state_history", row["id"])
+
+    async def run_background(self, name, job):
+        try:
+            await asyncio.wait_for(job(self.now()), timeout=300)
+            self.last_errors.pop(name, None)
+        except Exception as error:
+            self.last_errors[name] = str(error)
+            self.ctx.logger.exception("%s失败", name)
+        self.last_error = "；".join(f"{label}：{error}" for label, error in self.last_errors.items())
+
+    async def arrange_diary(self, now):
+        if self.config.life.autonomous:
+            await self.diary.arrange(now, self.spatial)
+
+    async def plan_life(self, now):
+        await self.living.choose_activity(now)
 
     async def adjust_life(self, now):
         self.living.adjust(now)
@@ -207,11 +233,14 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "awake_until": self.living.awake_until(self.now()).isoformat() if self.config.life.schedule_enabled and self.living.awake_until(self.now()) else "",
         }
         snapshot["profiles"] = [p for p in self.store.all("profile") if p["session_id"] == session]
+        snapshot["pending_changes"] = [{"id": r["id"], "action": r["action"], "conflicts": r["conflicts"],
+                                        "proposed": r.get("proposed", r["payload"])}
+                                       for r in self.store.all("review") if r["session_id"] == session and r["status"] == "待确认"]
         snapshot["anniversaries"] = [item for item in self.anniversaries.upcoming(self.now().date(), session) if item["days_left"] <= 30]
         return (
             "\n【MaiWeave 当前生活】\n"
             "以下记录是当前角色生活状态。对话涉及安排的新增、修改、取消时使用 maiweave 工具，"
-            "以工具保存成功的结果为准。相对时间按这里的 now 和时区解析。"
+            "资料核对返回待确认时，向用户说明冲突和修改 ID，收到用户明确同意后调用 maiweave_confirm_change。以工具保存成功的结果为准。相对时间按这里的 now 和时区解析。"
             "把计划表述为接下来的安排；awaiting_confirmation 表示到了确认完成情况的时候。"
             "simulated 是角色世界中的虚拟经历，reported 是用户陈述，observed 是实际交互观测。"
             "讲述经历时沿用记录中的细节。涉及用户的行动、见面和承诺，以用户陈述及已确认的互动为依据，缺少信息时可以询问。"
@@ -274,22 +303,31 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             profile_id = existing["profile_id"]
         profile = self.engine.owned("profile", profile_id, session) if profile_id else None
         if action == "delete_date":
-            return self.anniversaries.delete("anniversary", anniversary_id)
+            return await self.reviews.submit("delete_anniversary", {"anniversary_id": anniversary_id}, session)
         if action == "delete_profile":
-            return self.anniversaries.delete("profile", profile_id)
+            return await self.reviews.submit("delete_profile", {"profile_id": profile_id}, session)
         if not profile:
             matches = [p for p in self.store.all("profile") if p["session_id"] == session and user and p["user_id"] == user]
             profile = matches[0] if len(matches) == 1 else None
         if action == "profile":
-            return self.anniversaries.save_profile(name or (profile["name"] if profile else user or "当前用户"), session,
-                                                  profile["user_id"] if profile else user, notes, profile["id"] if profile else "")
+            return await self.reviews.submit("profile", {"name": name or (profile["name"] if profile else user or "当前用户"),
+                "session_id": session, "user_id": profile["user_id"] if profile else user, "notes": notes,
+                "profile_id": profile["id"] if profile else "", "person_id": profile.get("person_id", "") if profile else "",
+                "intimacy_mode": profile.get("intimacy_mode", "auto") if profile else "auto", "intimacy": profile.get("intimacy", 0) if profile else 0, "relationship": profile.get("relationship", "普通关系") if profile else "普通关系"}, session)
         if action == "save_date":
             if month == 0 or day == 0:
                 raise ValueError("请提供纪念日的月份和日期")
+            payload = {"profile_id": profile["id"] if profile else "", "title": title, "calendar": calendar, "month": month, "day": day, "year": year, "leap_month": leap_month, "enabled": enabled, "anniversary_id": anniversary_id}
             if not profile:
-                profile = self.anniversaries.save_profile(name or user or "当前用户", session, user)
-            return self.anniversaries.save_date(profile["id"], title, calendar, month, day, year, leap_month, enabled, anniversary_id)
+                payload["profile_seed"] = {"name": name or user or "当前用户", "session_id": session, "user_id": user}
+            return await self.reviews.submit("anniversary", payload, session)
         raise ValueError("请选择查询、保存资料、保存日期或删除操作")
+
+    @Tool("maiweave_confirm_change", description="用户收到冲突说明并明确选择后，确认或取消待写入修改；accept=true 为用户同意强制写入。", parameters=schema({"review_id": text_field("待确认修改 ID"), "accept": {"type": "boolean"}}, ["review_id", "accept"]))
+    @operation
+    async def confirm_change(self, review_id: str, accept: bool, **kwargs):
+        self.engine.owned("review", review_id, kwargs["stream_id"])
+        return await self.reviews.decide(review_id, accept)
 
     @Tool("maiweave_query", description="查询角色状态、计划、生活经历、长期目标、当前用户关系或原生记忆。修改前可先查询事件 ID。", parameters=schema({
         "topic": {"type": "string", "enum": ["life", "plans", "experiences", "goals", "relationship", "memory"]},
@@ -316,7 +354,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @Tool("maiweave_create_plan", description="为角色新增计划。start/end 必须转换为明确 ISO 日期时间。participants 填写共同参与者；共同安排结束后根据实际情况确认完成。独自的角色活动可 simulation=true。", parameters=schema({"plan": PlanInput.model_json_schema()}, ["plan"]))
     @operation
     async def create_plan(self, plan: dict, **kwargs):
-        return self.spatial.schedule(PlanInput.model_validate(plan), kwargs["stream_id"], self.now())
+        value = PlanInput.model_validate(plan)
+        return self.spatial.schedule(value, kwargs["stream_id"], self.now(), user_id=kwargs.get("user_id", ""))
 
     @Tool("maiweave_change_plan", description="按事件 ID 修改、取消、暂停或恢复计划。update 时 patch 填写要改变的字段。取消保留记录，完成情况通过记录经历确认。", parameters=schema({
         "plan_id": text_field("计划 ID"),
@@ -325,11 +364,18 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     }, ["plan_id", "action"]))
     @operation
     async def change_plan(self, plan_id: str, action: str, patch: dict | None = None, **kwargs):
+        target = self.engine.owned("plan", plan_id, kwargs["stream_id"])
+        self.living.check_influence(kwargs["stream_id"], kwargs.get("user_id", ""), [target])
         if action == "update":
             return self.spatial.change(plan_id, PlanPatch.model_validate(patch or {}), kwargs["stream_id"], self.now())
         return self.spatial.transition(plan_id, action, kwargs["stream_id"], self.now())
 
     async def sync_experience(self, record: dict) -> dict:
+        if record["memory_revision"] == record["revision"]:
+            return {"status": "synced", "claim_id": record["memory_id"]}
+        return await self.reviews.submit("sync", {"experience_id": record["id"]}, record["session_id"])
+
+    async def apply_memory_sync(self, record: dict) -> dict:
         if record["memory_revision"] == record["revision"]:
             return {"status": "synced", "claim_id": record["memory_id"]}
         response = await self.memory.sync(record)
@@ -428,9 +474,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.5.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.6.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
-            f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled and self.config.memory.session_cookie else '未配置'}\n"
+            f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
         )
         return await self.ctx.send.text(message, session, storage_message=False, sync_to_maisaka_history=False)

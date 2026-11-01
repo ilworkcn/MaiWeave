@@ -1,17 +1,22 @@
 """插件配置及 WebUI 中文标签。"""
 
 from maibot_sdk import Field, PluginConfigBase
+from zoneinfo import available_timezones
 
 
 def setting(label: str, **kwargs):
     """使用 SDK 的字段元数据指定中文显示名称。"""
     extra = kwargs.pop("json_schema_extra", {})
+    if label == "生活时区（必填）" or label == "生活时区":
+        extra["choices"] = sorted(available_timezones())
+    if "（整点）" in label:
+        extra["choices"] = list(range(24))
     return Field(json_schema_extra={"label": label, "hint": kwargs.get("description", ""), **extra}, **kwargs)
 
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.5.1", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.6.0", description="配置版本，由插件维护", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -52,7 +57,7 @@ class MemoryConfig(PluginConfigBase):
     __ui_label__ = "原生记忆"
     enabled: bool = setting("启用原生记忆连接", default=False, description="读取和同步宿主 A_Memorix")
     base_url: str = setting("宿主网页地址（启用记忆后必填）", default="http://127.0.0.1:8001", description="已填本机默认地址；WebUI 在其他机器或端口时修改。")
-    session_cookie: str = setting("网页登录凭据（启用记忆后必填）", default="", description="登录 WebUI 后，从浏览器 Cookie 复制 maibot_session 的值；未启用记忆可留空。", json_schema_extra={"x-widget": "password", "input_type": "password", "placeholder": "填写实际的 maibot_session 值"})
+    session_cookie: str = setting("网页登录凭据（远程宿主选填）", default="", description="默认读取 MaiBot 运行目录的 webui.json 或 data/webui.json；连接远程宿主时可填写其 Cookie。", json_schema_extra={"x-widget": "password", "input_type": "password", "placeholder": "填写实际的 maibot_session 值"})
 
 
 class WorldConfig(PluginConfigBase):
@@ -102,11 +107,10 @@ class ContinuityConfig(PluginConfigBase):
 
 
 class DiaryConfig(PluginConfigBase):
-    """每天回顾前一天的生活，日记保存在生活工作区。"""
+    """模型安排写作窗口，日记保存在生活工作区。"""
 
     __ui_label__ = "生活日记"
-    enabled: bool = setting("自动写日记", default=True, description="每天根据前一天的活动、经历和心情写一篇日记")
-    write_hour: int = setting("写日记时间（整点）", default=0, ge=0, le=23, description="按生活时区，在这个整点后回顾前一天；默认零点")
+    enabled: bool = setting("自动写日记", default=True, description="由生活规划模型安排写日记的时间，进入活动窗口后回顾当天生活")
 
 
 class MaiWeaveConfig(PluginConfigBase):

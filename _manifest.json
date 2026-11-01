@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "ilworkcn.maiweave",
   "name": "MaiWeave",
-  "version": "0.5.1",
+  "version": "0.6.1",
   "description": "由对话与时间共同驱动的持续角色生活引擎",
   "author": {
     "name": "ilworkcn",
@@ -26,7 +26,9 @@
     "web.search",
     "web.fetch",
     "chat.open_session",
-    "person.get_value"
+    "person.get_value",
+    "chat.get_all_streams",
+    "person.get_id"
   ],
   "i18n": {
     "default_locale": "zh-CN",

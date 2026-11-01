@@ -9,7 +9,7 @@ from maibot_sdk import API
 from .models import GoalInput, PlanInput, PlanPatch, RoutineInput
 from .usage import summary as usage_summary
 
-KIND = {"sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交"}
+KIND = {"sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "写日记"}
 STATUS = {"scheduled": "未开始", "active": "进行中", "completed": "已完成", "cancelled": "已取消", "paused": "已暂停", "awaiting_confirmation": "等待完成确认", "blocked": "需要调整"}
 SOURCE = {"reported": "用户陈述", "observed": "交互观测", "simulated": "角色模拟", "dream": "梦境"}
 FREQUENCY = {"daily": "按日", "weekly": "按周", "monthly": "按月"}
@@ -28,6 +28,26 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_change_begin", description="异步核对资料修改")
+    async def ui_change_begin(self, action: str, payload: str) -> dict:
+        record = self.reviews.create(action, json.loads(payload))
+        self.start_job("资料核对", self.reviews.check(record["id"]))
+        return {"review_id": record["id"]}
+
+    @API("ui_change_status", description="查询核对结果")
+    async def ui_change_status(self, review_id: str) -> dict:
+        return self.store.get("review", review_id)
+
+    @API("ui_change_decide", description="确认或取消有冲突的修改")
+    async def ui_change_decide(self, review_id: str, accept: bool) -> dict:
+        self.start_job("确认资料修改", self.reviews.decide(review_id, accept))
+        return {"review_id": review_id}
+
+    @API("ui_chat_choices", description="读取宿主聊天流选项")
+    async def ui_chat_choices(self) -> dict:
+        rows = await self.ctx.chat.get_all_streams(platform="all_platforms")
+        return {"items": [{"id": row["stream_id"], "name": row.get("group_name") or row.get("user_cardname") or row.get("user_nickname") or row["stream_id"]} for row in rows]}
+
     @API("ui_diaries", description="按日期查看生活日记")
     async def ui_diaries(self, day: str = "") -> dict:
         rows = sorted(self.store.all("diary"), key=lambda row: row["day"], reverse=True)
@@ -46,22 +66,26 @@ class WebUI:
         material = self.diary.material(chosen, now)
         if not any(material[key] for key in ("活动", "经历", "状态变化", "梦境")):
             raise ValueError("这一天还没有生活记录，积累活动或经历后即可写日记")
-        return self.start_job("生活日记", self.diary.write(chosen.isoformat(), now))
+        plan = PlanInput(title="写生活日记", kind="diary", start=now.isoformat(), end=(now + timedelta(minutes=15)).isoformat(),
+                         diary_day=chosen.isoformat(), motivation="用户安排写作窗口", flexible=True)
+        return self.spatial.schedule(plan, "", now)
 
     @API("ui_usage", description="模型调用用量与趋势")
-    async def ui_usage(self, days: int = 7, feature: str = "") -> dict:
-        return usage_summary(self.store, self.now(), days, "" if feature == "all" else feature)
+    async def ui_usage(self, days: str = "7", feature: str = "") -> dict:
+        return usage_summary(self.store, self.now(), int(days), "" if feature == "all" else feature)
 
     @API("ui_editor_records", description="按类别查找可编辑记录")
     async def ui_editor_records(self, category: str, query: str = "") -> dict:
         if category not in {"profile", "anniversary", "plan", "routine", "place", "route", "experience", "thread"}:
             raise ValueError("请选择资料、纪念日、日程、重复规则、地点、路线、经历或跟进事项")
         rows = self.anniversaries.upcoming(self.now().date()) if category == "anniversary" else self.store.all(category)
+        if category == "profile":
+            rows = [{**row, "effective_intimacy": self.living.intimacy(row["session_id"], row["user_id"])} for row in rows]
         if category == "plan":
             rows = [row for row in rows if row["status"] in {"scheduled", "active", "paused", "blocked"}]
         if query.strip():
             rows = [row for row in rows if query.casefold() in json.dumps(row, ensure_ascii=False).casefold()]
-        return {"records": rows[-200:][::-1], "total": len(rows), "profiles": self.store.all("profile"),
+        return {"today": self.now().date().isoformat(), "records": rows[-200:][::-1], "total": len(rows), "profiles": self.store.all("profile"),
                 "places": self.store.all("place")}
 
     @API("ui_anniversaries", description="个人资料和纪念日")
@@ -85,13 +109,13 @@ class WebUI:
                 "profile_text": row.get("profile_text", ""),
                 "override_text": (override.get("override_text") or override.get("text", "")) if isinstance(override, dict) else override}
 
-    @API("ui_edit_memory_person", description="保存原生人物画像的人工补充")
     async def ui_edit_memory_person(self, person_id: str, text: str) -> dict:
         await self.ui_memory_person(person_id)
         return await self.memory.edit_person(person_id, text)
 
-    @API("ui_save_profile", description="保存个人资料")
-    async def ui_save_profile(self, name: str, session_id: str, user_id: str = "", notes: str = "", profile_id: str = "", person_id: str = "") -> dict:
+    async def ui_save_profile(self, name: str, session_id: str, user_id: str = "", notes: str = "", profile_id: str = "", person_id: str = "", intimacy_mode: str = "auto", intimacy: int = 0, relationship: str = "普通关系") -> dict:
+        if intimacy_mode not in {"auto", "manual"} or intimacy not in {0, 1, 2, 3}:
+            raise ValueError("请选择自动或手动关系，以及普通、熟悉、亲近或亲密等级")
         if person_id and not profile_id:
             existing = next((row for row in self.store.all("profile") if row.get("person_id") == person_id and row["session_id"] == session_id), None)
             profile_id = existing["id"] if existing else ""
@@ -99,18 +123,19 @@ class WebUI:
             person = await self.ui_memory_person(person_id)
             name = person["name"]
             user_id = str(await self.ctx.person.get_value(person_id=person_id, field_name="user_id") or "")
-        return self.anniversaries.save_profile(name, session_id, user_id, notes, profile_id, person_id)
+        record = self.anniversaries.save_profile(name, session_id, user_id, notes, profile_id, person_id)
+        record.update(intimacy_mode=intimacy_mode, intimacy=intimacy, relationship=relationship)
+        with self.store.db:
+            self.store.put("profile", record)
+        return record
 
-    @API("ui_save_anniversary", description="保存生日或纪念日")
     async def ui_save_anniversary(self, profile_id: str, title: str, calendar: str, month: int, day: int,
                                   year: int = 0, leap_month: bool = False, enabled: bool = True, anniversary_id: str = "") -> dict:
         return self.anniversaries.save_date(profile_id, title, calendar, month, day, year, leap_month, enabled, anniversary_id)
 
-    @API("ui_delete_profile", description="删除个人资料及关联纪念日")
     async def ui_delete_profile(self, profile_id: str) -> dict:
         return self.anniversaries.delete("profile", profile_id)
 
-    @API("ui_delete_anniversary", description="删除纪念日")
     async def ui_delete_anniversary(self, anniversary_id: str) -> dict:
         return self.anniversaries.delete("anniversary", anniversary_id)
 
@@ -315,8 +340,7 @@ class WebUI:
     @API("ui_sync_record", description="后台同步所选经历到原生记忆")
     async def ui_sync_record(self, experience_id: str) -> dict:
         self.require_life()
-        record = self.store.get("experience", experience_id)
-        return self.start_job("同步原生记忆", self.sync_experience(record))
+        return await self.ui_change_begin("sync", json.dumps({"experience_id": experience_id}))
 
     @API("ui_create_goal", description="新增长期目标")
     async def ui_create_goal(self, title: str, target_sessions: int = 5, reason: str = "", session_id: str = "") -> dict:

@@ -1,14 +1,28 @@
 """按生活日期整理角色的一天，保存日记与写作依据。"""
 
+import asyncio
 import json
 from datetime import date, datetime, time, timedelta
 
+from pydantic import BaseModel
+from .models import PlanInput
 from .usage import generate
+
+
+class DiarySlot(BaseModel):
+    start: str
+    end: str
+    reason: str
 
 
 class Diary:
     def __init__(self, engine, context, config):
         self.engine, self.ctx, self.config = engine, context, config
+        with engine.store.db:
+            for record in engine.store.all("diary"):
+                if record["status"] == "生成中":
+                    record.update(status="生成失败", error="上次写作随插件停止而中断")
+                    engine.store.put("diary", record)
 
     def material(self, day, now):
         start = datetime.combine(day, time.min, tzinfo=now.tzinfo)
@@ -21,18 +35,51 @@ class Diary:
         return {"日期": day.isoformat(), "记录截止": min(end, now).isoformat(), "活动": plans, "经历": experiences,
                 "状态变化": [{k: s[k] for k in ("at", "energy", "hunger", "mood", "stress") if k in s} for s in states], "梦境": dreams}
 
-    async def process(self, now):
-        if not self.config.diary.enabled or now.hour < self.config.diary.write_hour:
+    async def arrange(self, now, spatial):
+        if not self.config.diary.enabled:
             return
-        day = now.date() - timedelta(days=1)
-        old = self.engine.store.find("diary", day.isoformat())
-        if old and (old["status"] != "已生成" or old["complete"]):
+        store = self.engine.store
+        day = now.date().isoformat()
+        if any(p["kind"] == "diary" and (p.get("diary_day") or p["start"][:10]) == day
+               and p["status"] != "cancelled" for p in store.all("plan")):
             return
-        material = self.material(day, now)
-        if any(material[key] for key in ("活动", "经历", "状态变化", "梦境")):
-            await self.write(day.isoformat(), now)
+        prompt = (
+            "为角色安排今天写生活日记的时间窗口，结合当前时间、作息和已有日程，选择未来空闲的10到20分钟。"
+            "临近午夜时可安排到次日。输出 JSON：start、end（带时区的ISO时间）、reason（选择这个时间的理由）。"
+            f"现在：{now.isoformat()}；睡眠时间：{self.config.life.sleep_hour}至{self.config.life.wake_hour}；"
+            f"遵循作息：{self.config.life.schedule_enabled}；已有日程：{json.dumps([p for p in store.all('plan') if p['status'] in {'scheduled', 'active'}], ensure_ascii=False)}"
+        )
+        def validate(slot):
+            start, end = self.engine.time(slot.start), self.engine.time(slot.end)
+            if start < now or not 10 <= (end - start).total_seconds() / 60 <= 20:
+                raise ValueError("日记时间应为未来的10到20分钟")
+            if start.date() > now.date() + timedelta(days=1):
+                raise ValueError("请安排在今天或次日")
+            conflicts = [p for p in store.all("plan") if p["status"] in {"scheduled", "active"}
+                         and self.engine.time(p["start"]) < end and self.engine.time(p["end"]) > start]
+            if conflicts:
+                raise ValueError("请避开这些已有安排：" + json.dumps(
+                    [{k: p[k] for k in ("title", "start", "end")} for p in conflicts], ensure_ascii=False))
 
-    async def write(self, day_text, now):
+        slot = await generate(self.ctx, store, self.config, "日记安排", prompt, DiarySlot, validate=validate)
+        value = PlanInput(title="写生活日记", kind="diary", start=slot.start, end=slot.end,
+                          diary_day=now.date().isoformat(), motivation=slot.reason, flexible=True)
+        return spatial.schedule(value, "", now, autonomous=True)
+
+    async def process(self, now):
+        for plan in self.engine.store.all("plan"):
+            if plan["kind"] != "diary" or plan["status"] != "active":
+                continue
+            day = plan.get("diary_day") or self.engine.time(plan["start"]).date().isoformat()
+            old = self.engine.store.find("diary", day)
+            if old and old.get("plan_id") == plan["id"]:
+                if old["status"] in {"已生成", "生成中"}:
+                    continue
+                if old.get("retry_at") and self.engine.time(old["retry_at"]) > now:
+                    continue
+            await self.write(day, now, plan["id"])
+
+    async def write(self, day_text, now, plan_id=""):
         day = date.fromisoformat(day_text) if day_text else now.date()
         if day > now.date():
             raise ValueError("请选择今天或过去的日期")
@@ -45,7 +92,7 @@ class Diary:
             raise ValueError("这一天还没有生活记录，积累活动或经历后即可写日记")
         record = {"id": day.isoformat(), "day": day.isoformat(), "title": day.isoformat() + " 的一天",
                   "content": old.get("content", "") if old else "", "status": "生成中", "error": "",
-                  "created_at": now.isoformat(), "complete": day < now.date(), "material": material}
+                  "plan_id": plan_id, "created_at": now.isoformat(), "complete": day < now.date(), "material": material}
         with store.db:
             store.put("diary", record)
         try:
@@ -68,8 +115,11 @@ class Diary:
             if not content:
                 raise ValueError("模型返回了空日记，请重新生成")
             record.update(content=content, status="已生成")
+        except asyncio.CancelledError:
+            record.update(status="生成失败", error="写作任务已中断", retry_at=(now + timedelta(minutes=5)).isoformat())
+            raise
         except Exception as error:
-            record.update(status="生成失败", error=str(error))
+            record.update(status="生成失败", error=str(error), retry_at=(now + timedelta(minutes=5)).isoformat())
             raise
         finally:
             with store.db:

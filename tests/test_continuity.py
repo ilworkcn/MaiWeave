@@ -302,13 +302,17 @@ async def test_full_tick_goal_activity_result_and_webui(plugin, monkeypatch):
     goal = plugin.engine.create_goal(GoalInput(title="读完一篇短文", target_sessions=1), "a", now)
     plugin.config.life.autonomous = True
     plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"steps":[{"title":"读短文","criterion":"完成阅读","sessions":1,"minutes":30}]}'}
+    plugin.config.diary.enabled = False
     await plugin.tick()
+    await asyncio.gather(*plugin.background.values())
     plan = next(p for p in plugin.store.all("plan") if p["goal_id"] == goal["id"])
     assert plan["goal_step_id"]
     now += timedelta(minutes=31)
     plugin.config.life.autonomous = False
     plugin.ctx.llm.generate.return_value = result(summary="读完了短文", next_action="下次比较另一篇")
+    plugin.config.diary.enabled = False
     await plugin.tick()
+    await asyncio.gather(*plugin.background.values())
     assert plugin.last_errors == {}
     assert plugin.store.get("goal", goal["id"])["status"] == "completed"
     data = await plugin.ui_continuity()

@@ -40,13 +40,7 @@ class Dreams:
             f"最近经历：{json.dumps(recent, ensure_ascii=False)}"
         )
         try:
-            response = await generate(self.ctx, self.engine.store, self.config, "梦境", prompt)
-            if not response["success"]:
-                raise RuntimeError(response.get("error") or "梦境模型调用失败")
-            text = response["response"].strip()
-            if text.startswith("```"):
-                text = "\n".join(text.splitlines()[1:-1])
-            content = DreamContent.model_validate_json(text)
+            content = await generate(self.ctx, self.engine.store, self.config, "梦境", prompt, DreamContent)
             record.update(content.model_dump(), status="已生成")
             with self.engine.store.db:
                 self.engine.store.put("dream", record)
