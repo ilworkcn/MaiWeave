@@ -302,7 +302,8 @@ class Living:
         if current and current["kind"] in {"sleep", "work", "study"}:
             return
         day = now.date().isoformat()
-        for session in config.session_ids:
+        sessions = dict.fromkeys([*config.session_ids, *(p["session_id"] for p in engine.store.all("profile"))])
+        for session in sessions:
             sent = engine.store.find("sharing", session) or {"id": session, "day": day, "count": 0, "last_at": "", "experience_ids": []}
             if sent["day"] != day:
                 sent.update(day=day, count=0)

@@ -63,3 +63,18 @@ async def test_profile_context_is_scoped(plugin):
     await plugin.ui_save_profile("私聊称呼", "chat-a", notes="私人资料")
     assert "私人资料" in plugin.context_text("chat-a")
     assert "私人资料" not in plugin.context_text("chat-b")
+
+
+async def test_profile_stream_receives_reminder_without_duplicate_configuration(plugin):
+    now = plugin.now().replace(hour=12)
+    profile = await plugin.ui_save_profile("小明", "chat-profile")
+    await plugin.ui_save_anniversary(profile["id"], "生日", "solar", now.month, now.day)
+    plugin.config.proactive.enabled = True
+    assert plugin.config.proactive.session_ids == []
+    await plugin.living.share(now)
+    assert plugin.ctx.maisaka.proactive.trigger.await_args.args[0] == "chat-profile"
+    plugin.ctx.maisaka.proactive.trigger.reset_mock()
+    plugin.config.proactive.session_ids = ["chat-profile", "chat-extra"]
+    plugin.store.delete("sharing", "chat-profile")
+    await plugin.living.share(now)
+    assert plugin.ctx.maisaka.proactive.trigger.await_count == 1

@@ -40,11 +40,11 @@ class LifeConfig(PluginConfigBase):
 
 
 class ProactiveConfig(PluginConfigBase):
-    """启用后填写接收聊天流，提醒和跟进共用下方时段与额度。"""
+    """启用后向个人资料和额外列表中的聊天流发送消息，提醒和跟进共用时段与额度。"""
 
     __ui_label__ = "主动交流"
     enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求宿主主动开口")
-    session_ids: list[str] = setting("接收聊天流（启用主动交流后必填）", default_factory=list, description="在目标聊天发送 /maiweave，复制回复中的聊天流 ID，每项填写一个。")
+    session_ids: list[str] = setting("额外接收聊天流（选填）", default_factory=list, description="个人资料中选择的聊天流自动用于主动交流和纪念日提醒。这里填写额外的群聊或其他聊天流；可发送 /maiweave 获取 ID。")
     daily_limit: int = setting("每日主动请求上限", default=2, ge=0, description="每个聊天流每天的请求次数")
     cooldown_minutes: int = setting("主动交流间隔（分钟）", default=180, ge=1, description="两次请求的最短间隔")
     start_hour: int = setting("允许开始时间（整点）", default=9, ge=0, le=23, description="主动交流时间窗口起点")

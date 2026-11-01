@@ -70,7 +70,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
             ("search", "world", "联网搜索", "复用宿主已配置的搜索服务。", ["search_enabled", "places_enabled"]),
-            ("proactive", "proactive", "主动交流对象", "开启后指定接收聊天流；关闭时无需填写。", ["enabled", "session_ids"]),
+            ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "session_ids"]),
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
         original = schema["sections"]
@@ -482,7 +482,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.6.11\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.6.12\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

@@ -22,7 +22,7 @@ class Reviews:
         if action not in {"profile", "anniversary", "delete_profile", "delete_anniversary", "edit_person", "sync"}:
             raise ValueError("请选择资料、纪念日、人物画像或经历同步操作")
         record = {"id": uuid4().hex, "action": action, "payload": payload, "session_id": session,
-                  "status": "检查中", "phase": "正在读取已有资料与原生画像…", "conflicts": [], "error": "", "created_at": self.plugin.now().isoformat()}
+                  "status": "检查中", "phase": "正在读取经历与相关原生记忆…" if action == "sync" else "正在读取已有资料与原生画像…", "conflicts": [], "error": "", "created_at": self.plugin.now().isoformat()}
         with self.plugin.store.db:
             self.plugin.store.put("review", record)
         return record
@@ -82,7 +82,7 @@ class Reviews:
                 "现任恋人可为亲密关系；前任、别人的恋人和引用的话按实际主体判断。删除有内容的记录时列出将删除的内容。"
                 f"操作：{record['action']}；已有：{json.dumps(record['existing'], ensure_ascii=False)}；新内容：{json.dumps(payload, ensure_ascii=False)}"
             )
-            record["phase"] = "模型正在核对资料冲突与亲密关系…"
+            record["phase"] = "模型正在核对经历与原生记忆是否冲突…" if record["action"] == "sync" else "模型正在核对资料冲突与亲密关系…"
             with p.store.db:
                 p.store.put("review", record)
             result = await generate(p.ctx, p.store, p.config, "资料核对", prompt, Assessment)
