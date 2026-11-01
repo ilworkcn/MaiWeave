@@ -9,6 +9,8 @@
 [![Release](https://img.shields.io/github/v/release/ilworkcn/MaiWeave?label=Release)](https://github.com/ilworkcn/MaiWeave/releases)
 [![MaiBot](https://img.shields.io/badge/MaiBot-1.3.19–1.3.x-7ba989)](https://docs.maibot.chat/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-orange)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/ilworkcn/MaiWeave?style=flat&label=Stars&color=e8b44c)](https://github.com/ilworkcn/MaiWeave/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/ilworkcn/MaiWeave?label=Last%20Commit&color=7ba989)](https://github.com/ilworkcn/MaiWeave/commits/main/)
 
 [下载安装](https://github.com/ilworkcn/MaiWeave/releases/latest) · [使用手册](docs/使用手册.md) · [配置指南](docs/配置指南.md)
 
