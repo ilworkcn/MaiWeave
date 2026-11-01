@@ -161,3 +161,16 @@ async def test_empty_place_cache_expires_and_errors_can_retry(plugin):
     plugin.ctx.web.search.side_effect = None
     await plugin.world.discover_places(plugin.spatial, now, activity="书店")
     assert plugin.ctx.web.search.await_count == 4
+
+
+
+async def test_webui_place_search_uses_cache_and_explicit_refresh(plugin):
+    import asyncio
+    plugin.config.world.places_enabled = True
+    plugin.world.discover_places = AsyncMock(return_value=[])
+    await plugin.ui_discover_places("咖啡馆")
+    await asyncio.gather(*plugin.jobs)
+    assert plugin.world.discover_places.call_args.kwargs == {"force": False, "activity": "咖啡馆"}
+    await plugin.ui_discover_places("咖啡馆", force=True)
+    await asyncio.gather(*plugin.jobs)
+    assert plugin.world.discover_places.call_args.kwargs == {"force": True, "activity": "咖啡馆"}

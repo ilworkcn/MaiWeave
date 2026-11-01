@@ -273,6 +273,8 @@ class Living:
         engine.advance(now)
         if engine.current(now):
             return
+        state = engine.state()
+        free = engine.free_minutes(now)
         travel_minutes = self.spatial.route(state["location"], location)["minutes"] if location else 0
         minutes = min(minutes, free - travel_minutes)
         if kind == "sleep":

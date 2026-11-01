@@ -26,7 +26,7 @@ class LifeConfig(PluginConfigBase):
     enabled: bool = setting("启用生活引擎", default=True, description="控制生活推进和对话工具")
     autonomous: bool = setting("自主安排活动", default=True, description="空闲时由角色选择活动")
     timezone: str = setting("生活时区（必填）", default="Asia/Shanghai", description="已填中国标准时间，可直接使用；其他地区例如 Asia/Tokyo。")
-    model_task: str = setting("生活规划模型任务（必填）", default="utils", description="默认 utils；填写 MaiBot 中已配置的模型任务名称，无需填写密钥。")
+    model_task: str = setting("生活规划模型任务（必填）", default="utils", description="从 MaiBot 已配置的模型任务中选择，默认 utils；任务选项在插件加载时更新。")
     schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后切换为全天候模式，已有约定继续执行。")
     wake_enabled: bool = setting("允许聊天唤醒", default=True, description="关键词匹配和 MaiBot 对当前情绪、陪伴请求的判断都可唤醒角色，原消息正常进入对话。")
     wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项填写一个词。聊天中出现这些词时唤醒角色；可增删默认词，清空词表可关闭匹配。")

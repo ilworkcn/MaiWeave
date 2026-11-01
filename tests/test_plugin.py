@@ -22,7 +22,7 @@ async def plugin(tmp_path):
     context = SimpleNamespace(paths=SimpleNamespace(data_dir=tmp_path), logger=logging.getLogger("test"),
                               send=SimpleNamespace(text=AsyncMock(return_value=True)),
                               config=SimpleNamespace(get=AsyncMock(return_value={"personality": "喜欢安静"})),
-                              llm=SimpleNamespace(generate=AsyncMock(return_value={"success": False, "error": "测试尚未设置模型结果"})),
+                              llm=SimpleNamespace(get_available_models=AsyncMock(return_value=["utils", "replyer", "planner"]), generate=AsyncMock(return_value={"success": False, "error": "测试尚未设置模型结果"})),
                               maisaka=SimpleNamespace(proactive=SimpleNamespace(trigger=AsyncMock(return_value={"success": True}))))
     plugin._set_context(context)
     await plugin.on_load()
@@ -131,3 +131,19 @@ async def test_memory_failure_reports_local_save_separately(plugin):
     assert result["success"]
     assert result["content"]["memory"]["status"] == "failed"
     assert len(plugin.engine.experiences("chat-a")) == 1
+
+
+
+async def test_model_task_dropdown_uses_host_tasks_and_keeps_selection(plugin):
+    plugin.ctx.llm.get_available_models.assert_awaited_once()
+    plugin.config.life.model_task = "custom_life"
+    field = plugin.get_webui_config_schema()["sections"]["planning"]["fields"]["model_task"]
+    assert field["ui_type"] == "select"
+    assert field["choices"] == ["utils", "replyer", "planner", "custom_life"]
+    plugin.config.life.model_task = "planner"
+    field = plugin.get_webui_config_schema()["sections"]["planning"]["fields"]["model_task"]
+    assert field["choices"] == ["utils", "replyer", "planner"]
+    from maiweave.usage import generate
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": "已完成"}
+    await generate(plugin.ctx, plugin.store, plugin.config, "测试任务选择", "测试")
+    assert plugin.ctx.llm.generate.call_args.kwargs["task_name"] == "planner"

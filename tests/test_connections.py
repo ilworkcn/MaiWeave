@@ -159,3 +159,23 @@ async def test_missing_conflict_assessment_retries_instead_of_writing(plugin):
     result=await plugin.reviews.submit("profile",{"name":"小明","session_id":"a","user_id":"u"},"a")
     assert result["status"]=="待确认" and not plugin.store.all("profile")
     assert plugin.ctx.llm.generate.await_count==2
+
+
+
+async def test_autonomous_planning_uses_diary_slot_added_during_model_call(plugin):
+    await stop_clock(plugin)
+    plugin.config.life.autonomous = True
+    plugin.config.life.schedule_enabled = False
+    now = plugin.now()
+    async def choose(*args, **kwargs):
+        plugin.engine.create_plan(PlanInput(title="写生活日记", kind="diary",
+            start=(now + timedelta(minutes=20)).isoformat(),
+            end=(now + timedelta(minutes=35)).isoformat()), "", now, autonomous=True)
+        return {"success": True, "response": json.dumps({"title": "阅读", "kind": "leisure",
+            "minutes": 60, "location": "住处", "motivation": "读一会儿书"})}
+    plugin.ctx.llm.generate.side_effect = choose
+    await plugin.living.choose_activity(now)
+    plans = plugin.store.all("plan")
+    reading = next(p for p in plans if p["title"] == "阅读")
+    diary = next(p for p in plans if p["kind"] == "diary")
+    assert plugin.engine.time(reading["end"]) <= plugin.engine.time(diary["start"])

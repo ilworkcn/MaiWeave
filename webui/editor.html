@@ -9,7 +9,7 @@ body{margin:0;padding:20px;font-family:var(--maibot-font-body,system-ui);color:v
 <body class="maibot-page">
 <header><h1 id="heading">生活工作区</h1><p class="maibot-muted" id="intro">选中记录，修改表单，再保存。已有内容会自动填入。</p></header>
 <section id="connectionPanel" class="panel" hidden><strong>原生记忆连接</strong><p id="connectionState" role="status"></p><p id="connectionDetail" class="maibot-muted"></p><button id="checkMemory" class="maibot-button">重新检查连接</button></section>
-<section id="cityPanel" class="panel" hidden><strong>城市生活地点</strong><p id="cityState" role="status"></p><p class="maibot-muted">自主活动按需求搜索当地场所，收录后可在日程中选择。新地点与楼下街道之间预设 15 分钟模拟步行，可在「地点路线」中修改。</p><label>活动或地点需求（选填）<input id="cityActivity" class="maibot-input" placeholder="例如：找一家安静的咖啡馆读书"></label><button id="findCityPlaces" class="maibot-button">搜索并收录城市地点</button></section>
+<section id="cityPanel" class="panel" hidden><strong>城市生活地点</strong><p id="cityState" role="status"></p><p class="maibot-muted">自主活动按需求搜索当地场所，收录后可在日程中选择。新地点与楼下街道之间预设 15 分钟模拟步行，可在「地点路线」中修改。</p><label>活动或地点需求（选填）<input id="cityActivity" class="maibot-input" placeholder="例如：找一家安静的咖啡馆读书"></label><label><input id="forceCityPlaces" type="checkbox">强制联网刷新（跳过缓存）</label><button id="findCityPlaces" class="maibot-button">搜索并收录城市地点</button></section>
 <div class="toolbar"><select id="category" class="maibot-select" style="width:auto"></select><input id="query" class="maibot-input" placeholder="搜索标题、姓名或记录内容"><button id="search" class="maibot-button">查找</button><button id="new" class="maibot-button">新建</button></div>
 <p id="status" role="status" aria-live="polite"></p>
 <main class="workspace"><section class="panel"><h2 id="count">记录</h2><div id="records"></div></section><section class="panel"><h2 id="formTitle">编辑内容</h2><div id="form"><section id="personLink" hidden><label>选择 MaiBot 人物画像（必选）</label><div class="toolbar"><input id="personKeyword" class="maibot-input" placeholder="搜索姓名、昵称或人物 ID"><button id="personSearch" type="button" class="maibot-button">搜索人物</button></div><select id="personChoice" class="maibot-select"><option value="">请选择人物画像</option></select><p id="personHint" class="maibot-muted">沿用「原生记忆连接」配置，选择长期记忆中对应的人物。</p><pre id="personPreview"></pre><label>画像人工补充<textarea id="personOverride" class="maibot-input" placeholder="填写要补充到 MaiBot 人物画像的信息"></textarea></label><button id="personSave" class="maibot-button" type="button">保存到原生画像</button><p class="maibot-muted">人物画像由 MaiBot 管理。下方保存此人的生活备注、提醒聊天流，生日和纪念日在对应分类中填写。</p></section><div id="fields"></div><div class="actions"><button id="save" class="maibot-button maibot-button-primary" type="button">保存</button><button id="remove" class="maibot-button" type="button">删除</button></div></div><pre id="details" class="maibot-muted"></pre></section></main>
@@ -220,7 +220,7 @@ async function watchCityPlaces(){
 }
 async function findCityPlaces(){
  $('findCityPlaces').disabled=true;$('cityState').textContent='正在搜索城市地点…';
- await maibot.action('discover_places',{activity:$('cityActivity').value});
+ await maibot.action('discover_places',{activity:$('cityActivity').value,force:$('forceCityPlaces').checked});
  while((await showCityPlaces()).status==='搜索中')await new Promise(resolve=>setTimeout(resolve,1500));
  await refresh(selected?.id);if(pageMeta.view)await renderView();
 }

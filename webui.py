@@ -109,10 +109,10 @@ class WebUI:
         return self.world.place_status()
 
     @API("ui_discover_places", description="按天气城市搜索并收录生活地点")
-    async def ui_discover_places(self, activity: str = "") -> dict:
+    async def ui_discover_places(self, activity: str = "", force: bool = False) -> dict:
         if not self.config.world.places_enabled:
             raise ValueError("请在天气与见闻配置中开启按城市自动搜索生活地点")
-        return self.start_job("搜索城市地点", self.world.discover_places(self.spatial, self.now(), force=True, activity=activity))
+        return self.start_job("搜索城市地点", self.world.discover_places(self.spatial, self.now(), force=force, activity=activity))
 
     @API("ui_memory_people", description="搜索原生记忆人物画像")
     async def ui_memory_people(self, query: str = "") -> dict:

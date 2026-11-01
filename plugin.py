@@ -55,6 +55,7 @@ def operation(function):
 
 class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     config_model = MaiWeaveConfig
+    model_tasks = ["utils"]
 
     @classmethod
     def build_config_schema(cls, **kwargs):
@@ -93,10 +94,17 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         ]}
         return schema
 
+    def get_webui_config_schema(self, **kwargs):
+        schema = super().get_webui_config_schema(**kwargs)
+        field = schema["sections"]["planning"]["fields"]["model_task"]
+        field.update(choices=list(dict.fromkeys([*self.model_tasks, self.config.life.model_task])), ui_type="select")
+        return schema
+
     def now(self) -> datetime:
         return datetime.now(ZoneInfo(self.config.life.timezone))
 
     async def on_load(self):
+        self.model_tasks = await self.ctx.llm.get_available_models()
         self.store = Store(Path(self.ctx.paths.data_dir) / "maiweave.sqlite3")
         self.anniversaries = Anniversaries(self.store)
         self.reviews = Reviews(self)
@@ -474,7 +482,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.6.7\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.6.9\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
