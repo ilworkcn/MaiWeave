@@ -14,6 +14,7 @@ async def test_usage_records_host_tokens_and_survives_reload(plugin):
     plugin.ctx.llm.generate.return_value = {"success": True, "response": "内容", "model_name": "模型A",
         "prompt_tokens": 100, "completion_tokens": 25, "total_tokens": 125, "prompt_cache_hit_tokens": 40}
     await generate(plugin.ctx, plugin.store, plugin.config, "梦境", "提示")
+    assert plugin.ctx.llm.generate.call_args.kwargs["timeout_ms"] > 90000
     plugin.ctx.llm.generate.return_value = {"success": False, "error": "模型繁忙"}
     with pytest.raises(RuntimeError, match="模型繁忙"):
         await generate(plugin.ctx, plugin.store, plugin.config, "自主活动", "提示")
@@ -124,6 +125,8 @@ async def test_unchanged_failed_planning_waits_for_interval(plugin):
 
 async def test_next_day_continuation_uses_saved_subject_and_progress(plugin):
     now = plugin.now().replace(hour=12)
+    with plugin.store.db:
+        plugin.store.put("state", {**plugin.engine.state(), "updated_at": now.isoformat()})
     plugin.config.life.autonomous = True
     with plugin.store.db:
         plugin.store.put("activity_memory", {"id": "book", "session_id": "a", "activity": "阅读", "subject": "海边的故事",

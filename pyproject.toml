@@ -1,6 +1,6 @@
 [project]
 name = "maiweave"
-version = "0.6.3"
+version = "0.6.4"
 description = "MaiBot 持续角色生活引擎"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]

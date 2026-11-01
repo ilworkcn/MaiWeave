@@ -86,7 +86,7 @@ class WebUI:
         if query.strip():
             rows = [row for row in rows if query.casefold() in json.dumps(row, ensure_ascii=False).casefold()]
         return {"today": self.now().date().isoformat(), "records": rows[-200:][::-1], "total": len(rows), "profiles": self.store.all("profile"),
-                "places": self.store.all("place")}
+                "places": self.store.all("place"), "memory_enabled": self.config.memory.enabled}
 
     @API("ui_anniversaries", description="个人资料和纪念日")
     async def ui_anniversaries(self) -> dict:
@@ -358,6 +358,7 @@ class WebUI:
     @API("ui_continuity", description="活动接续、阶段目标与待跟进事项")
     async def ui_continuity(self) -> dict:
         goals = self.store.all("goal")
+        active_steps = {p.get("goal_step_id") for p in self.store.all("plan") if p["status"] == "active"}
         return {
             "reflections": self.store.all("reflection")[-50:][::-1],
             "preferences": [{**p, "evidence": "、".join(p["evidence_ids"])} for p in self.store.all("preference")],
@@ -366,7 +367,7 @@ class WebUI:
             "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
                          "request_label": "已向宿主请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")][-100:],
             "goals": [{**g, "outline_status": g.get("outline_status", "待分解"), "outline_error": g.get("outline_error", ""), "status_label": STATUS[g["status"]]} for g in goals],
-            "steps": [{**s, "goal_title": g["title"], "status_label": {"pending": "未开始", "active": "进行中", "completed": "已完成"}[s["status"]]} for g in goals for s in g.get("steps", [])],
+            "steps": [{**s, "goal_title": g["title"], "status_label": "进行中" if s["id"] in active_steps else {"pending": "未开始", "active": "进行中", "completed": "已完成"}[s["status"]]} for g in goals for s in g.get("steps", [])],
             "jobs": self.store.all("job")[-10:],
         }
 

@@ -30,6 +30,8 @@ let chatChoices=[];let data={records:[],profiles:[],places:[]},selected=null,cat
 function message(text){$('status').textContent=text}
 function labelFor(row){return row.person ? `${row.person} · ${row.title}` : row.name||row.title||row.summary||`${row.origin} → ${row.destination}`}
 async function edit(row){
+ $('personSearch').disabled=!data.memory_enabled;
+ $('personHint').textContent=data.memory_enabled?'搜索并选择 MaiBot 已有的人物画像。':'请在插件配置的「交流与记忆」中开启原生记忆连接。';
  selected=row;$('personLink').hidden=category!=='profile';$('personChoice').replaceChildren(new Option('请选择人物画像',''));if(row?.person_id)$('personChoice').add(new Option(`${row.name} · ${row.person_id}`,row.person_id));$('personChoice').value=row?.person_id||'';$('personPreview').textContent='';$('personOverride').value='';$('personSave').disabled=true;const schema=schemas[category];$('fields').replaceChildren();$('formTitle').textContent=row?`编辑${schema.label}`:`新建${schema.label}`;
  for(const [name,label,type,initial,source] of schema.fields){
   const wrapper=document.createElement('label');wrapper.textContent=label;if(type==='textarea')wrapper.className='wide';
@@ -38,7 +40,7 @@ async function edit(row){
   let input;
   if(typeof type==='object'||['profiles','places','locations','chats','weekdays'].includes(type)){
    input=document.createElement('select');input.className='maibot-select';
-   const choices=typeof type==='object'?Object.entries(type):type==='chats'?[['','公共生活'],...chatChoices.map(i=>[i.id,i.name])]:type==='weekdays'?['周一','周二','周三','周四','周五','周六','周日'].map(x=>[x,x]):type==='locations'?data.places.map(i=>[i.name,i.name]):data[type].map(item=>[item.id,item.name]);
+   const choices=typeof type==='object'?Object.entries(type):type==='chats'?[['','公共生活'],...chatChoices.map(i=>[i.id,i.name])]:type==='weekdays'?['周一','周二','周三','周四','周五','周六','周日'].map(x=>[x,x]):type==='locations'?[['','未指定地点'],...data.places.map(i=>[i.name,i.name])]:data[type].map(item=>[item.id,item.name]);
    if(type==='weekdays')input.multiple=true;
    if(value&&type!=='weekdays'&&!choices.some(c=>String(c[0])===String(value)))choices.push([value,value]);
    for(const [key,title] of choices)input.add(new Option(title,key));
@@ -53,7 +55,7 @@ async function edit(row){
  for(const button of $('records').children)button.setAttribute('aria-pressed',String(button.dataset.id===row?.id));
  if(row){const key={plan:'plan',routine:'rule',experience:'record',thread:'thread',place:'place',route:'route'}[category];if(key)viewSelection[key]=row;}
  if($('pageDetails'))drawView($('pageDetails'));
- if(category==='profile'&&row?.person_id)await loadPerson();
+ if(category==='profile'&&row?.person_id&&data.memory_enabled)await loadPerson();
 }
 async function refresh(keepId=''){
  data=await maibot.query('records',{category,query:$('query').value});$('records').replaceChildren();$('count').textContent=`${schemas[category].label} · ${data.total} 条`;

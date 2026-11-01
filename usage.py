@@ -15,7 +15,7 @@ async def _once(ctx, store, config, feature, prompt):
               "prompt_tokens": None, "completion_tokens": None, "total_tokens": None,
               "prompt_cache_hit_tokens": None}
     try:
-        result = await asyncio.wait_for(ctx.llm.generate(prompt, task_name=config.life.model_task), timeout=90)
+        result = await asyncio.wait_for(ctx.llm.generate(prompt, task_name=config.life.model_task, timeout_ms=95000), timeout=90)
         record.update(model=result.get("model") or result.get("model_name", ""),
                       status="成功" if result["success"] else "失败", error=result.get("error", ""))
         for key in ("prompt_tokens", "completion_tokens", "total_tokens", "prompt_cache_hit_tokens"):

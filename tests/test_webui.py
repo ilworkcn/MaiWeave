@@ -127,3 +127,20 @@ def test_merged_pages_keep_action_selections_and_data_sources():
                 assert item["action"] in view["actions"]
             if item.get("detail"):
                 assert item["detail"] in dialogs
+
+
+def test_new_routine_webui_does_not_require_existing_id():
+    pages = json.loads((Path(__file__).parents[1] / "webui.json").read_text(encoding="utf-8"))["pages"]
+    page = next(page for page in pages if page["id"] == "schedule")
+    assert page["actions"]["routine"]["parameters"]["rule_id"]["required"] is False
+
+
+async def test_goal_stage_shows_running_plan(plugin):
+    with plugin.store.db:
+        plugin.store.put("goal", {"id": "goal", "title": "读书", "status": "active",
+            "steps": [{"id": "step", "status": "pending"}]})
+        plugin.store.put("plan", {"id": "plan", "goal_step_id": "step", "status": "active"})
+    assert (await plugin.ui_continuity())["steps"][0]["status_label"] == "进行中"
+    with plugin.store.db:
+        plugin.store.put("plan", {"id": "plan", "goal_step_id": "step", "status": "cancelled"})
+    assert (await plugin.ui_continuity())["steps"][0]["status_label"] == "未开始"
