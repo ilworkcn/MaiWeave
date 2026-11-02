@@ -89,7 +89,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             }
         schema["layout"] = {"type": "tabs", "tabs": [
             {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
-            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary"], "order": 1},
+            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary", "books"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
             {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "plugin"], "order": 3},
         ]}
@@ -283,7 +283,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "地点移动需要时间，安排异地活动前可用 maiweave_space 查询路线；重复安排用 maiweave_routine。\n"
             "新出现的临时事件可用 maiweave_continuity 的 replan 调整可变动日程。"
             "约好了后续时间的话题可以保存为跟进事项，解决后关闭。"
-            "谈论读书时依据bookshelf中的书名、章节和已完成笔记，原文摘句与角色感想分别表述；安排阅读时填写book_id。"
+            "谈论读书时依据bookshelf中的书名、章节和已完成笔记，原文摘句与角色感想分别表述；需要更多阅读笔记时调用maiweave_books的notes并填写book_id与page；安排阅读时填写book_id。"
             "接续活动沿用保存的进度；关联目标时填写当前阶段 goal_step_id，按阶段推进。\n"
             "sleep_policy 中的 awake_until 尚未到期时，按已经醒来的状态回应。"
             "sleep_policy.sleeping 为 true 时保持安静，普通聊天调用 stop 结束本轮。用户正在低落、需要陪伴或明确请求醒来时，调用 maiweave_wake；awake 为 true 后再回应。群聊和私聊遵循同一规则。"
@@ -509,7 +509,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.7.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.7.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

@@ -56,7 +56,7 @@ def test_all_page_bindings_match_real_registered_api():
     raw = (Path(__file__).parents[1] / "webui.json").read_bytes()
     assert len(raw) <= 128 * 1024
     pages = json.loads(raw)["pages"]
-    assert len(pages) == 9
+    assert len(pages) == 10
     for page in pages:
         for binding in [*page["queries"].values(), *page["actions"].values()]:
             component = components[binding["api"]]
@@ -95,7 +95,7 @@ def test_merged_pages_keep_action_selections_and_data_sources():
     root = Path(__file__).parents[1]
     pages = json.loads((root / "webui.json").read_text(encoding="utf-8"))["pages"]
     metadata = json.loads(re.search(r"const PAGE_METADATA=(.*);", (root / "webui/editor.html").read_text(encoding="utf-8")).group(1))
-    assert {p["id"] for p in pages} == {"overview", "schedule", "world", "space", "records", "continuity", "anniversaries", "usage", "diary"}
+    assert {p["id"] for p in pages} == {"overview", "schedule", "world", "space", "records", "continuity", "anniversaries", "usage", "diary", "books"}
     def objects(value):
         if isinstance(value, dict):
             yield value

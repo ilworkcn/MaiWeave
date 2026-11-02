@@ -1184,10 +1184,6 @@
               "required": false
             }
           }
-        },
-        "books": {
-          "api": "ui_books",
-          "version": "1"
         }
       },
       "actions": {
@@ -1388,7 +1384,47 @@
               "required": true
             }
           }
+        }
+      }
+    },
+    {
+      "id": "books",
+      "title": "书架与阅读",
+      "placement": "workspace",
+      "mode": "custom",
+      "icon": "database",
+      "entry": "webui/editor.html",
+      "queries": {
+        "books": {
+          "api": "ui_books",
+          "version": "1",
+          "parameters": {
+            "book_id": {
+              "type": "string",
+              "required": false
+            },
+            "page": {
+              "type": "integer",
+              "required": false
+            }
+          }
         },
+        "operation_status": {
+          "api": "ui_operation_status",
+          "version": "1",
+          "parameters": {
+            "task_id": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            }
+          }
+        }
+      },
+      "actions": {
         "book_upload": {
           "api": "ui_book_upload",
           "version": "1",
@@ -1416,6 +1452,10 @@
             "content": {
               "type": "string",
               "required": false
+            },
+            "size": {
+              "type": "integer",
+              "required": false
             }
           }
         },
@@ -1441,6 +1481,14 @@
             },
             "minutes": {
               "type": "integer",
+              "required": false
+            },
+            "title": {
+              "type": "string",
+              "required": false
+            },
+            "author": {
+              "type": "string",
               "required": false
             }
           }

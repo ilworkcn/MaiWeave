@@ -233,7 +233,10 @@ class Living:
         continuation_id = ""
         place_query = ""
         book_id = ""
-        books = [b for b in engine.store.all("book") if b["status"] != "已读完"]
+        books = [b for b in engine.store.all("book") if b["status"] != "已读完" and not b.get("archived")]
+        current_book = engine.store.find("runtime", "current_book")
+        books.sort(key=lambda b: b["id"] != (current_book or {}).get("book_id"))
+        books = [{k: b[k] for k in ("id", "title", "author", "status", "chapter", "chapter_count")} for b in books[:10]]
         habit = self.rhythm.candidate(now)
         if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
             habit = None

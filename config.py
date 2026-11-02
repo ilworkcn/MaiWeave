@@ -114,6 +114,15 @@ class DiaryConfig(PluginConfigBase):
     enabled: bool = setting("自动写日记", default=True, description="由生活规划模型安排写日记的时间，进入活动窗口后回顾当天生活")
 
 
+class BooksConfig(PluginConfigBase):
+    __ui_label__ = "书架与阅读"
+    max_books: int = setting("最多书籍数", default=100, ge=1, le=1000, description="包含已归档书籍；删除书籍可释放名额。")
+    storage_mb: int = setting("书架文件总容量（MB）", default=200, ge=1, le=10240, description="计算原始文件、解析后的正文和上传中的文件。")
+    max_file_mb: int = setting("单本文件容量（MB）", default=20, ge=1, le=100, description="同时作为 EPUB 解压内容上限，正文解析后还会检查书架总容量。")
+    reading_chars: int = setting("每次阅读正文上限（字）", default=4000, ge=500, le=12000, description="每次读取当前位置的一段正文，下次从保存的位置继续。")
+    context_chars: int = setting("对话书架信息上限（字符）", default=4000, ge=1000, le=16000, description="限制书目和近期笔记带入对话的总长度；详细笔记可按书查询。")
+
+
 class MaiWeaveConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     life: LifeConfig = Field(default_factory=LifeConfig)
@@ -124,3 +133,4 @@ class MaiWeaveConfig(PluginConfigBase):
     dreams: DreamConfig = Field(default_factory=DreamConfig)
     diary: DiaryConfig = Field(default_factory=DiaryConfig)
     continuity: ContinuityConfig = Field(default_factory=ContinuityConfig)
+    books: BooksConfig = Field(default_factory=BooksConfig)

@@ -59,6 +59,8 @@ class LifeEngine:
         self._check_interval(start, end)
         if value.book_id:
             book = self.store.get("book", value.book_id)
+            if book.get("archived"):
+                raise ValueError("请先恢复已归档书籍，再安排阅读")
             if book["status"] == "已读完":
                 raise ValueError("这本书已读完，请选择下一本")
             if not value.simulation or value.participants:

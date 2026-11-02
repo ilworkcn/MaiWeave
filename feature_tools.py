@@ -10,14 +10,19 @@ def parameters(properties, required):
 
 
 class FeatureTools:
-    @Tool("maiweave_books", description="查询上传书籍与已读笔记，选择当前读物或安排一段阅读日程。", parameters=parameters({
-        "action": {"type": "string", "enum": ["list", "select", "schedule"]}, "book_id": {"type": "string"},
-        "start": {"type": "string"}, "minutes": {"type": "integer", "enum": [15,30,45,60]},
+    @Tool("maiweave_books", description="list按page分页查看书目，notes按book_id与page查询已读笔记；page从0开始。select选择当前读物，schedule安排阅读日程。", parameters=parameters({
+        "action": {"type": "string", "enum": ["list", "notes", "select", "schedule"]}, "book_id": {"type": "string"},
+        "start": {"type": "string"}, "minutes": {"type": "integer", "enum": [15,30,45,60]}, "page": {"type": "integer"},
     }, ["action"]))
-    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, **kwargs):
+    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, page: int = 0, **kwargs):
         self.require_life()
         if action == "list":
-            return self.books.context()
+            books = [b for b in self.store.all("book") if not b.get("archived")]
+            return {"total_books": len(books), "page": max(0, page), "books": [{k: (b[k][:100] if isinstance(b[k], str) else b[k]) for k in ("id", "title", "author", "status", "chapter", "chapter_count")} for b in books[max(0,page)*5:(max(0,page)+1)*5]]}
+        if action == "notes":
+            rows = [n for n in self.store.all("book_note") if n["status"] == "已完成" and (not book_id or n["book_id"] == book_id)]
+            rows.sort(key=lambda n: n["finished_at"], reverse=True)
+            return {"total": len(rows), "page": max(0, page), "items": [{k: n[k][:500] for k in ("book_id", "book_title", "chapter_title", "summary", "thoughts", "quote", "question")} for n in rows[max(0,page)*2:(max(0,page)+1)*2]]}
         if action == "select":
             return self.books.select(book_id)
         return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""))
