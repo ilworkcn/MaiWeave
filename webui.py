@@ -28,6 +28,35 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_books", description="书架、阅读进度与笔记")
+    async def ui_books(self) -> dict:
+        return {**self.books.context(), "sessions": [{**n, "status": "日程已取消" if self.store.get("plan", n["id"])["status"] == "cancelled" else n["status"]} for n in self.store.all("book_note")[-10:]], "now": self.now().isoformat()}
+
+    @API("ui_book_upload", description="上传书籍资料")
+    async def ui_book_upload(self, action: str, upload_id: str = "", filename: str = "", title: str = "", author: str = "", content: str = "") -> dict:
+        if action == "begin":
+            return self.books.begin(filename, title, author)
+        if action == "append":
+            return await self.books.append(upload_id, content)
+        if action == "finish":
+            return await self.books.finish(upload_id, self.now())
+        raise ValueError("请选择开始上传、上传片段或完成导入")
+
+    @API("ui_book_action", description="选书、安排阅读与重试阅读")
+    async def ui_book_action(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, plan_id: str = "") -> dict:
+        self.require_life()
+        if action == "select":
+            return self.books.select(book_id)
+        if action == "schedule":
+            return self.books.schedule(book_id, start, minutes, self.spatial, self.now())
+        if action == "retry":
+            note = self.store.get("book_note", plan_id)
+            if note["status"] == "阅读失败":
+                with self.store.db:
+                    self.store.put("book_note", {**note, "retry_at": ""})
+            return self.start_job("书籍阅读", self.books.process(self.now()))
+        raise ValueError("请选择设为当前读物、安排阅读或重试")
+
     @API("ui_operation_status", description="查看后台操作与日记写作进度")
     async def ui_operation_status(self, task_id: str = "", plan_id: str = "") -> dict:
         if task_id:

@@ -32,7 +32,7 @@ class Diary:
         experiences = [e for e in store.all("experience") if start <= self.engine.time(e["occurred_at"]) < min(end, now)]
         states = [s for s in store.all("state_history") if start <= self.engine.time(s["at"]) < min(end, now)]
         dreams = [d for d in store.all("dream") if d["status"] == "已生成" and start <= self.engine.time(d["sleep_end"]) < min(end, now)]
-        return {"日期": day.isoformat(), "记录截止": min(end, now).isoformat(), "活动": plans, "经历": experiences,
+        return {"阅读笔记": [n for n in store.all("book_note") if n["status"] == "已完成" and start <= self.engine.time(n["finished_at"]) < min(end, now)], "日期": day.isoformat(), "记录截止": min(end, now).isoformat(), "活动": plans, "经历": experiences,
                 "状态变化": [{k: s[k] for k in ("at", "energy", "hunger", "mood", "stress") if k in s} for s in states], "梦境": dreams}
 
     async def arrange(self, now, spatial):

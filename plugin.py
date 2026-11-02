@@ -23,6 +23,7 @@ from .world import World
 from .spatial import Spatial
 from .rhythm import Rhythm
 from .dreams import Dreams
+from .books import Books
 from .diary import Diary
 from .feature_tools import FeatureTools
 from .webui import WebUI
@@ -113,6 +114,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.world = World(self.engine, self.ctx, self.config)
         self.rhythm = Rhythm(self.engine, self.spatial, self.config)
         self.dreams = Dreams(self.engine, self.ctx, self.config)
+        self.books = Books(self.engine, self.ctx, self.config, self.ctx.paths.data_dir)
         self.diary = Diary(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
@@ -159,7 +161,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         for name, job in [("外部世界", self.world.refresh),
                           ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
-                          ("主动交流", self.living.share), ("生活日记", self.diary.process)]:
+                          ("主动交流", self.living.share), ("生活日记", self.diary.process), ("书籍阅读", self.books.process)]:
             if name not in self.background or self.background[name].done():
                 task = asyncio.create_task(self.run_background(name, job), name="maiweave-" + name)
                 self.background[name] = task
@@ -253,6 +255,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.world.planning_places()]
         snapshot["habits"] = [h for h in self.store.all("habit") if h["active"] and h["enabled"] and self.engine.visible(h, session)]
         snapshot["dreams"] = [d for d in self.store.all("dream") if d["status"] == "已生成" and self.engine.visible(d, session)][-2:]
+        snapshot["bookshelf"] = self.books.context()
         snapshot["continuity"] = self.continuity.context(session, self.now())
         snapshot["schedule_issues"] = [r for r in self.store.all("schedule_issue") if self.engine.visible(r, session)]
         snapshot["schedule_notices"] = [r for r in self.store.all("schedule_notice") if self.engine.visible(r, session)]
@@ -280,6 +283,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "地点移动需要时间，安排异地活动前可用 maiweave_space 查询路线；重复安排用 maiweave_routine。\n"
             "新出现的临时事件可用 maiweave_continuity 的 replan 调整可变动日程。"
             "约好了后续时间的话题可以保存为跟进事项，解决后关闭。"
+            "谈论读书时依据bookshelf中的书名、章节和已完成笔记，原文摘句与角色感想分别表述；安排阅读时填写book_id。"
             "接续活动沿用保存的进度；关联目标时填写当前阶段 goal_step_id，按阶段推进。\n"
             "sleep_policy 中的 awake_until 尚未到期时，按已经醒来的状态回应。"
             "sleep_policy.sleeping 为 true 时保持安静，普通聊天调用 stop 结束本轮。用户正在低落、需要陪伴或明确请求醒来时，调用 maiweave_wake；awake 为 true 后再回应。群聊和私聊遵循同一规则。"
@@ -505,7 +509,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.6.14\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.7.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

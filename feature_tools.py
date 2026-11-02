@@ -10,6 +10,18 @@ def parameters(properties, required):
 
 
 class FeatureTools:
+    @Tool("maiweave_books", description="查询上传书籍与已读笔记，选择当前读物或安排一段阅读日程。", parameters=parameters({
+        "action": {"type": "string", "enum": ["list", "select", "schedule"]}, "book_id": {"type": "string"},
+        "start": {"type": "string"}, "minutes": {"type": "integer", "enum": [15,30,45,60]},
+    }, ["action"]))
+    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, **kwargs):
+        self.require_life()
+        if action == "list":
+            return self.books.context()
+        if action == "select":
+            return self.books.select(book_id)
+        return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""))
+
     @Tool("maiweave_continuity", description="管理生活接续。status 查看偏好和持续事项；reflect 为已完成活动生成或重试具体结果；outline/revise_goal 分解或调整目标阶段；replan 根据临时事件重排可变动安排；save_thread 保存有明确上下文的后续关心事项，resolve_thread 关闭已解决事项。", parameters=parameters({
         "action": {"type": "string", "enum": ["status", "reflect", "outline", "revise_goal", "replan", "save_thread", "resolve_thread"]},
         "record_id": {"type": "string"}, "title": {"type": "string"}, "context": {"type": "string"},

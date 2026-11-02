@@ -232,6 +232,8 @@ class Living:
         goal_step_id = ""
         continuation_id = ""
         place_query = ""
+        book_id = ""
+        books = [b for b in engine.store.all("book") if b["status"] != "已读完"]
         habit = self.rhythm.candidate(now)
         if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
             habit = None
@@ -288,6 +290,7 @@ class Living:
                 "location 填已有地点名称；想去的新场所用 place_query 填简短稳定的地点搜索词，location 可留空。"
                 "同类需求复用相同搜索词，例如咖啡馆、东北菜餐厅、安静的咖啡馆；保留菜系、环境等具体要求。"
                 "根据本次活动决定是否需要新地点，例如喝咖啡找咖啡馆、吃饭找餐厅、购物找商场，类别自由选择。"
+                f"书架：{json.dumps(books, ensure_ascii=False)}；阅读书架中的书时填写book_id，从已读位置继续。"
                 f"城市地点联网可用：{search_ready}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
                 "外出时优先复用当前城市已收录的合适地点；居家活动使用住处或厨房。"
                 f"；可选地点名称：{json.dumps(places, ensure_ascii=False)}；"
@@ -300,6 +303,7 @@ class Living:
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation
             minutes = min(choice.minutes, free)
             place_query = choice.place_query
+            book_id = choice.book_id
             goal_id = choice.goal_id
             goal_step_id = choice.goal_step_id
             if goal_id:
@@ -325,7 +329,13 @@ class Living:
         if minutes < 1:
             return
         start = now + timedelta(minutes=travel_minutes)
-        value = PlanInput(title=title, start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
+        if not book_id and books and any(word in title for word in ("阅读", "读书", "读几页", "翻书", "读一", "翻翻")):
+            current_book = engine.store.find("runtime", "current_book")
+            book_id = next((b["id"] for b in books if current_book and b["id"] == current_book["book_id"]), books[0]["id"])
+        if book_id:
+            book = engine.store.get("book", book_id)
+            title = f"阅读《{book['title']}》"
+        value = PlanInput(title=title, book_id=book_id, start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
                           kind=kind, location=location, motivation=motivation, goal_id=goal_id, goal_step_id=goal_step_id,
                           continuation_id=continuation_id)
         self.spatial.schedule(value, session, now, autonomous=True)

@@ -57,6 +57,12 @@ class LifeEngine:
         if start < now - timedelta(minutes=1):
             raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
         self._check_interval(start, end)
+        if value.book_id:
+            book = self.store.get("book", value.book_id)
+            if book["status"] == "已读完":
+                raise ValueError("这本书已读完，请选择下一本")
+            if not value.simulation or value.participants:
+                raise ValueError("书架阅读使用角色独自阅读的日程")
         if value.goal_id:
             goal = self.owned("goal", value.goal_id, session)
             if goal["status"] != "active":
@@ -368,6 +374,8 @@ class LifeEngine:
                   "evidence": f"角色生活模拟，依据已保存计划 {plan['id']} 推进",
                   "plan_id": plan["id"], "importance": 2 if plan["goal_id"] else 1, "revision": 1, "history": [],
                   "memory_id": "", "memory_revision": 0}
+        if plan.get("book_id"):
+            record["summary"] = f"结束{plan['title']}的阅读时段，正文笔记正在整理"
         plan.update(status="completed", experience_id=record["id"])
         self.store.put("experience", record)
         self._progress_goal(plan)

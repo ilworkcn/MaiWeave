@@ -34,7 +34,7 @@ class Continuity:
                        and g.get("outline_status", "待分解") == "待分解"]
             if pending:
                 await self.outline(pending[0]["id"], now)
-        pending = [p for p in store.all("plan") if p["status"] == "completed" and p["kind"] not in {"travel", "sleep", "diary"}
+        pending = [p for p in store.all("plan") if p["status"] == "completed" and not p.get("book_id") and p["kind"] not in {"travel", "sleep", "diary"}
                    and 0 <= (now - self.engine.time(p["end"])).total_seconds() < self.config.rhythm.learning_days * 86400
                    and not store.find("reflection", p["id"])]
         for plan in pending[:3]:
@@ -45,6 +45,8 @@ class Continuity:
         plan = store.get("plan", plan_id)
         if plan["status"] != "completed" or plan["kind"] in {"travel", "sleep", "diary"}:
             raise ValueError("请选择已完成的非睡眠、非出行活动")
+        if plan.get("book_id"):
+            return {"status": "阅读笔记由书架整理", "book_id": plan["book_id"]}
         event = store.get("experience", plan["experience_id"])
         old = store.find("reflection", plan_id)
         if old and old["status"] == "已完成":

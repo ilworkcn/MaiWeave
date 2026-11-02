@@ -1184,6 +1184,10 @@
               "required": false
             }
           }
+        },
+        "books": {
+          "api": "ui_books",
+          "version": "1"
         }
       },
       "actions": {
@@ -1382,6 +1386,62 @@
             "goal_id": {
               "type": "string",
               "required": true
+            }
+          }
+        },
+        "book_upload": {
+          "api": "ui_book_upload",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "upload_id": {
+              "type": "string",
+              "required": false
+            },
+            "filename": {
+              "type": "string",
+              "required": false
+            },
+            "title": {
+              "type": "string",
+              "required": false
+            },
+            "author": {
+              "type": "string",
+              "required": false
+            },
+            "content": {
+              "type": "string",
+              "required": false
+            }
+          }
+        },
+        "book_action": {
+          "api": "ui_book_action",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "book_id": {
+              "type": "string",
+              "required": false
+            },
+            "start": {
+              "type": "string",
+              "required": false
+            },
+            "plan_id": {
+              "type": "string",
+              "required": false
+            },
+            "minutes": {
+              "type": "integer",
+              "required": false
             }
           }
         }

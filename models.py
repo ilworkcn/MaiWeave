@@ -29,6 +29,7 @@ class PlanInput(BaseModel):
     goal_step_id: str = ""
     continuation_id: str = ""
     diary_day: str = ""
+    book_id: str = ""
     flexible: bool = False
 
 
@@ -51,6 +52,7 @@ class ActivityChoice(BaseModel):
     goal_id: str = ""
     goal_step_id: str = ""
     place_query: str = ""
+    book_id: str = ""
 
 
 class LifeState(BaseModel):

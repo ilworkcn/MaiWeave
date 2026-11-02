@@ -10,6 +10,19 @@ label.inline-checkbox{display:flex;align-items:center;gap:8px;margin:12px 0;curs
 <header><h1 id="heading">生活工作区</h1><p class="maibot-muted" id="intro">选中记录，修改表单，再保存。已有内容会自动填入。</p></header>
 <section id="connectionPanel" class="panel" hidden><strong>原生记忆连接</strong><p id="connectionState" role="status"></p><p id="connectionDetail" class="maibot-muted"></p><button id="checkMemory" class="maibot-button">重新检查连接</button></section>
 <section id="cityPanel" class="panel" hidden><strong>城市生活地点</strong><p id="cityState" role="status"></p><p id="cityService" class="maibot-muted"></p><p class="maibot-muted">自主活动按需求搜索当地场所，收录后可在日程中选择。新地点与楼下街道之间预设 15 分钟模拟步行，可在「地点路线」中修改。</p><label>活动或地点需求（选填）<input id="cityActivity" class="maibot-input" placeholder="例如：找一家安静的咖啡馆读书"></label><label class="inline-checkbox"><input id="forceCityPlaces" type="checkbox">强制联网刷新（跳过缓存）</label><button id="findCityPlaces" class="maibot-button">搜索并收录城市地点</button></section>
+<section id="bookPanel" class="panel" hidden>
+<h2>书架</h2><p class="maibot-muted">上传书籍后，每次阅读从上次位置继续。阅读笔记会进入生活经历、对话与日记。</p>
+<details><summary>上传书籍 · TXT / Markdown / EPUB</summary><div class="fields">
+<label>书籍文件（必选，最大20MB）<input id="bookFile" type="file" accept=".txt,.md,.epub"></label>
+<label>书名（选填，默认取文件名或 EPUB 书名）<input id="bookTitle" class="maibot-input"></label>
+<label>作者（选填）<input id="bookAuthor" class="maibot-input"></label></div>
+<button id="uploadBook" class="maibot-button">上传到书架</button></details>
+<p id="bookStatus" role="status" aria-live="polite"></p>
+<div class="fields"><label>选择书籍<select id="bookChoice" class="maibot-select"></select></label><label>阅读时长<select id="bookMinutes" class="maibot-select"><option value="15">15分钟</option><option value="30" selected>30分钟</option><option value="45">45分钟</option><option value="60">60分钟</option></select></label>
+<label>阅读开始时间（选填，留空立即开始）<input id="bookStart" class="maibot-input" type="datetime-local"></label></div>
+<div class="actions"><button id="selectBook" class="maibot-button">设为当前读物</button><button id="scheduleBook" class="maibot-button">安排阅读日程</button><button id="refreshBooks" class="maibot-button">刷新书架</button><button id="retryBook" class="maibot-button" hidden>重试阅读</button></div>
+<p id="bookInfo"></p><h3>最近完成的阅读笔记</h3><pre id="bookNotes"></pre>
+</section>
 <div class="toolbar"><select id="category" class="maibot-select" style="width:auto"></select><input id="query" class="maibot-input" placeholder="搜索标题、姓名或记录内容"><button id="search" class="maibot-button">查找</button><button id="new" class="maibot-button">新建</button></div>
 <p id="status" role="status" aria-live="polite"></p>
 <main class="workspace"><section class="panel"><h2 id="count">记录</h2><div id="records"></div></section><section class="panel"><h2 id="formTitle">编辑内容</h2><div id="form"><section id="personLink" hidden><label>选择 MaiBot 人物画像（必选）</label><div class="toolbar"><input id="personKeyword" class="maibot-input" placeholder="搜索姓名、昵称或人物 ID"><button id="personSearch" type="button" class="maibot-button">搜索人物</button></div><select id="personChoice" class="maibot-select"><option value="">请选择人物画像</option></select><p id="personHint" class="maibot-muted">沿用「原生记忆连接」配置，选择长期记忆中对应的人物。</p><pre id="personPreview"></pre><label>画像人工补充<textarea id="personOverride" class="maibot-input" placeholder="填写要补充到 MaiBot 人物画像的信息"></textarea></label><button id="personSave" class="maibot-button" type="button">保存到原生画像</button><p class="maibot-muted">在下方选择此人的交流与提醒聊天流，填写生活备注。开启主动交流后，这个聊天流同时接收主动消息与纪念日提醒。</p><button id="openDates" type="button" class="maibot-button">管理此人的生日与纪念日</button></section><div id="fields"></div><div class="actions"><button id="save" class="maibot-button maibot-button-primary" type="button">保存</button><button id="remove" class="maibot-button" type="button">删除</button></div></div><pre id="details" class="maibot-muted"></pre></section></main>
@@ -266,6 +279,44 @@ $('openDates').onclick=()=>run(async()=>{const id=selected.id;category='annivers
 $('checkMemory').onclick=()=>run(checkMemory);
 $('findCityPlaces').onclick=()=>run(findCityPlaces);
 
+let shelf={books:[],notes:[],sessions:[]};
+function renderBook(){
+ const b=shelf.books.find(x=>x.id===$('bookChoice').value);
+ for(const id of ['selectBook','scheduleBook'])$(id).disabled=!b;
+ if(!b){$('bookInfo').textContent='书架还没有书籍，先上传一本。';$('bookNotes').textContent='';return}
+ $('scheduleBook').disabled=b.status==='已读完';
+ const latest=shelf.sessions.filter(n=>n.book_id===b.id).at(-1);
+ const active=shelf.current_book===b.id?' · 当前读物':'';
+ $('bookInfo').textContent=`《${b.title}》${b.author?' · '+b.author:''}${active} · ${b.status} · ${Math.round(b.read_characters/b.characters*100)}% · 已读 ${b.read_characters}/${b.characters} 字 · 共 ${b.chapter_count} 章`+(latest?` · 本次阅读：${latest.status}${latest.error?' · '+latest.error:''}`:'');
+ $('retryBook').hidden=latest?.status!=='阅读失败';$('retryBook').dataset.plan=latest?.id||'';
+ const notes=shelf.notes.filter(n=>n.book_id===b.id);
+ $('bookNotes').textContent=notes.map(n=>`${n.chapter_title} · ${n.finished_at.replace('T',' ').slice(0,19)}
+内容：${n.summary}
+原文：${n.quote}
+感想：${n.thoughts}
+${n.question?'读后问题：'+n.question:''}`).join('\n\n')||'阅读日程完成后，笔记会显示在这里。';
+}
+async function showBooks(prefer=''){
+ const selected=prefer||$('bookChoice').value;shelf=await maibot.query('books');
+ $('bookChoice').replaceChildren(...shelf.books.map(b=>new Option(b.title,b.id)));
+ if(shelf.books.some(b=>b.id===selected))$('bookChoice').value=selected;else if(shelf.current_book)$('bookChoice').value=shelf.current_book;
+ renderBook();
+}
+async function uploadBook(){
+ const file=$('bookFile').files[0];if(!file)throw Error('请选择书籍文件');if(file.size>20*1024*1024)throw Error('请选择20MB以内的书籍');
+ await tracked($('uploadBook'),'上传书籍',async show=>{
+  const row=await maibot.action('book_upload',{action:'begin',filename:file.name,title:$('bookTitle').value,author:$('bookAuthor').value});
+  for(let offset=0;offset<file.size;offset+=24576){const bytes=new Uint8Array(await file.slice(offset,offset+24576).arrayBuffer());await maibot.action('book_upload',{action:'append',upload_id:row.id,content:btoa(String.fromCharCode(...bytes))});show(`上传中 ${Math.min(100,Math.round((offset+bytes.length)/file.size*100))}%`)}
+  show('正在解析章节与正文');const book=await maibot.action('book_upload',{action:'finish',upload_id:row.id});await showBooks(book.id);$('bookStatus').textContent=`已导入《${book.title}》，共${book.chapter_count}章`;return $('bookStatus').textContent;
+ });
+}
+$('bookChoice').onchange=renderBook;
+$('uploadBook').onclick=()=>run(uploadBook);
+$('refreshBooks').onclick=()=>run(()=>showBooks());
+$('selectBook').onclick=()=>run(async()=>{await maibot.action('book_action',{action:'select',book_id:$('bookChoice').value});await showBooks();$('bookStatus').textContent='已设为当前读物，自主阅读会优先选择这本书';});
+$('scheduleBook').onclick=()=>run(async()=>{const p=await maibot.action('book_action',{action:'schedule',book_id:$('bookChoice').value,start:$('bookStart').value?new Date($('bookStart').value).toISOString():'',minutes:Number($('bookMinutes').value)});$('bookStatus').textContent=`已安排：${p.title}，${p.start.replace('T',' ').slice(0,19)} 开始。可在日程与作息中暂停、继续或取消。`;});
+$('retryBook').onclick=()=>run(()=>tracked($('retryBook'),'书籍阅读',async show=>{const r=await maibot.action('book_action',{action:'retry',plan_id:$('retryBook').dataset.plan});const result=await waitOperation(r,show);await showBooks();return result}));
+
 await maibot.ready;
 const pageMeta=PAGE_METADATA[maibot.page.id];
 $('heading').textContent=pageMeta.title;$('intro').textContent='选中记录即可修改。固定选项可以直接选择，资料冲突会在保存前提示。';
@@ -275,6 +326,7 @@ if(maibot.page.id==='anniversaries'){
  for(const key of pageMeta.categories){const button=document.createElement('button');button.className='maibot-button';button.textContent=schemas[key].label;button.onclick=()=>run(async()=>{category=key;$('category').value=key;$('query').value='';await refresh()});tabs.append(button)}
  $('category').hidden=true;document.querySelector('.toolbar').before(tabs);
 } 
+if(maibot.page.id==='continuity'){$('bookPanel').hidden=false;await showBooks();setInterval(()=>showBooks().catch(e=>{$('bookStatus').textContent=e.message}),15000)}
 category=pageMeta.categories[0];
 if(!category){document.querySelector('.toolbar').hidden=true;document.querySelector('main').hidden=true;$('intro').textContent='点击操作后可查看处理进度，完成后自动更新结果。'}
 if(['anniversaries','records'].includes(maibot.page.id)){$('connectionPanel').hidden=false;checkMemory().catch(error=>{$('connectionDetail').textContent=error.message;$('checkMemory').disabled=false})}
