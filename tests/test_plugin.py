@@ -19,7 +19,9 @@ async def plugin(tmp_path):
     config.life.autonomous = False
     config.world.weather_enabled = False
     plugin.set_plugin_config(config.model_dump())
-    context = SimpleNamespace(paths=SimpleNamespace(data_dir=tmp_path), logger=logging.getLogger("test"),
+    context = SimpleNamespace(person=SimpleNamespace(get_id=AsyncMock(side_effect=lambda platform, user_id: platform + ":" + user_id)),
+                              chat=SimpleNamespace(get_all_streams=AsyncMock(return_value=[{"stream_id": name, "platform": "qq"} for name in ["a", "chat-a", "group", "private"]])),
+                              paths=SimpleNamespace(data_dir=tmp_path), logger=logging.getLogger("test"),
                               send=SimpleNamespace(text=AsyncMock(return_value=True)),
                               config=SimpleNamespace(get=AsyncMock(return_value={"personality": "喜欢安静"})),
                               llm=SimpleNamespace(get_available_models=AsyncMock(return_value=["utils", "replyer", "planner"]), generate=AsyncMock(return_value={"success": False, "error": "测试尚未设置模型结果"})),

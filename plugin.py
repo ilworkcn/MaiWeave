@@ -220,6 +220,26 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         task.add_done_callback(self.jobs.discard)
         return {"task_id": record["id"], "status": "进行中"}
 
+    async def identify_person(self, session, user_id, platform=""):
+        if not user_id:
+            return
+        key = f"{session}:{user_id}"
+        if self.store.find("identity", key):
+            return
+        if not platform:
+            streams = await self.ctx.chat.get_all_streams(platform="all_platforms")
+            platform = next(s["platform"] for s in streams if s["stream_id"] == session)
+        person_id = await self.ctx.person.get_id(platform=platform, user_id=str(user_id))
+        with self.store.db:
+            self.store.put("identity", {"id": key, "session_id": session, "user_id": str(user_id), "person_id": person_id})
+
+    @HookHandler("send_service.before_send")
+    async def sleep_before_send(self, message: dict, storage_message: bool = True, **kwargs):
+        if storage_message and self.living.sleeping(self.now()):
+            self.ctx.logger.info("MaiWeave 正在睡眠，本次聊天发言已暂停：%s", message["session_id"])
+            return {"action": "abort"}
+        return {"action": "continue"}
+
     def context_text(self, session: str) -> str:
         snapshot = self.engine.snapshot(session, self.now())
         for event in snapshot["experiences"]:
@@ -237,6 +257,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         snapshot["schedule_issues"] = [r for r in self.store.all("schedule_issue") if self.engine.visible(r, session)]
         snapshot["schedule_notices"] = [r for r in self.store.all("schedule_notice") if self.engine.visible(r, session)]
         snapshot["sleep_policy"] = {
+            "sleeping": self.living.sleeping(self.now()),
             "mode": "按作息生活" if self.config.life.schedule_enabled else "全天候交流",
             "awake_until": self.living.awake_until(self.now()).isoformat() if self.config.life.schedule_enabled and self.living.awake_until(self.now()) else "",
         }
@@ -261,7 +282,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "约好了后续时间的话题可以保存为跟进事项，解决后关闭。"
             "接续活动沿用保存的进度；关联目标时填写当前阶段 goal_step_id，按阶段推进。\n"
             "sleep_policy 中的 awake_until 尚未到期时，按已经醒来的状态回应。"
-            "睡眠期间，用户正在低落、需要陪伴或明确请求醒来时，调用 maiweave_wake 并说明当前表达。"
+            "sleep_policy.sleeping 为 true 时保持安静，普通聊天调用 stop 结束本轮。用户正在低落、需要陪伴或明确请求醒来时，调用 maiweave_wake；awake 为 true 后再回应。群聊和私聊遵循同一规则。"
             "结合前后文理解心情；已经恢复心情、转述往事和引用他人的话按各自语境回应。"
             "用户提到自己的称呼、生日或纪念日时，使用 maiweave_personal 查询并保存；修改时合并原有资料。填写了年份时可计算年龄或周年数，其余情况直接表达祝福。\n"
             + json.dumps(snapshot, ensure_ascii=False)
@@ -288,6 +309,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @Tool("maiweave_wake", description="用户当前需要陪伴或明确请求醒来时使用。结合当前消息和前文判断，reason 填写触发这次唤醒的具体表达。", parameters=schema({"reason": text_field("当前需要陪伴的表达")}, ["reason"]))
     @operation
     async def wake(self, reason: str, **kwargs):
+        await self.identify_person(kwargs["stream_id"], kwargs.get("user_id", ""), kwargs.get("platform", ""))
         return {"awake": self.living.wake(kwargs["stream_id"], self.now(), reason, kwargs.get("user_id", ""))}
 
     @Tool("maiweave_personal", description="用对话管理当前聊天流的个人资料与生日、纪念日。list 查询 ID；profile 保存称呼和备注；save_date 保存日期；delete_date 删除纪念日；delete_profile 删除人物及其纪念日。公历用 solar，农历用 lunar，农历闰月 leap_month=true，未知年份填0。修改时先查询原记录并合并用户提出的修改。", parameters=schema({
@@ -456,6 +478,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @HookHandler("chat.receive.after_process", name="maiweave_status")
     async def management_message(self, message: dict, **kwargs):
         if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
+            await self.identify_person(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""), message.get("platform", ""))
             self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now(),
                                          message.get("message_info", {}).get("user_info", {}).get("user_id", ""))
             return {"action": "continue"}
@@ -482,7 +505,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.6.12\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.6.13\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

@@ -24,13 +24,43 @@ class Living:
         self.spatial, self.rhythm, self.world = spatial, rhythm, world
         self.continuity = continuity
 
+    def person_key(self, session, user):
+        identity = self.engine.store.find("identity", f"{session}:{user}")
+        return identity["person_id"] if identity else ""
+
     def intimacy(self, session, user):
-        profile = next((p for p in self.engine.store.all("profile") if p["session_id"] == session and p["user_id"] == user), {})
+        identity = self.person_key(session, user)
+        profiles = [p for p in self.engine.store.all("profile") if
+                    (identity and p.get("person_id") == identity) or
+                    ((not identity or not p.get("person_id")) and p["session_id"] == session and p["user_id"] == user)]
+        profile = next((p for p in profiles if p.get("intimacy_mode") == "manual"), profiles[0] if profiles else {})
         level = profile.get("intimacy", 0)
         if profile.get("intimacy_mode") != "manual":
-            score = self.engine.relationship(session, user)["closeness"]
+            sessions = {session, *(p["session_id"] for p in profiles)}
+            sessions.update(i["session_id"] for i in self.engine.store.all("identity") if identity and i["person_id"] == identity)
+            score = max((self.engine.relationship(stream, user)["closeness"] for stream in sessions), default=0)
             level = max(level, 3 if score >= 80 else 2 if score >= 50 else 1 if score >= 20 else 0)
         return level
+
+    def sleeping(self, now):
+        config = self.config.life
+        if not (config.enabled and config.schedule_enabled) or self.awake_until(now):
+            return False
+        current = self.engine.current(now)
+        if current:
+            return current["kind"] == "sleep"
+        wake = self.engine.store.find("runtime", "awakening")
+        return bool(wake and wake.get("sleep_end") and self.engine.time(wake["sleep_end"]) > now)
+
+    def resume_sleep(self, now):
+        wake = self.engine.store.find("runtime", "awakening")
+        if not wake or not wake.get("sleep_end") or self.awake_until(now) or self.engine.current(now):
+            return
+        end = min(self.engine.time(wake["sleep_end"]), now + timedelta(minutes=self.engine.free_minutes(now)))
+        if end <= now:
+            return
+        self.spatial.schedule(PlanInput(title="继续睡觉", kind="sleep", start=now.isoformat(), end=end.isoformat(),
+                                       location=wake["sleep_location"]), "", now, autonomous=True)
 
     def check_influence(self, session, user, plans):
         level = self.intimacy(session, user)
@@ -45,7 +75,10 @@ class Living:
 
     def apply_schedule(self, now):
         """切换全天候模式时撤销自主睡眠，保留用户明确安排的日程。"""
-        if not self.config.life.enabled or self.config.life.schedule_enabled:
+        if not self.config.life.enabled:
+            return
+        if self.config.life.schedule_enabled:
+            self.resume_sleep(now)
             return
         self.engine.advance(now)
         for plan in self.engine.store.all("plan"):
@@ -57,17 +90,20 @@ class Living:
         if not (config.enabled and config.schedule_enabled and config.wake_enabled):
             return False
         current = self.engine.current(now)
-        if not (current and current["kind"] == "sleep") and not self.awake_until(now):
+        if not self.sleeping(now) and not self.awake_until(now):
             return False
+        if self.intimacy(session, user_id) < 3:
+            return False
+        previous = self.engine.store.find("runtime", "awakening") or {}
         if current and current["kind"] == "sleep":
-            if self.intimacy(session, user_id) < 3:
-                return False
+            previous = {"sleep_end": current["end"], "sleep_location": current["location"]}
             self.engine.advance(now)
             self.spatial.transition(current["id"], "cancel", current["session_id"], now)
+        minutes = config.wake_minutes * (1 + self.intimacy(session, user_id) / 3)
         with self.engine.store.db:
-            self.engine.store.put("runtime", {"id": "awakening", "until": (now + timedelta(minutes=config.wake_minutes * (1 + self.intimacy(session, user_id) / 3))).isoformat(),
-                                             "reason": reason, "session_id": session, "user_id": user_id})
-        self.ctx.logger.info("MaiWeave 已醒来，留出 %s 分钟聊天", config.wake_minutes)
+            self.engine.store.put("runtime", {**previous, "id": "awakening", "until": (now + timedelta(minutes=minutes)).isoformat(),
+                                             "reason": reason, "session_id": session, "user_id": user_id, "person_id": self.person_key(session, user_id)})
+        self.ctx.logger.info("MaiWeave 已醒来，留出 %s 分钟聊天", minutes)
         return True
 
     def wake_for_message(self, text, session, now, user_id=""):
@@ -77,10 +113,13 @@ class Living:
         if not (config.enabled and config.schedule_enabled and config.wake_enabled):
             return False
         active = self.engine.store.find("runtime", "awakening")
-        if self.awake_until(now) and active["session_id"] == session and active.get("user_id", "") == user_id:
+        same_person = active and ((self.person_key(session, user_id) and active.get("person_id") == self.person_key(session, user_id)) or
+                                  (not active.get("person_id") and active["session_id"] == session and active.get("user_id", "") == user_id))
+        if self.awake_until(now) and same_person:
             if any(word in text for word in ("晚安", "去睡吧", "我去睡了", "先聊到这里")):
                 with self.engine.store.db:
                     self.engine.store.put("runtime", {**active, "until": now.isoformat(), "reason": "这段聊天已结束，恢复作息"})
+                self.resume_sleep(now)
                 return True
             if text.strip():
                 return self.wake(session, now, "正在继续聊天", user_id)
@@ -299,7 +338,7 @@ class Living:
         current = engine.current(now)
         if not config.enabled or not in_hours(now.hour, config.start_hour, config.end_hour):
             return
-        if current and current["kind"] in {"sleep", "work", "study"}:
+        if self.sleeping(now) or (current and current["kind"] in {"sleep", "work", "study"}):
             return
         day = now.date().isoformat()
         sessions = dict.fromkeys([*config.session_ids, *(p["session_id"] for p in engine.store.all("profile"))])
