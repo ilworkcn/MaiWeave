@@ -7,6 +7,8 @@ import asyncio
 import hashlib
 import json
 import time
+import tomllib
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 import re
 from html import unescape
@@ -75,6 +77,61 @@ class CityPlaces(BaseModel):
 class World:
     def __init__(self, engine, context, config):
         self.engine, self.ctx, self.config = engine, context, config
+        self.host_config_path = Path.cwd() / "config" / "model_config.toml"
+
+    async def search_status(self):
+        """读取宿主联网任务分配，连接结果来自实际搜索或网页读取。"""
+        enabled = self.config.world.search_enabled
+        state = {"enabled": enabled, "configured": False, "ready": False, "service": ""}
+        try:
+            raw = await asyncio.to_thread(self.host_config_path.read_text, encoding="utf-8")
+            config = tomllib.loads(raw)
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            state["configuration"] = f"宿主联网配置读取失败：{error}"
+        else:
+            selected = config.get("model_task_config", {}).get("web_search", {}).get("model_list", [])
+            name = selected[0] if selected else ""
+            service = config.get("web", {}).get("services", {}).get(name)
+            state["service"] = name
+            if not name:
+                state["configuration"] = "请在 MaiBot「模型管理 → 功能分配 → 联网搜索」选择服务"
+            elif service is None:
+                state["configuration"] = f"请在 MaiBot 模型管理中添加联网服务「{name}」"
+            elif not service.get("server_ref" if service.get("adapter") == "stepsearch_mcp" else "api_key", "").strip():
+                state["configuration"] = f"请补充联网服务「{name}」的 MCP 连接名称或 API 密钥"
+            else:
+                state.update(configured=True, configuration=f"宿主已配置：{name}")
+        state["ready"] = enabled and state["configured"]
+        previous = self.engine.store.find("world_status", "host_web")
+        connection = "等待首次联网调用"
+        if previous and previous["service"] == state["service"]:
+            connection = f"上次{previous['operation']}：{previous['status']} · {previous['attempted_at'].replace('T', ' ')[:19]}"
+            if previous["error"]:
+                connection += f" · {previous['error']}"
+        state["connection"] = connection
+        switch = "插件联网已开启" if enabled else "请在插件「天气与见闻」开启宿主联网搜索"
+        state["summary"] = f"{switch}；{state['configuration']}；{connection}"
+        return state
+
+    async def request_web(self, operation, now, **arguments):
+        status = await self.search_status()
+        if not status["ready"]:
+            raise ValueError(status["configuration"] if status["enabled"] else "请在插件「天气与见闻」开启宿主联网搜索")
+        record = {"id": "host_web", "service": status["service"], "operation": "搜索" if operation == "search" else "网页读取",
+                  "attempted_at": now.isoformat(), "status": "连接中", "error": ""}
+        with self.engine.store.db:
+            self.engine.store.put("world_status", record)
+        try:
+            result = await getattr(self.ctx.web, operation)(**arguments)
+        except Exception as error:
+            record.update(status="连接失败", error=str(error))
+            raise
+        else:
+            record["status"] = "连接成功"
+            return result
+        finally:
+            with self.engine.store.db:
+                self.engine.store.put("world_status", record)
 
     def due(self, key: str, now, minutes: int, force: bool) -> bool:
         record = self.engine.store.find("world_status", key)
@@ -207,7 +264,7 @@ class World:
             store.put("world_status", status)
         try:
             query = f"{cfg.city} {cfg.country_code} {activity} 地点 名称 地址"
-            result = await self.ctx.web.search(query, max_results=8)
+            result = await self.request_web("search", now, query=query, max_results=8)
             sources = result["results"]
             prompt = ("根据活动需求，从联网搜索结果中选择最多三处适合前往的当地具体地点，按适合程度排序。"
                       "输出 JSON places 数组，每项包含 name（来源中出现的完整地点名）、category（自由填写地点类别）、"
@@ -244,9 +301,7 @@ class World:
         return collected
 
     async def search(self, query: str, now):
-        if not self.config.world.search_enabled:
-            raise ValueError("请在天气与外部世界配置中启用宿主联网搜索")
-        result = await self.ctx.web.search(query, max_results=5)
+        result = await self.request_web("search", now, query=query, max_results=5)
         record = {"id": hashlib.sha256((query + now.isoformat()).encode()).hexdigest()[:20],
                   "query": query, "retrieved_at": now.isoformat(), "results": result["results"], "source_kind": "宿主联网搜索"}
         with self.engine.store.db:
@@ -254,9 +309,7 @@ class World:
         return record
 
     async def read(self, url: str, now):
-        if not self.config.world.search_enabled:
-            raise ValueError("请先启用宿主联网搜索")
-        result = await self.ctx.web.fetch(url)
+        result = await self.request_web("fetch", now, url=url)
         record = {"id": hashlib.sha256(url.encode()).hexdigest()[:20], "url": url, "title": result["title"],
                   "content": result["content"][:12000], "retrieved_at": now.isoformat(), "source_kind": "外部网页"}
         with self.engine.store.db:

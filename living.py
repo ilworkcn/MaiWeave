@@ -227,6 +227,7 @@ class Living:
         with engine.store.db:
             engine.store.put("runtime", {"id": "planning", "at": now.isoformat(), "signature": signature})
         session = ""
+        search_ready = self.config.world.places_enabled and (await self.world.search_status())["ready"]
         goal_id = ""
         goal_step_id = ""
         continuation_id = ""
@@ -287,7 +288,7 @@ class Living:
                 "location 填已有地点名称；想去的新场所用 place_query 填简短稳定的地点搜索词，location 可留空。"
                 "同类需求复用相同搜索词，例如咖啡馆、东北菜餐厅、安静的咖啡馆；保留菜系、环境等具体要求。"
                 "根据本次活动决定是否需要新地点，例如喝咖啡找咖啡馆、吃饭找餐厅、购物找商场，类别自由选择。"
-                f"城市地点搜索开关：{self.config.world.places_enabled}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
+                f"城市地点联网可用：{search_ready}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
                 "外出时优先复用当前城市已收录的合适地点；居家活动使用住处或厨房。"
                 f"；可选地点名称：{json.dumps(places, ensure_ascii=False)}；"
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
@@ -304,7 +305,7 @@ class Living:
             if goal_id:
                 goal = engine.store.get("goal", goal_id)
                 session = goal["session_id"]
-        if place_query and self.config.world.places_enabled:
+        if place_query and search_ready:
             found = await self.world.discover_places(self.spatial, now, activity=place_query)
             if not found:
                 raise ValueError(f"本次活动尚未找到合适地点：{place_query}")

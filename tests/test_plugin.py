@@ -28,6 +28,8 @@ async def plugin(tmp_path):
                               maisaka=SimpleNamespace(proactive=SimpleNamespace(trigger=AsyncMock(return_value={"success": True}))))
     plugin._set_context(context)
     await plugin.on_load()
+    plugin.world.host_config_path = tmp_path / "model_config.toml"
+    plugin.world.host_config_path.write_text('[model_task_config.web_search]\nmodel_list=["test"]\n[web.services.test]\nadapter="tavily"\napi_key="test-key"\n', encoding="utf-8")
     yield plugin
     await plugin.on_unload()
 

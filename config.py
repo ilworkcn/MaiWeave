@@ -65,10 +65,10 @@ class WorldConfig(PluginConfigBase):
 
     __ui_label__ = "天气与外部世界"
     weather_enabled: bool = setting("启用实时天气", default=True, description="使用 Open-Meteo 实时天气数据")
-    search_enabled: bool = setting("启用宿主联网搜索", default=False, description="使用 MaiBot 已配置的统一联网服务，无需另填搜索密钥")
+    search_enabled: bool = setting("启用宿主联网搜索", default=False, description="控制地点搜索、联网检索和网页读取；服务在 MaiBot「模型管理 → 功能分配 → 联网搜索」选择。")
     city: str = setting("天气城市（使用天气时必填）", default="大庆", description="角色生活所在城市，天气和地点搜索共用此项。", json_schema_extra={"placeholder": "例如：大庆"})
     country_code: str = setting("国家或地区代码（选填）", default="CN", description="有同名城市时可以补充：中国填 CN，日本填 JP；选填。", json_schema_extra={"placeholder": "例如：CN"})
-    places_enabled: bool = setting("按城市自动搜索生活地点", default=False, description="自主规划按活动需求搜索当地场所，如餐厅、咖啡馆或商场；已有合适地点可直接复用。")
+    places_enabled: bool = setting("按城市自动搜索生活地点", default=False, description="自主规划按活动需求搜索当地场所，如餐厅、咖啡馆或商场；已有合适地点可直接复用；新搜索需要开启宿主联网搜索总开关。")
     news_enabled: bool = setting("启用订阅资讯", default=False, description="读取已配置的 RSS 或 Atom 信息源")
     feed_urls: list[str] = setting("资讯订阅地址（启用资讯后必填）", default_factory=list, description="每项填写一个真实 RSS 或 Atom 地址，例如 https://站点域名/feed.xml；未启用可留空。")
     weather_minutes: int = setting("天气更新间隔（分钟）", default=60, ge=15, description="实时天气刷新频率")

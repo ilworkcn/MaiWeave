@@ -27,8 +27,11 @@ def life(tmp_path):
     cfg = MaiWeaveConfig()
     ctx = SimpleNamespace(logger=logging.getLogger("test"), llm=SimpleNamespace(generate=AsyncMock()),
                           web=SimpleNamespace(search=AsyncMock(), fetch=AsyncMock()))
+    world = World(engine, ctx, cfg)
+    world.host_config_path = tmp_path / "model_config.toml"
+    world.host_config_path.write_text('[model_task_config.web_search]\nmodel_list=["test"]\n[web.services.test]\nadapter="tavily"\napi_key="test-key"\n', encoding="utf-8")
     yield SimpleNamespace(engine=engine, store=store, spatial=spatial, cfg=cfg, ctx=ctx, now=now,
-                          rhythm=Rhythm(engine, spatial, cfg), world=World(engine, ctx, cfg), dreams=Dreams(engine, ctx, cfg))
+                          rhythm=Rhythm(engine, spatial, cfg), world=world, dreams=Dreams(engine, ctx, cfg))
     store.close()
 
 

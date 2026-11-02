@@ -15,6 +15,7 @@ def test_city_defaults():
 
 
 async def test_city_search_connects_places_to_schedule(plugin):
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.ctx.web = SimpleNamespace(search=AsyncMock(return_value={"results": [
         {"title": "大庆黎明湖公园", "url": "https://example.org/park", "snippet": "大庆市黎明湖公园"}]}))
@@ -27,8 +28,10 @@ async def test_city_search_connects_places_to_schedule(plugin):
     assert "黎明湖公园" in plugin.context_text("a")
     assert place["id"] in {p["id"] for p in plugin.world.planning_places()}
     assert "park" not in {p["id"] for p in plugin.world.planning_places()}
+    plugin.config.world.search_enabled = False
     await plugin.world.discover_places(plugin.spatial, plugin.now(), activity="湖边散步")
     assert plugin.ctx.web.search.await_count == 1
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = False
     await plugin.world.discover_places(plugin.spatial, plugin.now(), force=True)
     assert plugin.ctx.web.search.await_count == 1
@@ -38,6 +41,7 @@ async def test_city_search_connects_places_to_schedule(plugin):
     assert any(p["name"] == "黎明湖公园" for p in (await plugin.ui_editor_records("plan"))["places"])
     saved = plugin.spatial.save_place("黎明湖公园", True, "更新介绍", place["id"])
     assert saved["source_url"] == place["source_url"]
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.config.world.city = "哈尔滨"
     assert plugin.world.place_status()["status"] == "尚未搜索"
@@ -75,6 +79,7 @@ async def test_weather_changes_city_without_waiting_for_interval(plugin):
     ("去商场买生活用品", "leisure", "商场", "城市商场"),
 ])
 async def test_autonomous_activity_searches_and_schedules_its_venue(plugin, activity, kind, category, name):
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.config.life.autonomous = True
     plugin.config.life.schedule_enabled = False
@@ -92,13 +97,14 @@ async def test_autonomous_activity_searches_and_schedules_its_venue(plugin, acti
     trip = plugin.store.get("plan", plan["travel_id"])
     assert trip["route"]["destination"] == name
     assert plugin.engine.time(trip["end"]) == plugin.engine.time(plan["start"])
-    assert activity in plugin.ctx.web.search.call_args.args[0]
+    assert activity in plugin.ctx.web.search.call_args.kwargs["query"]
     assert plugin.spatial.place(name)["search_request"] == activity
 
 
 async def test_existing_place_is_reused_by_autonomous_planning(plugin):
     plugin.config.life.autonomous = True
     plugin.config.life.schedule_enabled = False
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.ctx.web = SimpleNamespace(search=AsyncMock())
     place = plugin.spatial.save_place("常去咖啡馆", False, "已收录咖啡馆")
@@ -113,6 +119,7 @@ async def test_existing_place_is_reused_by_autonomous_planning(plugin):
 async def test_place_cache_survives_restart_and_query_updates(plugin):
     from maiweave.store import Store
     from datetime import timedelta
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.ctx.web = SimpleNamespace(search=AsyncMock(return_value={"results": [
         {"title": "湖畔咖啡", "url": "https://example.org/cafe"}]}))
@@ -145,6 +152,7 @@ async def test_place_cache_survives_restart_and_query_updates(plugin):
 
 async def test_empty_place_cache_expires_and_errors_can_retry(plugin):
     from datetime import timedelta
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.ctx.web = SimpleNamespace(search=AsyncMock(return_value={"results": []}))
     plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"places": []}'}
@@ -166,6 +174,7 @@ async def test_empty_place_cache_expires_and_errors_can_retry(plugin):
 
 async def test_webui_place_search_uses_cache_and_explicit_refresh(plugin):
     import asyncio
+    plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True
     plugin.world.discover_places = AsyncMock(return_value=[])
     await plugin.ui_discover_places("咖啡馆")
