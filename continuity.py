@@ -1,5 +1,6 @@
 """具体活动结果、语义习惯、阶段目标和持续事项。"""
 
+import asyncio
 import hashlib
 import json
 from datetime import timedelta
@@ -12,6 +13,15 @@ from .usage import generate
 class Continuity:
     def __init__(self, engine, context, config):
         self.engine, self.ctx, self.config = engine, context, config
+        with engine.store.db:
+            for record in engine.store.all("reflection"):
+                if record["status"] == "生成中":
+                    record.update(status="失败", error="上次活动回顾随插件停止而中断")
+                    engine.store.put("reflection", record)
+            for goal in engine.store.all("goal"):
+                if goal.get("outline_status") == "分解中":
+                    goal.update(outline_status="失败", outline_error="上次目标分解随插件停止而中断")
+                    engine.store.put("goal", goal)
 
     async def ask(self, prompt, model, feature):
         return await generate(self.ctx, self.engine.store, self.config, feature, prompt, model)
@@ -31,12 +41,14 @@ class Continuity:
         store = self.engine.store
         if self.config.continuity.goal_planning:
             pending = [g for g in store.all("goal") if g["status"] == "active" and not g.get("steps")
-                       and g.get("outline_status", "待分解") == "待分解"]
+                       and g.get("outline_status", "待分解") in {"待分解", "失败"}
+                       and (not g.get("outline_retry_at") or self.engine.time(g["outline_retry_at"]) <= now)]
             if pending:
                 await self.outline(pending[0]["id"], now)
         pending = [p for p in store.all("plan") if p["status"] == "completed" and not p.get("book_id") and p["kind"] not in {"travel", "sleep", "diary"}
                    and 0 <= (now - self.engine.time(p["end"])).total_seconds() < self.config.rhythm.learning_days * 86400
-                   and not store.find("reflection", p["id"])]
+                   and ((record := store.find("reflection", p["id"])) is None or
+                        (record["status"] == "失败" and (not record.get("retry_at") or self.engine.time(record["retry_at"]) <= now)))]
         for plan in pending[:3]:
             await self.reflect(plan["id"], now)
 
@@ -120,8 +132,8 @@ class Continuity:
                     self.engine.progress_stage(plan, result.goal_units, result.next_action or "依据已有记录评估进展")
                 store.put("reflection", record)
             return record
-        except Exception as error:
-            record.update(status="失败", error=str(error))
+        except (Exception, asyncio.CancelledError) as error:
+            record.update(status="失败", error=str(error) or "活动回顾中断", retry_at=(now + timedelta(minutes=5)).isoformat())
             with store.db:
                 store.put("reflection", record)
             raise
@@ -157,8 +169,8 @@ class Continuity:
             with store.db:
                 store.put("goal", goal)
             return goal
-        except Exception as error:
-            goal.update(outline_status="失败", outline_error=str(error))
+        except (Exception, asyncio.CancelledError) as error:
+            goal.update(outline_status="失败", outline_error=str(error) or "目标分解中断", outline_retry_at=(now + timedelta(minutes=5)).isoformat())
             with store.db:
                 store.put("goal", goal)
             raise

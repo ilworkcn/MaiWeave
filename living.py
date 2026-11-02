@@ -182,7 +182,7 @@ class Living:
             if not temporary:
                 plan.update(title="室内休息" if state["energy"] < 25 or state["stress"] >= 70 else "室内休闲",
                             kind="rest" if state["energy"] < 25 or state["stress"] >= 70 else "leisure",
-                            location=self.spatial.place("home")["name"], goal_id="", goal_step_id="")
+                            location=self.spatial.place("home")["name"], goal_id="", goal_step_id="", book_id="", continuation_id="")
                 start += timedelta(minutes=self.spatial.route(state["location"], plan["location"])["minutes"])
             plan.update(start=start.isoformat(), end=(start + duration).isoformat(), status="scheduled", motivation=why)
             plan["changes"].append({"at": now.isoformat(), "action": "动态调整", "before": before, "reason": why})

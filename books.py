@@ -232,6 +232,8 @@ class Books:
                          details={"书名": book["title"], "章节": note["chapter_title"], "内容": note["summary"], "原文摘句": note["quote"],
                                   "角色读后感": note["thoughts"], "读后问题": note["question"]})
             store.put("experience", event)
+            if plan.get("goal_step_id"):
+                self.engine.progress_stage(plan, 1, note["summary"])
             if book["status"] == "已读完":
                 for future in store.all("plan"):
                     if future.get("book_id") == book["id"] and future["status"] == "scheduled":

@@ -68,10 +68,12 @@ class Diary:
 
     async def process(self, now):
         for plan in self.engine.store.all("plan"):
-            if plan["kind"] != "diary" or plan["status"] != "active":
+            if plan["kind"] != "diary" or plan["status"] not in {"active", "completed"}:
                 continue
             day = plan.get("diary_day") or self.engine.time(plan["start"]).date().isoformat()
             old = self.engine.store.find("diary", day)
+            if plan["status"] == "completed" and (not old or old.get("plan_id") != plan["id"]):
+                continue
             if old and old.get("plan_id") == plan["id"]:
                 if old["status"] in {"已生成", "生成中"}:
                     continue

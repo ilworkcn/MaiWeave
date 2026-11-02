@@ -1,6 +1,8 @@
 """生成睡后梦境，保存梦境内容与醒后心情。"""
 
+import asyncio
 import json
+from datetime import timedelta
 
 from .models import DreamContent
 from .usage import generate
@@ -9,15 +11,21 @@ from .usage import generate
 class Dreams:
     def __init__(self, engine, context, config):
         self.engine, self.ctx, self.config = engine, context, config
+        with engine.store.db:
+            for record in engine.store.all("dream"):
+                if record["status"] == "生成中":
+                    record.update(status="生成失败", error="上次梦境生成随插件停止而中断")
+                    engine.store.put("dream", record)
 
     async def process(self, now):
         if not self.config.dreams.enabled:
             return
         for plan in self.engine.store.all("plan"):
+            old = self.engine.store.find("dream", plan["id"])
             if (plan["status"] == "completed" and plan["kind"] == "sleep"
                     and plan["elapsed_seconds"] >= self.config.dreams.minimum_hours * 3600
                     and 0 <= (now - self.engine.time(plan["end"])).total_seconds() < 86400
-                    and self.engine.store.find("dream", plan["id"]) is None):
+                    and (old is None or (old["status"] == "生成失败" and (not old.get("retry_at") or self.engine.time(old["retry_at"]) <= now)))):
                 await self.generate(plan["id"], now)
 
     async def generate(self, plan_id: str, now) -> dict:
@@ -47,8 +55,8 @@ class Dreams:
                 if self.config.dreams.mood_effect:
                     self.engine.affect(content.mood_delta, 0, "梦醒后的感受：" + content.feeling, now)
             return record
-        except Exception as error:
-            record.update(status="生成失败", error=str(error))
+        except (Exception, asyncio.CancelledError) as error:
+            record.update(status="生成失败", error=str(error) or "梦境生成中断", retry_at=(now + timedelta(minutes=5)).isoformat())
             with self.engine.store.db:
                 self.engine.store.put("dream", record)
             raise
