@@ -1451,7 +1451,8 @@
             },
             "content": {
               "type": "string",
-              "required": false
+              "required": false,
+              "max_length": 32768
             },
             "size": {
               "type": "integer",

@@ -97,3 +97,18 @@ async def test_reading_chunk_uses_configured_limit(plugin):
     note=plugin.store.get('book_note',plan['id'])
     assert note['end']==500 and note['next_offset']==500
     assert len(plugin.ctx.llm.generate.call_args.args[0].split('正文：\n')[1])==500
+
+async def test_full_browser_upload_chunks_fit_declared_parameters(plugin):
+    import re
+    root=Path(__file__).parents[1]
+    page=next(p for p in json.loads((root/'webui.json').read_text(encoding='utf-8'))['pages'] if p['id']=='books')
+    chunk_size=int(re.search(r'offset\+=([0-9]+)',(root/'webui/editor.html').read_text(encoding='utf-8')).group(1))
+    content_limit=page['actions']['book_upload']['parameters']['content'].get('max_length',4000)
+    raw=('# 第一章\n'+'测试书籍正文。'*12000).encode('utf-8')
+    row=await plugin.ui_book_upload('begin',filename='完整片段.txt',size=len(raw))
+    for offset in range(0,len(raw),chunk_size):
+        content=base64.b64encode(raw[offset:offset+chunk_size]).decode()
+        assert len(content)<=content_limit
+        await plugin.ui_book_upload('append',upload_id=row['id'],content=content)
+    book=await plugin.ui_book_upload('finish',upload_id=row['id'])
+    assert book['characters']==len(raw.decode().strip())

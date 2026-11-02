@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "ilworkcn.maiweave",
   "name": "MaiWeave",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "由对话与时间共同驱动的持续角色生活引擎",
   "author": {
     "name": "ilworkcn",
