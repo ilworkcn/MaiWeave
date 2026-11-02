@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "id": "ilworkcn.maiweave",
   "name": "MaiWeave · 麦织｜阅读与生活",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "给麦麦一本书，让它按日程阅读、留下笔记，和你聊读后感。聊天也能改变生活安排，串起日记、人物关系与纪念日。",
   "author": {
     "name": "ilworkcn",
@@ -17,7 +17,18 @@
     "min_version": "2.21.0",
     "max_version": "2.21.99"
   },
-  "dependencies": [],
+  "dependencies": [
+    {
+      "type": "python_package",
+      "name": "lunar_python",
+      "version_spec": "==1.4.8"
+    },
+    {
+      "type": "python_package",
+      "name": "tzdata",
+      "version_spec": ">=2026.1"
+    }
+  ],
   "capabilities": [
     "llm.generate",
     "config.get",
