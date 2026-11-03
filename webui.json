@@ -1892,7 +1892,7 @@
       "content": [
         {
           "type": "text",
-          "value": "记录 MaiWeave 发起的模型请求。Token 使用宿主返回值，缺少用量的调用标为「用量未返回」。"
+          "value": "记录 MaiWeave 发起的模型请求。Token 使用 MaiBot 返回值，缺少用量的调用标为「用量未返回」。"
         },
         {
           "type": "grid",

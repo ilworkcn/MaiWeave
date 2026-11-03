@@ -1,4 +1,4 @@
-"""使用真实 SDK 检查注册和工具链，宿主服务使用测试替身。"""
+"""使用真实 SDK 检查注册和工具链，MaiBot 服务使用测试替身。"""
 
 import json
 import asyncio
@@ -111,7 +111,7 @@ async def test_proactive_requests_are_limited(plugin):
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 1
     assert plugin.store.get("sharing", "chat-a")["count"] == 1
     decisions = (await plugin.ui_overview())["share_decisions"]
-    assert [row["outcome"] for row in decisions[:2]] == ["跳过", "宿主已受理"]
+    assert [row["outcome"] for row in decisions[:2]] == ["跳过", "MaiBot 已受理"]
     assert decisions[0]["session"] == "chat-a"
     assert "下次可请求时间" in decisions[0]["reason"]
     assert "经历分享" in decisions[1]["reason"]

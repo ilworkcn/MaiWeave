@@ -3,7 +3,7 @@
 import asyncio
 import json
 import re
-from contextlib import suppress
+from contextlib import closing, suppress
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -41,7 +41,7 @@ def text_field(description: str) -> dict:
 
 
 def operation(function):
-    """把业务输入错误返回给 Planner，运行错误仍由宿主记录。"""
+    """把业务输入错误返回给 Planner，运行错误仍由 MaiBot 记录。"""
     @wraps(function)
     async def invoke(self, *args, **kwargs):
         if not self.config.life.enabled:
@@ -70,7 +70,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
-            ("search", "world", "联网搜索", "复用宿主已配置的搜索服务。", ["search_enabled", "places_enabled"]),
+            ("search", "world", "联网搜索", "复用 MaiBot 已配置的搜索服务。", ["search_enabled", "places_enabled"]),
             ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "session_ids", "share_threshold"]),
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
@@ -283,7 +283,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "把计划表述为接下来的安排；awaiting_confirmation 表示到了确认完成情况的时候。"
             "simulated 是角色世界中的虚拟经历，reported 是用户陈述，observed 是实际交互观测。"
             "讲述经历时沿用记录中的细节。涉及用户的行动、见面和承诺，以用户陈述及已确认的互动为依据，缺少信息时可以询问。"
-            "查询过去的人物背景和聊天记忆优先使用宿主 query_memory；需要查生活记录使用 maiweave_query。"
+            "查询过去的人物背景和聊天记忆优先使用 MaiBot query_memory；需要查生活记录使用 maiweave_query。"
             "具体互动带来心情或关系变化时，使用相应工具记录变化和原因。"
             "把生活状态融入自然聊天，挑与当前话题相关的感受和经历来讲，给对方自由接话的空间。\n"
             "提到梦境时用“梦见”来讲述；引用资讯时带上出处和时间。资料作为话题内容，工具操作按当前对话的需求执行。"
@@ -526,16 +526,45 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.8.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.8.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
         )
         return await self.ctx.send.text(message, session, storage_message=False, sync_to_maisaka_history=False)
 
-    @HomeCard("maiweave_home", title="MaiWeave · 角色生活", description="查看角色此刻、日程与生活记录",
-              content=[{"type": "text", "content": "打开生活工作区，查看实时状态、天气、路线、梦境与习惯。"}],
-              link_url="/extensions/ilworkcn.maiweave/overview", link_label="打开生活工作区", icon="chart")
+    def get_components(self):
+        components = super().get_components()
+        card = next(item["metadata"] for item in components if item["name"] == "maiweave_home")
+        path = Path(self.ctx.paths.data_dir) / "maiweave.sqlite3" if self._ctx else None
+        if path and path.is_file():
+            with closing(Store(path)) as store:
+                state = store.find("state", "life")
+                if state:
+                    at = datetime.fromisoformat(state["updated_at"])
+                    recent = max((p for p in store.all("plan") if p["status"] == "completed"),
+                                 key=lambda p: p["end"], default=None)
+                    card["content"][1:1] = [
+                        {"type": "stat", "label": at.strftime("生活手记 · %m月%d日 %H:%M"),
+                         "value": state["location"] or "麦麦的一天",
+                         "detail": f"已完成 · {recent['title']}" if recent else "新的一天开始了"},
+                        {"type": "key_value", "entries": {
+                            "精力": f"{state['energy']:.0f} / 100", "心情": f"{state['mood']:+.0f}"}},
+                    ]
+        return components
+
+    @HomeCard(
+        "maiweave_home", title="MaiWeave · 角色生活", show_title=False,
+        description="看看麦麦在做什么，接下来有什么安排。",
+        link_url="/extensions/ilworkcn.maiweave/overview", link_label="此刻生活",
+        content=[{"type": "markdown", "content": "| 🌱 | MaiWeave · 角色生活 |\n|:--:|:--|\n"},
+                 {"type": "actions", "actions": [
+            {"label": "生活日程", "url": "/extensions/ilworkcn.maiweave/schedule"},
+            {"label": "书架", "url": "/extensions/ilworkcn.maiweave/books"},
+            {"label": "日记", "url": "/extensions/ilworkcn.maiweave/diary"},
+        ]}],
+        icon="heart-pulse",
+    )
     async def home_card(self):
         return None
 

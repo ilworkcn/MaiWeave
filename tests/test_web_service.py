@@ -1,4 +1,4 @@
-"""宿主联网配置检查、地点缓存和实际调用状态。"""
+"""MaiBot 联网配置检查、地点缓存和实际调用状态。"""
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -29,7 +29,7 @@ async def test_master_switch_cache_force_and_connection_results(plugin):
     plugin.config.world.places_enabled = True
     plugin.ctx.web = SimpleNamespace(search=AsyncMock(return_value={"results":[]}), fetch=AsyncMock(return_value={"title":"网页", "content":"正文"}))
     now = plugin.now()
-    with pytest.raises(ValueError, match="开启宿主联网搜索"):
+    with pytest.raises(ValueError, match="开启 MaiBot 联网搜索"):
         await plugin.world.discover_places(plugin.spatial, now, activity="咖啡")
     plugin.ctx.web.search.assert_not_awaited()
     plugin.config.world.search_enabled = True

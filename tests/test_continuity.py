@@ -309,14 +309,14 @@ async def test_failed_proactive_request_remains_pending(plugin):
     plugin.config.proactive.enabled = True
     plugin.config.proactive.session_ids = ["a"]
     thread = plugin.continuity.save_thread("关心作品", "上次说还在修改", "a", now.isoformat(), now)
-    plugin.ctx.maisaka.proactive.trigger.return_value = {"success": False, "error": "宿主拒绝请求"}
-    with pytest.raises(RuntimeError, match="宿主拒绝"):
+    plugin.ctx.maisaka.proactive.trigger.return_value = {"success": False, "error": "MaiBot 拒绝请求"}
+    with pytest.raises(RuntimeError, match="MaiBot 拒绝"):
         await plugin.living.share(now)
     assert plugin.store.get("thread", thread["id"])["requested_at"] == ""
     assert plugin.store.find("sharing", "a") is None
     decision = (await plugin.ui_overview())["share_decisions"][0]
     assert decision["outcome"] == "请求失败"
-    assert "宿主拒绝请求" in decision["reason"]
+    assert "MaiBot 拒绝请求" in decision["reason"]
 
 
 async def test_full_tick_goal_activity_result_and_webui(plugin, monkeypatch):

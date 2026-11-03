@@ -1,4 +1,4 @@
-"""通过宿主公开的 WebUI 接口访问 A_Memorix。"""
+"""通过 MaiBot 公开的 WebUI 接口访问 A_Memorix。"""
 
 import asyncio
 import json

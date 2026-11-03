@@ -1,4 +1,4 @@
-"""自主活动与主动交流，复用宿主模型和发言机制。"""
+"""自主活动与主动交流，复用 MaiBot 模型和发言机制。"""
 
 import json
 import re
@@ -465,9 +465,9 @@ class Living:
                 if not result["success"]:
                     raise RuntimeError(result.get("error") or "主动交流请求失败")
             except Exception as error:
-                record("请求失败", f"{reason}。宿主返回：{error}", session, score)
+                record("请求失败", f"{reason}。MaiBot 返回：{error}", session, score)
                 raise
-            record("宿主已受理", reason, session, score)
+            record("MaiBot 已受理", reason, session, score)
             sent.update(count=sent["count"] + 1, last_at=now.isoformat())
             if notices:
                 sent.setdefault("notice_ids", []).append(notices[0][0])

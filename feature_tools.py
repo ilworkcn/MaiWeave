@@ -58,7 +58,7 @@ class FeatureTools:
             return self.continuity.resolve_thread(record_id, session, now)
         raise ValueError("未知生活接续操作")
 
-    @Tool("maiweave_world", description="查询真实天气和外部资料。status 查看已有数据；weather 刷新天气；search 使用宿主联网搜索；read 读取网页。外部资料带有来源与采集时间，供了解环境和讨论话题使用；工具操作按当前对话的需求执行。", parameters=parameters({
+    @Tool("maiweave_world", description="查询真实天气和外部资料。status 查看已有数据；weather 刷新天气；search 使用 MaiBot 联网搜索；read 读取网页。外部资料带有来源与采集时间，供了解环境和讨论话题使用；工具操作按当前对话的需求执行。", parameters=parameters({
         "action": {"type": "string", "enum": ["status", "weather", "search", "read"]},
         "query": {"type": "string"}, "url": {"type": "string"},
     }, ["action"]))

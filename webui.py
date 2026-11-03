@@ -107,7 +107,7 @@ class WebUI:
         self.start_job("确认资料修改", self.reviews.decide(review_id, accept))
         return {"review_id": review_id}
 
-    @API("ui_chat_choices", description="读取宿主聊天流选项")
+    @API("ui_chat_choices", description="读取 MaiBot 聊天流选项")
     async def ui_chat_choices(self) -> dict:
         rows = await self.ctx.chat.get_all_streams(platform="all_platforms")
         return {"items": [{"id": row["stream_id"], "name": row.get("group_name") or row.get("user_cardname") or row.get("user_nickname") or row["stream_id"]} for row in rows]}
@@ -462,7 +462,7 @@ class WebUI:
             "continuations": [{**p, "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")][-30:],
             "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")][-50:],
             "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
-                         "request_label": "已向宿主请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")][-100:],
+                         "request_label": "已向 MaiBot 请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")][-100:],
             "goals": [{**g, "outline_status": g.get("outline_status", "待分解"), "outline_error": g.get("outline_error", ""), "status_label": STATUS[g["status"]]} for g in goals],
             "steps": [{**s, "goal_title": g["title"], "status_label": "进行中" if s["id"] in active_steps else {"pending": "未开始", "active": "进行中", "completed": "已完成"}[s["status"]]} for g in goals for s in g.get("steps", [])],
             "jobs": self.store.all("job")[-10:],

@@ -1,4 +1,4 @@
-"""真实天气、订阅资讯和宿主联网资料。"""
+"""真实天气、订阅资讯和 MaiBot 联网资料。"""
 
 from pydantic import BaseModel, Field
 from .usage import generate
@@ -80,14 +80,14 @@ class World:
         self.host_config_path = Path.cwd() / "config" / "model_config.toml"
 
     async def search_status(self):
-        """读取宿主联网任务分配，连接结果来自实际搜索或网页读取。"""
+        """读取 MaiBot 联网任务分配，连接结果来自实际搜索或网页读取。"""
         enabled = self.config.world.search_enabled
         state = {"enabled": enabled, "configured": False, "ready": False, "service": ""}
         try:
             raw = await asyncio.to_thread(self.host_config_path.read_text, encoding="utf-8")
             config = tomllib.loads(raw)
         except (OSError, tomllib.TOMLDecodeError) as error:
-            state["configuration"] = f"宿主联网配置读取失败：{error}"
+            state["configuration"] = f"MaiBot 联网配置读取失败：{error}"
         else:
             selected = config.get("model_task_config", {}).get("web_search", {}).get("model_list", [])
             name = selected[0] if selected else ""
@@ -100,7 +100,7 @@ class World:
             elif not service.get("server_ref" if service.get("adapter") == "stepsearch_mcp" else "api_key", "").strip():
                 state["configuration"] = f"请补充联网服务「{name}」的 MCP 连接名称或 API 密钥"
             else:
-                state.update(configured=True, configuration=f"宿主已配置：{name}")
+                state.update(configured=True, configuration=f"MaiBot 已配置：{name}")
         state["ready"] = enabled and state["configured"]
         previous = self.engine.store.find("world_status", "host_web")
         connection = "等待首次联网调用"
@@ -109,14 +109,14 @@ class World:
             if previous["error"]:
                 connection += f" · {previous['error']}"
         state["connection"] = connection
-        switch = "插件联网已开启" if enabled else "请在插件「天气与见闻」开启宿主联网搜索"
+        switch = "插件联网已开启" if enabled else "请在插件「天气与见闻」开启 MaiBot 联网搜索"
         state["summary"] = f"{switch}；{state['configuration']}；{connection}"
         return state
 
     async def request_web(self, operation, now, **arguments):
         status = await self.search_status()
         if not status["ready"]:
-            raise ValueError(status["configuration"] if status["enabled"] else "请在插件「天气与见闻」开启宿主联网搜索")
+            raise ValueError(status["configuration"] if status["enabled"] else "请在插件「天气与见闻」开启 MaiBot 联网搜索")
         record = {"id": "host_web", "service": status["service"], "operation": "搜索" if operation == "search" else "网页读取",
                   "attempted_at": now.isoformat(), "status": "连接中", "error": ""}
         with self.engine.store.db:
@@ -303,7 +303,7 @@ class World:
     async def search(self, query: str, now):
         result = await self.request_web("search", now, query=query, max_results=5)
         record = {"id": hashlib.sha256((query + now.isoformat()).encode()).hexdigest()[:20],
-                  "query": query, "retrieved_at": now.isoformat(), "results": result["results"], "source_kind": "宿主联网搜索"}
+                  "query": query, "retrieved_at": now.isoformat(), "results": result["results"], "source_kind": "MaiBot 联网搜索"}
         with self.engine.store.db:
             self.engine.store.put("research", record)
         return record

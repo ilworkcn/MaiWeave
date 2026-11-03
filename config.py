@@ -35,7 +35,7 @@ class LifeConfig(PluginConfigBase):
     wake_hour: int = setting("习惯起床时间（整点）", default=7, ge=0, le=23, description="夜间睡眠窗口结束时间")
     tick_seconds: int = setting("状态更新间隔（秒）", default=60, ge=10, description="每次推进生活的间隔")
     planning_interval_minutes: int = setting("自主规划间隔（分钟）", default=30, ge=5, description="生活情况保持一致时的规划间隔；活动结束、日程与目标变化会触发新规划。")
-    background: str = setting("生活背景（选填）", default="", description="留空沿用宿主人格；可补充居住环境、日常身份和生活偏好。", json_schema_extra={"x-widget": "textarea", "rows": 2, "placeholder": "例如：住在城市近郊，白天工作，晚上喜欢读书。"})
+    background: str = setting("生活背景（选填）", default="", description="留空沿用 MaiBot 人格；可补充居住环境、日常身份和生活偏好。", json_schema_extra={"x-widget": "textarea", "rows": 2, "placeholder": "例如：住在城市近郊，白天工作，晚上喜欢读书。"})
     interests: list[str] = setting("兴趣爱好（选填）", default_factory=lambda: ["阅读", "散步"], description="已有阅读、散步作为参考，可修改或删除；每项填写一个兴趣。")
 
 
@@ -43,7 +43,7 @@ class ProactiveConfig(PluginConfigBase):
     """启用后向个人资料和额外列表中的聊天流发送消息，提醒和跟进共用时段与额度。"""
 
     __ui_label__ = "主动交流"
-    enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求宿主主动开口")
+    enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求 MaiBot 主动开口")
     session_ids: list[str] = setting("额外接收聊天流（选填）", default_factory=list, description="个人资料中选择的聊天流自动用于主动交流和纪念日提醒。这里填写额外的群聊或其他聊天流；可发送 /maiweave 获取 ID。")
     share_threshold: int = setting("经历分享最低分", default=6, ge=1, le=10, description="分数越高，主动分享的经历越少。生日祝福、约定提醒按各自时间触发。", json_schema_extra={"choices": list(range(1, 11))})
     daily_limit: int = setting("每日主动请求上限", default=2, ge=0, description="每个聊天流每天的请求次数")
@@ -53,12 +53,12 @@ class ProactiveConfig(PluginConfigBase):
 
 
 class MemoryConfig(PluginConfigBase):
-    """按需连接原生记忆；开启后需要有效的宿主地址和登录凭据。"""
+    """按需连接原生记忆；开启后需要有效的 MaiBot 地址和登录凭据。"""
 
     __ui_label__ = "原生记忆"
-    enabled: bool = setting("启用原生记忆连接", default=False, description="读取和同步宿主 A_Memorix")
-    base_url: str = setting("宿主网页地址（启用记忆后必填）", default="http://127.0.0.1:8001", description="已填本机默认地址；WebUI 在其他机器或端口时修改。")
-    session_cookie: str = setting("网页登录凭据（远程宿主选填）", default="", description="默认读取 MaiBot 运行目录的 webui.json 或 data/webui.json；连接远程宿主时可填写其 Cookie。", json_schema_extra={"x-widget": "password", "input_type": "password", "placeholder": "填写实际的 maibot_session 值"})
+    enabled: bool = setting("启用原生记忆连接", default=False, description="读取和同步 MaiBot A_Memorix")
+    base_url: str = setting("MaiBot 网页地址（启用记忆后必填）", default="http://127.0.0.1:8001", description="已填本机默认地址；WebUI 在其他机器或端口时修改。")
+    session_cookie: str = setting("网页登录凭据（远程 MaiBot 选填）", default="", description="默认读取 MaiBot 运行目录的 webui.json 或 data/webui.json；连接远程 MaiBot 时可填写其 Cookie。", json_schema_extra={"x-widget": "password", "input_type": "password", "placeholder": "填写实际的 maibot_session 值"})
 
 
 class WorldConfig(PluginConfigBase):
@@ -66,10 +66,10 @@ class WorldConfig(PluginConfigBase):
 
     __ui_label__ = "天气与外部世界"
     weather_enabled: bool = setting("启用实时天气", default=True, description="使用 Open-Meteo 实时天气数据")
-    search_enabled: bool = setting("启用宿主联网搜索", default=False, description="控制地点搜索、联网检索和网页读取；服务在 MaiBot「模型管理 → 功能分配 → 联网搜索」选择。")
+    search_enabled: bool = setting("启用 MaiBot 联网搜索", default=False, description="控制地点搜索、联网检索和网页读取；服务在 MaiBot「模型管理 → 功能分配 → 联网搜索」选择。")
     city: str = setting("天气城市（使用天气时必填）", default="大庆", description="角色生活所在城市，天气和地点搜索共用此项。", json_schema_extra={"placeholder": "例如：大庆"})
     country_code: str = setting("国家或地区代码（选填）", default="CN", description="有同名城市时可以补充：中国填 CN，日本填 JP；选填。", json_schema_extra={"placeholder": "例如：CN"})
-    places_enabled: bool = setting("按城市自动搜索生活地点", default=False, description="自主规划按活动需求搜索当地场所，如餐厅、咖啡馆或商场；已有合适地点可直接复用；新搜索需要开启宿主联网搜索总开关。")
+    places_enabled: bool = setting("按城市自动搜索生活地点", default=False, description="自主规划按活动需求搜索当地场所，如餐厅、咖啡馆或商场；已有合适地点可直接复用；新搜索需要开启 MaiBot 联网搜索总开关。")
     news_enabled: bool = setting("启用订阅资讯", default=False, description="读取已配置的 RSS 或 Atom 信息源")
     feed_urls: list[str] = setting("资讯订阅地址（启用资讯后必填）", default_factory=list, description="每项填写一个真实 RSS 或 Atom 地址，例如 https://站点域名/feed.xml；未启用可留空。")
     weather_minutes: int = setting("天气更新间隔（分钟）", default=60, ge=15, description="实时天气刷新频率")
@@ -101,7 +101,7 @@ class ContinuityConfig(PluginConfigBase):
 
     __ui_label__ = "生活连贯性"
     outcomes_enabled: bool = setting("生成具体活动结果", default=True, description="独自模拟活动结束后生成细节、感受和下次接续内容")
-    semantic_learning: bool = setting("归并同类活动与学习偏好", default=True, description="使用宿主模型归并不同说法，依据已发生体验更新偏好")
+    semantic_learning: bool = setting("归并同类活动与学习偏好", default=True, description="使用 MaiBot 模型归并不同说法，依据已发生体验更新偏好")
     goal_planning: bool = setting("分解与推进长期目标", default=True, description="将目标拆成可执行阶段，并依据活动结果推进")
     adaptive_schedule: bool = setting("动态调整自主日程", default=True, description="天气、精力与临时事件改变时调整可变动安排")
     reminder_minutes: int = setting("共同安排提前提醒（分钟）", default=30, ge=1, le=120, description="使用已有主动交流开关、时段和额度")
