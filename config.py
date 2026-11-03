@@ -46,8 +46,8 @@ class ProactiveConfig(PluginConfigBase):
     enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求 MaiBot 主动开口")
     session_ids: list[str] = setting("额外接收聊天流（选填）", default_factory=list, description="个人资料中选择的聊天流自动用于主动交流和纪念日提醒。这里填写额外的群聊或其他聊天流；可发送 /maiweave 获取 ID。")
     share_threshold: int = setting("经历分享最低分", default=5, ge=1, le=10, description="分数越高，主动分享的经历越少。生日祝福、约定提醒按各自时间触发。", json_schema_extra={"choices": list(range(1, 11))})
-    daily_limit: int = setting("每日主动请求上限", default=2, ge=0, description="每个聊天流每天的请求次数")
-    cooldown_minutes: int = setting("主动交流间隔（分钟）", default=180, ge=1, description="两次请求的最短间隔")
+    daily_limit: int = setting("每日主动请求上限", default=4, ge=0, description="每个聊天流每天的请求次数")
+    cooldown_minutes: int = setting("主动交流间隔（分钟）", default=60, ge=1, description="两次请求的最短间隔")
     start_hour: int = setting("允许开始时间（整点）", default=9, ge=0, le=23, description="主动交流时间窗口起点")
     end_hour: int = setting("允许结束时间（整点）", default=22, ge=0, le=23, description="到这个整点停止主动交流")
 
