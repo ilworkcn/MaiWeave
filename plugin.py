@@ -19,6 +19,7 @@ from .living import Living
 from .memory import NativeMemory
 from .models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .store import Store
+from .share_receipts import planner_task
 from .world import World
 from .spatial import Spatial
 from .rhythm import Rhythm
@@ -311,6 +312,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         if not self.config.life.enabled:
             return {"action": "continue"}
         session = kwargs["session_id"]
+        self.living.receipts.turn[session] = planner_task(kwargs["items"])
         latest = next((i for i in reversed(kwargs["items"]) if i["item_type"] == "UserMessageItem"), {})
         text = "".join(p["text"] for p in latest.get("parts", []) if p.get("type") == "text")
         book_id = self.books.mentioned_book(text)
@@ -324,6 +326,11 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "parts": [{"type": "text", "text": self.context_text(session, book_id)}],
         })
         return {"action": "continue", "modified_kwargs": kwargs}
+
+    @HookHandler("maisaka.planner.after_response")
+    async def planner_receipt(self, session_id: str, output_items: list, **kwargs):
+        self.living.receipts.observe(session_id, output_items)
+        return {"action": "continue"}
 
     @HookHandler("maisaka.replyer.before_request")
     async def reply_context(self, **kwargs):
@@ -533,7 +540,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.8.3\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.8.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

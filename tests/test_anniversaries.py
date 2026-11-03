@@ -77,5 +77,6 @@ async def test_profile_stream_receives_reminder_without_duplicate_configuration(
     plugin.ctx.maisaka.proactive.trigger.reset_mock()
     plugin.config.proactive.session_ids = ["chat-profile", "chat-extra"]
     plugin.store.delete("sharing", "chat-profile")
+    plugin.store.delete("share_receipt", "proactive:ilworkcn.maiweave:1")
     await plugin.living.share(now)
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 1

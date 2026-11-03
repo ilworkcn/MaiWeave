@@ -11,6 +11,7 @@ from .engine import LifeEngine
 from .models import ActivityChoice, PlanInput
 from .anniversaries import Anniversaries
 from .usage import generate
+from .share_receipts import ShareReceipts
 
 
 def in_hours(hour: int, start: int, end: int) -> bool:
@@ -25,6 +26,7 @@ class Living:
         self.spatial, self.rhythm, self.world = spatial, rhythm, world
         self.continuity = continuity
         self.share_decisions = deque(maxlen=10)
+        self.receipts = ShareReceipts(engine.store, context)
 
     def person_key(self, session, user):
         identity = self.engine.store.find("identity", f"{session}:{user}")
@@ -400,7 +402,7 @@ class Living:
             return
 
         def record(outcome, reason, session="全部", score="本轮未筛选经历"):
-            self.share_decisions.appendleft({"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
+            self.share_decisions.appendleft({"created": now.isoformat(), "at": now.strftime("%m-%d %H:%M:%S"), "session": session,
                                              "outcome": outcome, "reason": reason, "score": score})
 
         if not in_hours(now.hour, config.start_hour, config.end_hour):
@@ -410,20 +412,23 @@ class Living:
         if self.sleeping(now) or (current and current["kind"] in {"sleep", "work", "study"}):
             record("跳过", f"正在{current['title']}" if current else "角色正在睡眠")
             return
-        day = now.date().isoformat()
+        await self.receipts.refresh(now)
         sessions = dict.fromkeys([*config.session_ids, *(p["session_id"] for p in engine.store.all("profile"))])
         if not sessions:
             record("跳过", "请在个人资料或额外接收列表中选择聊天流")
         for session in sessions:
-            sent = engine.store.find("sharing", session) or {"id": session, "day": day, "count": 0, "last_at": "", "experience_ids": []}
-            if sent["day"] != day:
-                sent.update(day=day, count=0)
-            if sent["count"] >= config.daily_limit:
-                record("跳过", f"今日已请求 {sent['count']}/{config.daily_limit} 次，明日恢复额度", session)
+            sent = engine.store.find("sharing", session) or {"id": session, "experience_ids": []}
+            times = self.receipts.sent_times(session, now.tzinfo)
+            count = sum(at.date() == now.date() for at in times)
+            if count >= config.daily_limit:
+                record("跳过", f"今日实际已发送 {count}/{config.daily_limit} 次", session)
                 continue
-            if sent["last_at"] and (now - engine.time(sent["last_at"])).total_seconds() < config.cooldown_minutes * 60:
-                next_at = engine.time(sent["last_at"]) + timedelta(minutes=config.cooldown_minutes)
-                record("跳过", f"上次请求在 {engine.time(sent['last_at']):%H:%M}，间隔 {config.cooldown_minutes} 分钟，下次可请求时间 {next_at:%m-%d %H:%M}", session)
+            if times and now < (next_at := max(times) + timedelta(minutes=config.cooldown_minutes)):
+                record("跳过", f"上次实际发送在 {max(times):%H:%M}，下次可请求时间 {next_at:%m-%d %H:%M}", session)
+                continue
+            if any(row["session"] == session and row["outcome"] == "MaiBot 已受理"
+                   for row in self.engine.store.all("share_receipt")):
+                record("跳过", "上一次主动交流正在等待回执", session)
                 continue
             in_window = [e for e in engine.store.all("experience") if engine.visible(e, session)
                          and timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
@@ -484,8 +489,8 @@ class Living:
             except Exception as error:
                 record("请求失败", f"{reason}。MaiBot 返回：{error}", session, score)
                 raise
-            record("MaiBot 已受理", reason, session, score)
-            sent.update(count=sent["count"] + 1, last_at=now.isoformat())
+            self.receipts.accept(result["task_id"], {"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
+                                                     "reason": reason, "score": score}, now)
             if notices:
                 sent.setdefault("notice_ids", []).append(notices[0][0])
                 if notices[0][2]:

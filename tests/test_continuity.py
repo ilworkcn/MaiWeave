@@ -229,6 +229,11 @@ async def test_reminder_and_followup_request_are_once_only(plugin):
     plan = plugin.engine.create_plan(PlanInput(title="一起聊天", start=(now + timedelta(minutes=15)).isoformat(), end=(now + timedelta(minutes=45)).isoformat(), participants=["用户"]), "a", now)
     thread = plugin.continuity.save_thread("上次的作品", "用户说今天完成后想聊聊", "a", now.isoformat(), now)
     await plugin.living.share(now)
+    task = plugin.ctx.maisaka.proactive.trigger.return_value["task_id"]
+    row = plugin.store.get("share_receipt", task)
+    with plugin.store.db:
+        plugin.store.put("share_receipt", {**row, "outcome": "Planner 选择沉默"})
+    plugin.ctx.maisaka.proactive.trigger.return_value = {"success": True, "task_id": task + "2"}
     await plugin.living.share(now + timedelta(minutes=2))
     await plugin.living.share(now + timedelta(minutes=4))
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 2

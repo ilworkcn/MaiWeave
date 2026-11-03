@@ -26,7 +26,8 @@ async def plugin(tmp_path):
                               send=SimpleNamespace(text=AsyncMock(return_value=True)),
                               config=SimpleNamespace(get=AsyncMock(return_value={"personality": "喜欢安静"})),
                               llm=SimpleNamespace(get_available_models=AsyncMock(return_value=["utils", "replyer", "planner"]), generate=AsyncMock(return_value={"success": False, "error": "测试尚未设置模型结果"})),
-                              maisaka=SimpleNamespace(proactive=SimpleNamespace(trigger=AsyncMock(return_value={"success": True}))))
+                              db=SimpleNamespace(get=AsyncMock(return_value=None)),
+                              maisaka=SimpleNamespace(proactive=SimpleNamespace(trigger=AsyncMock(return_value={"success": True, "task_id": "proactive:ilworkcn.maiweave:1"}))))
     plugin._set_context(context)
     await plugin.on_load()
     plugin.world.host_config_path = tmp_path / "model_config.toml"
@@ -100,8 +101,47 @@ async def test_sleep_trip_arrives_before_sleep_and_wakes_on_time(plugin):
     assert plugin.store.get("plan", sleep["travel_id"])["route"]["destination"] == "住处"
 
 
-async def test_proactive_requests_are_limited(plugin):
+@pytest.mark.parametrize("tool, outcome", [("reply", "实际已发送"), ("stop", "Planner 选择沉默")])
+async def test_proactive_delivery_controls_budget(plugin, tool, outcome):
+    from maiweave.models import ExperienceInput
+    from maiweave.share_receipts import planner_task
     now = plugin.now().replace(hour=12)
+    cfg = plugin.config.proactive
+    cfg.enabled, cfg.session_ids, cfg.daily_limit, cfg.cooldown_minutes = True, ["chat-a"], 1, 60
+    for score in (6, 7):
+        plugin.engine.record_experience(ExperienceInput(summary="读书有了新发现", importance=score,
+            occurred_at=now.isoformat(), source="simulated", evidence="角色模拟"), "chat-a", now)
+    await plugin.living.share(now)
+    task = plugin.ctx.maisaka.proactive.trigger.return_value["task_id"]
+    marker = {"item_type": "UserMessageItem", "parts": [{"type": "text", "text":
+        f'<plugin_proactive_task id="{task}" plugin_id="ilworkcn.maiweave">'}]}
+    ordinary = {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": "<message msg_id=123>你好"}]}
+    assert not planner_task([marker, ordinary])
+    await plugin.planner_context(session_id="chat-a", items=[marker])
+    await plugin.planner_receipt("chat-a", [{"item_type": "FunctionCallItem", "tool_call": {"func_name": tool, "call_id": "c1"}}])
+    at = now + timedelta(minutes=2)
+    data = {"success": True, "metadata": {"send_results": [{"success": True}, {"success": True}]} if tool == "reply" else {}}
+    plugin.ctx.db.get.return_value = {"tool_name": tool, "timestamp": at.isoformat(), "tool_data": json.dumps(data)}
+    await plugin.living.receipts.refresh(at)
+    await plugin.living.receipts.refresh(at)
+    assert plugin.store.get("share_receipt", task)["outcome"] == outcome
+    assert len(plugin.living.receipts.sent_times("chat-a", now.tzinfo)) == int(tool == "reply")
+    plugin.ctx.maisaka.proactive.trigger.return_value = {"success": True, "task_id": task + "2"}
+    await plugin.living.share(at + timedelta(minutes=10))
+    if tool == "stop":
+        assert plugin.ctx.maisaka.proactive.trigger.await_count == 2
+    else:
+        assert "今日实际已发送 1/1" in plugin.living.share_decisions[0]["reason"]
+        cfg.daily_limit = 4
+        await plugin.living.share(at + timedelta(minutes=59))
+        assert "上次实际发送" in plugin.living.share_decisions[0]["reason"]
+        await plugin.living.share(at + timedelta(minutes=60))
+        assert plugin.ctx.maisaka.proactive.trigger.await_count == 2
+
+
+async def test_proactive_requests_are_limited(plugin, monkeypatch):
+    now = plugin.now().replace(hour=12)
+    monkeypatch.setattr(plugin, "now", lambda: now + timedelta(minutes=1))
     plugin.config.proactive.enabled = True
     plugin.config.proactive.session_ids = ["chat-a"]
     from maiweave.models import ExperienceInput
@@ -109,11 +149,11 @@ async def test_proactive_requests_are_limited(plugin):
     await plugin.living.share(now)
     await plugin.living.share(now + timedelta(minutes=1))
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 1
-    assert plugin.store.get("sharing", "chat-a")["count"] == 1
+    assert plugin.living.receipts.sent_times("chat-a", now.tzinfo) == []
     decisions = (await plugin.ui_overview())["share_decisions"]
     assert [row["outcome"] for row in decisions[:2]] == ["跳过", "MaiBot 已受理"]
     assert decisions[0]["session"] == "chat-a"
-    assert "下次可请求时间" in decisions[0]["reason"]
+    assert "等待回执" in decisions[0]["reason"]
     assert "经历分享" in decisions[1]["reason"]
 
 

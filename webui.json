@@ -305,12 +305,13 @@
         },
         {
           "type": "table",
-          "label": "主动交流判定 · 最近 10 条（本次运行）",
+          "label": "主动交流判定 · 最近 10 条",
           "value": {"source": "data", "field": "share_decisions"},
           "columns": [
             {"field": "at", "label": "判定时间"},
             {"field": "session", "label": "聊天流"},
             {"field": "outcome", "label": "结果"},
+            {"field": "delivery", "label": "MaiBot 回执"},
             {"field": "score", "label": "候选经历最高分"},
             {"field": "reason", "label": "原因"}
           ]

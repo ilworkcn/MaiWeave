@@ -229,6 +229,7 @@ class WebUI:
 
     @API("ui_overview", description="生活状态和趋势")
     async def ui_overview(self) -> dict:
+        await self.living.receipts.refresh(self.now())
         now, state = self.now(), self.engine.state()
         current = self.engine.current(now)
         plans = self.store.all("plan")
@@ -261,7 +262,7 @@ class WebUI:
                 "planning_failure": failure["message"] if failure else "暂无失败记录",
                 "planning_history": decisions,
                 "share_status": "已启用" if self.config.proactive.enabled else "已关闭",
-                "share_decisions": list(self.living.share_decisions),
+                "share_decisions": self.living.receipts.history(self.living.share_decisions),
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
                 "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",
                 "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "当前没有陪伴时段",
