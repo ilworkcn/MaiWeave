@@ -10,8 +10,8 @@ from test_plugin import plugin
 
 TEXT = '# 第一章 风\n风吹过窗前的银杏树。\n# 第二章 灯\n夜里一盏灯照着书页。'
 
-async def upload(plugin, text=TEXT):
-    row = await plugin.ui_book_upload('begin', filename='银杏书.md', author='测试作者')
+async def upload(plugin, text=TEXT, filename='银杏书.md'):
+    row = await plugin.ui_book_upload('begin', filename=filename, author='测试作者')
     raw = text.encode('utf-8')
     for offset in range(0, len(raw), 7):
         await plugin.ui_book_upload('append', upload_id=row['id'], content=base64.b64encode(raw[offset:offset+7]).decode())
@@ -52,10 +52,30 @@ async def test_upload_read_finish_context_diary_and_next_chapter(plugin):
     assert plugin.ctx.llm.generate.await_count==calls
     await plugin.books.process(end+timedelta(seconds=1))
     assert plugin.store.get('book',book['id'])==b
+    other = await upload(plugin, '# 第一章 海\n潮水退去了。', '潮汐.md')
+    await plugin.ui_book_action('schedule', book_id=other['id'], minutes=15)
+    plugin.engine.advance(end + timedelta(seconds=3))
+    plugin.ctx.llm.generate.return_value = {'success': True, 'response': json.dumps({
+        'summary': '海滩露出了礁石。', 'thoughts': '走近潮水有些紧张。', 'quote': '潮水退去了。', 'question': '潮水几点再来？'})}
+    await plugin.books.process(end + timedelta(seconds=3))
+    assert '想起安静的下午' not in plugin.ctx.llm.generate.call_args.args[0]
+    end += timedelta(minutes=16)
+    plugin.engine.advance(end)
+    await plugin.books.process(end)
+    plugin.now = lambda: end + timedelta(seconds=1)
+    items = [{'item_type': 'UserMessageItem', 'parts': [{'type': 'text', 'text': '聊聊《银杏书》？'}]}]
+    planner = await plugin.planner_context(session_id='group', items=items)
+    reply = await plugin.reply_context(session_id='group', extra_prompt='')
+    for context in (planner['modified_kwargs']['items'][0]['parts'][0]['text'], reply['modified_kwargs']['extra_prompt']):
+        shelf = json.loads(context.split('\n')[-1])['bookshelf']
+        assert [n['book_id'] for n in shelf['notes']] == [book['id']]
+        assert shelf['notes'][0]['thoughts'] == '想起安静的下午。'
     p=await plugin.ui_book_action('schedule',book_id=book['id'],minutes=15)
     plugin.engine.advance(end+timedelta(seconds=3));answer(plugin,'夜里一盏灯照着书页。')
     await plugin.books.process(end+timedelta(seconds=3))
-    assert '夜里一盏灯' in plugin.ctx.llm.generate.call_args.args[0]
+    prompt = plugin.ctx.llm.generate.call_args.args[0]
+    assert all(s in prompt for s in ('夜里一盏灯', '想起安静的下午。', '下一章会写什么？', '窗前的银杏树随风摆动。'))
+    assert '潮水几点再来' not in prompt
     plugin.engine.advance(end+timedelta(minutes=16));await plugin.books.process(end+timedelta(minutes=16))
     assert plugin.store.get('book',book['id'])['status']=='已读完'
     assert any(u['feature']=='书籍阅读' for u in plugin.store.all('model_usage'))
@@ -101,6 +121,27 @@ async def test_autonomous_and_native_book_tools(plugin):
     assert p['book_id']==book['id'] and book['title'] in p['title']
     assert (await plugin.books_tool('list',stream_id='a'))['books'][0]['id']==book['id']
     assert any(c['name']=='maiweave_books' for c in plugin.get_components())
+
+async def test_planning_changes_activity_after_long_reading(plugin):
+    book = await upload(plugin)
+    start = plugin.now()
+    for minutes in (0, 45):
+        when = start + timedelta(minutes=minutes)
+        plugin.books.schedule(book['id'], when.isoformat(), 45, plugin.spatial, when)
+        plugin.engine.advance(when + timedelta(minutes=45))
+    plugin.config.life.autonomous = True
+    plugin.config.life.schedule_enabled = False
+    reading = {'title': '继续看书', 'kind': 'leisure', 'minutes': 30, 'location': '住处',
+               'motivation': '想看下一章', 'book_id': book['id']}
+    other = {**reading, 'title': '翻翻冰箱准备午饭', 'kind': 'meal', 'book_id': ''}
+    plugin.ctx.llm.generate.side_effect = [
+        {'success': True, 'response': json.dumps(choice, ensure_ascii=False)} for choice in (reading, other)]
+    now = start + timedelta(minutes=90)
+    await plugin.living.choose_activity(now)
+    plan = plugin.engine.current(now)
+    assert plan['title'] == '翻翻冰箱准备午饭' and not plan['book_id']
+    assert '过去两小时已读书 90 分钟' in plugin.ctx.llm.generate.call_args_list[0].args[0]
+
 
 def test_epub_uses_spine_and_metadata(tmp_path):
     p=tmp_path/'书.epub'

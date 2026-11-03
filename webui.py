@@ -235,7 +235,13 @@ class WebUI:
         journey = state.get("journey")
         travel = f"{journey['location']} → {journey['next']}（{journey['progress']}%）" if journey and journey["next"] else "当前没有移动"
         history = sorted(self.store.all("state_history"), key=lambda r: r["at"])[-144:]
+        since = now - timedelta(hours=24)
+        trend = [r for r in history if since <= self.engine.time(r["at"]) <= now]
+        if len(trend) > 13:
+            trend = [trend[round(i * (len(trend) - 1) / 12)] for i in range(13)]
         return {"state": state, "activity": current["title"] if current else "空闲", "travel": travel,
+                "share_status": "已启用" if self.config.proactive.enabled else "已关闭",
+                "share_decisions": list(self.living.share_decisions),
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
                 "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",
                 "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "当前没有陪伴时段",
@@ -244,6 +250,7 @@ class WebUI:
                 "pending_count": sum(p["status"] in {"scheduled", "active"} for p in plans),
                 "experience_count": len(self.store.all("experience")), "dream_count": len(self.store.all("dream")),
                 "habit_count": sum(h["active"] for h in self.store.all("habit")), "history": history,
+                "energy_trend": [{"time": self.engine.time(r["at"]).strftime("%H:%M"), "energy": r["energy"]} for r in trend],
                 "next_plans": [plan_row(p) for p in sorted(plans, key=lambda p: p["start"]) if p["status"] in {"scheduled", "active"}][:12],
                 "errors": "\n".join(f"{name}：{error}" for name, error in self.last_errors.items()) or "无运行错误",
                 "jobs": self.store.all("job")[-10:]}

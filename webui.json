@@ -94,6 +94,11 @@
                 },
                 {
                   "type": "text",
+                  "label": "主动交流",
+                  "value": {"source": "data", "field": "share_status"}
+                },
+                {
+                  "type": "text",
                   "label": "作息模式",
                   "value": {
                     "source": "data",
@@ -221,6 +226,18 @@
         },
         {
           "type": "table",
+          "label": "主动交流判定 · 最近 10 条（本次运行）",
+          "value": {"source": "data", "field": "share_decisions"},
+          "columns": [
+            {"field": "at", "label": "判定时间"},
+            {"field": "session", "label": "聊天流"},
+            {"field": "outcome", "label": "结果"},
+            {"field": "score", "label": "候选经历最高分"},
+            {"field": "reason", "label": "原因"}
+          ]
+        },
+        {
+          "type": "table",
           "label": "接下来的安排",
           "value": {
             "source": "data",
@@ -255,12 +272,12 @@
           "children": [
             {
               "type": "chart",
-              "label": "最近精力变化",
+              "label": "最近精力变化 · 近 24 小时",
               "value": {
                 "source": "data",
-                "field": "history"
+                "field": "energy_trend"
               },
-              "x": "label",
+              "x": "time",
               "y": "energy",
               "chart_type": "line"
             },

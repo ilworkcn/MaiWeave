@@ -287,6 +287,9 @@ async def test_failed_proactive_request_remains_pending(plugin):
         await plugin.living.share(now)
     assert plugin.store.get("thread", thread["id"])["requested_at"] == ""
     assert plugin.store.find("sharing", "a") is None
+    decision = (await plugin.ui_overview())["share_decisions"][0]
+    assert decision["outcome"] == "请求失败"
+    assert "宿主拒绝请求" in decision["reason"]
 
 
 async def test_full_tick_goal_activity_result_and_webui(plugin, monkeypatch):

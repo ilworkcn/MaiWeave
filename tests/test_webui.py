@@ -2,11 +2,26 @@
 
 import inspect
 import json
+from datetime import timedelta
 from pathlib import Path
 
 from maiweave.config import MaiWeaveConfig
 from maiweave.plugin import create_plugin
 from test_plugin import plugin
+
+
+async def test_energy_chart_keeps_first_and_latest_samples(plugin):
+    now = plugin.now()
+    with plugin.store.db:
+        for i in range(144):
+            at = now - timedelta(minutes=10 * (143 - i))
+            key = at.strftime("%Y-%m-%dT%H:") + f"{at.minute // 10 * 10:02d}"
+            plugin.store.put("state_history", {"id": key, "at": at.isoformat(), "energy": i / 2})
+    overview = await plugin.ui_overview()
+    points = overview["energy_trend"]
+    assert len(points) == 13 and len(overview["history"]) == 144
+    assert [p["energy"] for p in points] == sorted(p["energy"] for p in points)
+    assert points[0]["energy"] == 0 and points[-1]["energy"] == 71.5
 
 
 def test_config_labels_and_controls_are_chinese():

@@ -115,6 +115,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.rhythm = Rhythm(self.engine, self.spatial, self.config)
         self.dreams = Dreams(self.engine, self.ctx, self.config)
         self.books = Books(self.engine, self.ctx, self.config, self.ctx.paths.data_dir)
+        self.chat_books = {}
         self.diary = Diary(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
@@ -125,6 +126,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.last_errors = {}
         self.jobs = set()
         self.background = {}
+        self.next_share_check = None
         self.worker = asyncio.create_task(self.run_life(), name="maiweave-life")
         self.ctx.logger.info("MaiWeave 已加载")
 
@@ -163,6 +165,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
                           ("主动交流", self.living.share), ("生活日记", self.diary.process), ("书籍阅读", self.books.process)]:
             if name not in self.background or self.background[name].done():
+                if name == "主动交流":
+                    if not self.config.proactive.enabled or (self.next_share_check and now < self.next_share_check):
+                        continue
+                    self.next_share_check = now + timedelta(minutes=10)
                 task = asyncio.create_task(self.run_background(name, job), name="maiweave-" + name)
                 self.background[name] = task
                 self.jobs.add(task)
@@ -242,7 +248,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             return {"action": "abort"}
         return {"action": "continue"}
 
-    def context_text(self, session: str) -> str:
+    def context_text(self, session: str, book_id: str = "") -> str:
         snapshot = self.engine.snapshot(session, self.now())
         for event in snapshot["experiences"]:
             for key in ("history", "memory_id", "memory_revision"):
@@ -255,7 +261,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.world.planning_places()]
         snapshot["habits"] = [h for h in self.store.all("habit") if h["active"] and h["enabled"] and self.engine.visible(h, session)]
         snapshot["dreams"] = [d for d in self.store.all("dream") if d["status"] == "已生成" and self.engine.visible(d, session)][-2:]
-        snapshot["bookshelf"] = self.books.context()
+        snapshot["bookshelf"] = self.books.context(book_id=book_id)
         snapshot["continuity"] = self.continuity.context(session, self.now())
         snapshot["schedule_issues"] = [r for r in self.store.all("schedule_issue") if self.engine.visible(r, session)]
         snapshot["schedule_notices"] = [r for r in self.store.all("schedule_notice") if self.engine.visible(r, session)]
@@ -296,10 +302,18 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def planner_context(self, **kwargs):
         if not self.config.life.enabled:
             return {"action": "continue"}
+        session = kwargs["session_id"]
+        latest = next((i for i in reversed(kwargs["items"]) if i["item_type"] == "UserMessageItem"), {})
+        text = "".join(p["text"] for p in latest.get("parts", []) if p.get("type") == "text")
+        book_id = self.books.mentioned_book(text)
+        if book_id:
+            self.chat_books[session] = book_id
+        else:
+            self.chat_books.pop(session, None)
         kwargs["items"].insert(0, {
             "item_type": "SystemMessageItem",
             "meta": {"item_id": "maiweave-" + uuid4().hex, "logical_turn_id": None, "timestamp": self.now().isoformat()},
-            "parts": [{"type": "text", "text": self.context_text(kwargs["session_id"])}],
+            "parts": [{"type": "text", "text": self.context_text(session, book_id)}],
         })
         return {"action": "continue", "modified_kwargs": kwargs}
 
@@ -307,7 +321,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def reply_context(self, **kwargs):
         if not self.config.life.enabled:
             return {"action": "continue"}
-        kwargs["extra_prompt"] += self.context_text(kwargs["session_id"])
+        session = kwargs["session_id"]
+        book_id = self.books.mentioned_book(kwargs.get("reply_reason", "")) or self.chat_books.get(session, "")
+        kwargs["extra_prompt"] += self.context_text(session, book_id)
         return {"action": "continue", "modified_kwargs": kwargs}
 
     @Tool("maiweave_wake", description="用户当前需要陪伴或明确请求醒来时使用。结合当前消息和前文判断，reason 填写触发这次唤醒的具体表达。", parameters=schema({"reason": text_field("当前需要陪伴的表达")}, ["reason"]))

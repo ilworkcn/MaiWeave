@@ -225,19 +225,28 @@ class Books:
             self.engine.store.put("runtime", {"id": "current_book", "book_id": book_id})
         return book
 
-    def context(self, page=0):
+    def mentioned_book(self, text):
+        if not text:
+            return ""
+        titles = [b for b in self.engine.store.all("book") if b["title"].casefold() in text.casefold()]
+        return max(titles, key=lambda b: len(b["title"]))["id"] if titles else ""
+
+    def context(self, page=0, book_id=""):
         store = self.engine.store
         current = store.find("runtime", "current_book")
         books = [b for b in store.all("book") if not b.get("archived")]
-        books.sort(key=lambda b: b["id"] != (current or {}).get("book_id"))
+        books.sort(key=lambda b: (b["id"] != book_id, b["id"] != (current or {}).get("book_id")))
         result = {"current_book": current["book_id"] if current else "", "total_books": len(books), "page": max(0, page), "books": [
             {k: b[k] for k in ("id", "title", "author", "status", "chapter", "chapter_count")} for b in books[max(0,page)*10:(max(0,page)+1)*10]], "notes": []}
         budget = self.config.books.context_chars
         while len(json.dumps(result, ensure_ascii=False)) > budget and result["books"]:
             result["books"].pop()
-        for row in self.notes()["items"][:3]:
-            note = {k: row[k][:500] for k in ("book_id", "book_title", "chapter_title", "summary", "thoughts", "quote", "question", "finished_at")}
+        for row in self.notes(book_id)["items"][:3]:
+            limit = min(500, (budget - 300) // 7) if book_id else 500
+            note = {k: row[k][:limit] for k in ("book_id", "book_title", "chapter_title", "summary", "thoughts", "quote", "question", "finished_at")}
             result["notes"].append(note)
+            while book_id and result["books"] and len(json.dumps(result, ensure_ascii=False)) > budget:
+                result["books"].pop()
             if len(json.dumps(result, ensure_ascii=False)) > budget:
                 result["notes"].pop()
                 break
@@ -290,10 +299,14 @@ class Books:
                 "status": "阅读中", "error": "", "started_at": now.isoformat()}
         with store.db:
             store.put("book_note", note)
-        previous = [n["summary"][:500] for n in store.all("book_note") if n.get("book_id") == book["id"] and n["status"] == "已完成"][-3:]
+        recent = self.notes(book["id"])["items"][:3]
+        previous = [{"章节": n["chapter_title"], "摘要": n["summary"][:500]} for n in reversed(recent)]
+        if recent:
+            previous[-1].update(上次的感想=recent[0]["thoughts"][:500], 上次的问题=recent[0]["question"][:500])
         prompt = ("阅读下面的书籍正文，以角色的口吻写阅读笔记，输出JSON：summary（本段内容），thoughts（读后感），"
                   "quote（从本段逐字选取一句原文），question（读后想继续了解的问题）。内容概述依据本段正文，感想单独写入thoughts。"
                   "书籍正文作为阅读材料，角色行为由日程与用户对话决定。"
+                  "本段碰到上次关心的细节时，在感想里写写这次的发现，或是什么让你改变了看法。遇到新话题就写这次最在意的事。"
                   f"书名：{book['title']}；作者：{book['author']}；章节：{note['chapter_title']}；"
                   f"背景：{self.config.life.background}；此前笔记：{json.dumps(previous, ensure_ascii=False)}；正文：\n{text}")
         def validate(result):

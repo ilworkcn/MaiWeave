@@ -3,6 +3,7 @@
 import json
 import re
 import hashlib
+from collections import deque
 from datetime import datetime, timedelta
 
 from .config import MaiWeaveConfig
@@ -23,6 +24,7 @@ class Living:
         self.config = config
         self.spatial, self.rhythm, self.world = spatial, rhythm, world
         self.continuity = continuity
+        self.share_decisions = deque(maxlen=10)
 
     def person_key(self, session, user):
         identity = self.engine.store.find("identity", f"{session}:{user}")
@@ -276,6 +278,13 @@ class Living:
             motivation, minutes = continuation["next_action"], min(free, 30)
         else:
             goals = [g for g in engine.store.all("goal") if g["status"] == "active"]
+            completed = sorted((p for p in engine.store.all("plan") if p["status"] == "completed"),
+                               key=lambda p: engine.time(p["end"]), reverse=True)
+            window = now - timedelta(hours=2)
+            reading_seconds = sum(min(p["elapsed_seconds"], (engine.time(p["end"]) - max(window, engine.time(p["start"]))).total_seconds())
+                                  for p in completed if p.get("book_id") and engine.time(p["end"]) > window)
+            reading_minutes = round(reading_seconds / 60)
+            last_meal = next((engine.time(p["end"]).strftime("%m-%d %H:%M") for p in completed if p["kind"] == "meal"), "暂无记录")
             personality = await self.ctx.config.get("personality")
             recent = [{"summary": e["summary"], "source": e["source"]} for e in engine.store.all("experience")[-8:]]
             environment = self.world.context(now)
@@ -286,6 +295,7 @@ class Living:
                 "读书、工作、休闲和休息都可以。kind 从 study/work/leisure/rest/meal/social 中选择，出行由地点路线自动安排。"
                 "字段 title、kind、minutes（10到120）、location、motivation、goal_id（无关联填空字符串）。"
                 f"当前时间：{now.isoformat()}；可用分钟：{free}；"
+                f"上次用餐结束：{last_meal}。过去两小时已读书 {reading_minutes} 分钟。到饭点可以安排做饭、用餐。"
                 f"人格：{json.dumps(personality, ensure_ascii=False)}；补充背景：{config.background}；"
                 f"兴趣：{config.interests}；状态：{json.dumps(state, ensure_ascii=False)}；"
                 f"目标：{json.dumps(goals, ensure_ascii=False)}；最近经历：{json.dumps(recent, ensure_ascii=False)}"
@@ -300,7 +310,13 @@ class Living:
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
-            choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice)
+            def validate_activity(choice):
+                if reading_minutes >= 90 and (choice.book_id or self.reading_title(choice.title)):
+                    raise ValueError("这段时间已经读了很久，请选一项别的日常活动，book_id 填空字符串")
+
+            if reading_minutes >= 90:
+                prompt += "这次换一件事做，结合时间和角色的兴趣安排用餐、家务、运动或其他活动。"
+            choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice, validate_activity)
             if choice.kind not in {"study", "work", "leisure", "rest", "meal", "social"}:
                 raise ValueError("自主规划返回了未允许的活动类型")
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation
@@ -332,7 +348,7 @@ class Living:
         if minutes < 1:
             return
         start = now + timedelta(minutes=travel_minutes)
-        if not book_id and books and any(word in title for word in ("阅读", "读书", "读几页", "翻书", "读一", "翻翻")):
+        if not book_id and books and self.reading_title(title):
             current_book = engine.store.find("runtime", "current_book")
             book_id = next((b["id"] for b in books if current_book and b["id"] == current_book["book_id"]), books[0]["id"])
         if book_id:
@@ -347,26 +363,51 @@ class Living:
                 continuation = engine.store.get("activity_memory", continuation_id)
                 engine.store.put("activity_memory", {**continuation, "last_continued_at": now.isoformat()})
 
+    @staticmethod
+    def reading_title(title):
+        return any(word in title for word in ("阅读", "读书", "读几页", "翻书", "读一", "看书", "看小说", "读小说", "翻翻《"))
+
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine
-        current = engine.current(now)
-        if not config.enabled or not in_hours(now.hour, config.start_hour, config.end_hour):
+        if not config.enabled:
             return
+
+        def record(outcome, reason, session="全部", score="本轮未筛选经历"):
+            self.share_decisions.appendleft({"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
+                                             "outcome": outcome, "reason": reason, "score": score})
+
+        if not in_hours(now.hour, config.start_hour, config.end_hour):
+            record("跳过", f"允许交流的时段为 {config.start_hour:02}:00 至 {config.end_hour:02}:00")
+            return
+        current = engine.current(now)
         if self.sleeping(now) or (current and current["kind"] in {"sleep", "work", "study"}):
+            record("跳过", f"正在{current['title']}" if current else "角色正在睡眠")
             return
         day = now.date().isoformat()
         sessions = dict.fromkeys([*config.session_ids, *(p["session_id"] for p in engine.store.all("profile"))])
+        if not sessions:
+            record("跳过", "请在个人资料或额外接收列表中选择聊天流")
         for session in sessions:
             sent = engine.store.find("sharing", session) or {"id": session, "day": day, "count": 0, "last_at": "", "experience_ids": []}
             if sent["day"] != day:
                 sent.update(day=day, count=0)
             if sent["count"] >= config.daily_limit:
+                record("跳过", f"今日已请求 {sent['count']}/{config.daily_limit} 次，明日恢复额度", session)
                 continue
             if sent["last_at"] and (now - engine.time(sent["last_at"])).total_seconds() < config.cooldown_minutes * 60:
+                next_at = engine.time(sent["last_at"]) + timedelta(minutes=config.cooldown_minutes)
+                record("跳过", f"上次请求在 {engine.time(sent['last_at']):%H:%M}，间隔 {config.cooldown_minutes} 分钟，下次可请求时间 {next_at:%m-%d %H:%M}", session)
                 continue
-            candidates = [e for e in engine.experiences(session, limit=10)
-                          if e["importance"] >= 2 and e["id"] not in sent["experience_ids"]
-                          and 0 <= (now - engine.time(e["occurred_at"])).total_seconds() < 6 * 3600]
+            recent = engine.experiences(session, limit=10)
+            in_window = [e for e in recent if timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
+            available = [e for e in in_window if e["id"] not in sent["experience_ids"]]
+            best = max(available, key=lambda e: e["importance"], default=None)
+            threshold = 2
+            event = best if best and best["importance"] >= threshold else None
+            score = (f"《{best['summary'][:48]}》{best['importance']}/3 分，门槛 {threshold} 分"
+                     if best else "本轮没有可评分的经历")
+            screening = (f"检查最近 {len(recent)} 条经历，近六小时内 {len(in_window)} 条，"
+                         f"其中 {len(in_window) - len(available)} 条已向本聊天流请求分享")
             notices = []
             for item in Anniversaries(engine.store).upcoming(now.date(), session):
                 if item["enabled"] and item["days_left"] == 0:
@@ -388,17 +429,34 @@ class Living:
                 if item["session_id"] == session:
                     notices.append((f"issue:{item['id']}:{item['reason']}", f"安排需要调整：{item['title']}。原因：{item['reason']}。说明当前待调整的状态。", None))
             notices = [n for n in notices if n[0] not in sent.get("notice_ids", [])]
-            if not notices and not candidates:
+            if not notices and not event:
+                reason = f"没有待发提醒。{screening}"
+                if best:
+                    reason += "，剩余经历的最高分低于门槛"
+                record("跳过", reason, session, score)
                 continue
-            event = candidates[0] if candidates and not notices else None
             intent = notices[0][1] if notices else (
                 "有一件刚发生的生活经历可能值得分享。结合当前对话判断是否适合开口，可以选择沉默。"
                 "从角色自己的视角分享这次经历，给对方自由接话的空间。"
                 f"经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
             )
-            result = await self.ctx.maisaka.proactive.trigger(session, intent, reason="MaiWeave 生活跟进", metadata={"maiweave_record_id": notices[0][0] if notices else event["id"]})
-            if not result["success"]:
-                raise RuntimeError(result.get("error") or "主动交流请求失败")
+            record_id = notices[0][0] if notices else event["id"]
+            topic = "经历分享"
+            if notices:
+                topics = {"anniversary": "纪念日", "reminder": "共同安排提醒", "confirmation": "安排确认",
+                          "thread": "话题跟进", "issue": "日程调整"}
+                topic = topics[record_id.split(":", 1)[0]]
+                reason = f"{len(notices)} 条待发提醒，优先处理{topic}（{record_id}）"
+            else:
+                reason = f"{topic}：{screening}。选择得分最高的经历，同分时选最近发生的一条"
+            try:
+                result = await self.ctx.maisaka.proactive.trigger(session, intent, reason="MaiWeave 生活跟进", metadata={"maiweave_record_id": record_id})
+                if not result["success"]:
+                    raise RuntimeError(result.get("error") or "主动交流请求失败")
+            except Exception as error:
+                record("请求失败", f"{reason}。宿主返回：{error}", session, score)
+                raise
+            record("宿主已受理", reason, session, score)
             sent.update(count=sent["count"] + 1, last_at=now.isoformat())
             if notices:
                 sent.setdefault("notice_ids", []).append(notices[0][0])

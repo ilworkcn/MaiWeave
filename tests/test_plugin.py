@@ -1,6 +1,7 @@
 """使用真实 SDK 检查注册和工具链，宿主服务使用测试替身。"""
 
 import json
+import asyncio
 import logging
 from datetime import timedelta
 from types import SimpleNamespace
@@ -109,6 +110,59 @@ async def test_proactive_requests_are_limited(plugin):
     await plugin.living.share(now + timedelta(minutes=1))
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 1
     assert plugin.store.get("sharing", "chat-a")["count"] == 1
+    decisions = (await plugin.ui_overview())["share_decisions"]
+    assert [row["outcome"] for row in decisions[:2]] == ["跳过", "宿主已受理"]
+    assert decisions[0]["session"] == "chat-a"
+    assert "下次可请求时间" in decisions[0]["reason"]
+    assert "经历分享" in decisions[1]["reason"]
+
+
+async def test_share_schedule_and_recent_decisions(plugin, monkeypatch):
+    plugin.worker.cancel()
+    await asyncio.gather(plugin.worker, return_exceptions=True)
+    await asyncio.gather(*plugin.jobs)
+    plugin.config.proactive.enabled = True
+    start = plugin.now().replace(hour=12, minute=0, second=0)
+    async def run(name, job):
+        if name == "主动交流":
+            await job(plugin.now())
+    monkeypatch.setattr(plugin, "run_background", run)
+    for minute in [0, 1, 9, 10, *range(20, 101, 10)]:
+        now = start + timedelta(minutes=minute)
+        monkeypatch.setattr(plugin, "now", lambda: now)
+        await plugin.tick()
+        await asyncio.gather(*plugin.jobs)
+        if minute < 10:
+            assert len(plugin.living.share_decisions) == 1
+    rows = (await plugin.ui_overview())["share_decisions"]
+    assert [r["at"] for r in rows] == [
+        (start + timedelta(minutes=m)).strftime("%m-%d %H:%M:%S") for m in range(100, 0, -10)]
+
+
+async def test_proactive_selects_highest_eligible_score(plugin):
+    from maiweave.models import ExperienceInput
+    now = plugin.now().replace(hour=12)
+    plugin.config.proactive.enabled = True
+    plugin.config.proactive.session_ids = ["chat-a"]
+
+    def add(title, score, minutes):
+        return plugin.engine.record_experience(ExperienceInput(
+            summary=title, importance=score, occurred_at=(now - timedelta(minutes=minutes)).isoformat(),
+            source="simulated", evidence="角色模拟"), "chat-a", now)
+
+    add("散步", 1, 1)
+    add("昨天的成果", 3, 360)
+    await plugin.living.share(now)
+    row = (await plugin.ui_overview())["share_decisions"][0]
+    assert row["outcome"] == "跳过" and "1/3 分" in row["score"]
+    assert "近六小时内 1 条" in row["reason"]
+    add("整理笔记", 2, 2)
+    chosen = add("完成作品", 3, 15)
+    add("之前的突破", 3, 30)
+    await plugin.living.share(now)
+    row = (await plugin.ui_overview())["share_decisions"][0]
+    assert "完成作品》3/3 分" in row["score"]
+    assert plugin.store.get("sharing", "chat-a")["experience_ids"] == [chosen["id"]]
 
 
 async def test_disabled_plugin_does_not_write(plugin):
