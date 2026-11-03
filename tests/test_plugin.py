@@ -159,6 +159,8 @@ async def test_proactive_selects_highest_eligible_score(plugin):
     add("整理笔记", 6, 2)
     chosen = add("完成作品", 7, 15)
     add("之前的突破", 7, 30)
+    for i in range(12):
+        add(f"普通记录{i}", 2, 1)
     plugin.config.proactive.share_threshold = 8
     await plugin.living.share(now)
     assert "门槛 8 分" in plugin.living.share_decisions[0]["score"]
@@ -167,6 +169,7 @@ async def test_proactive_selects_highest_eligible_score(plugin):
     await plugin.living.share(now)
     row = (await plugin.ui_overview())["share_decisions"][0]
     assert "完成作品》7/10 分" in row["score"]
+    assert chosen["score_reason"] in plugin.ctx.maisaka.proactive.trigger.await_args.args[1]
     assert plugin.store.get("sharing", "chat-a")["experience_ids"] == [chosen["id"]]
 
 

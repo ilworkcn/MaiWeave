@@ -37,7 +37,16 @@ async def test_upload_read_finish_context_diary_and_next_chapter(plugin):
     assert plugin.books.context()['notes']==[]
     end=now+timedelta(minutes=16)
     plugin.engine.advance(end)
+    plugin.config.proactive.enabled = True
+    plugin.config.proactive.start_hour = plugin.config.proactive.end_hour = 0
+    plugin.config.proactive.share_threshold = 1
+    plugin.config.proactive.session_ids = ["group"]
+    await plugin.living.share(end)
+    assert "1 条等待笔记" in plugin.living.share_decisions[0]["reason"]
+    plugin.ctx.maisaka.proactive.trigger.assert_not_awaited()
     await plugin.books.process(end)
+    await plugin.living.share(end)
+    assert "解开了上次留下的问题" in plugin.ctx.maisaka.proactive.trigger.await_args.args[1]
     b=plugin.store.get('book',book['id'])
     assert b['chapter']==1 and b['offset']==0
     note=plugin.books.context()['notes'][0]

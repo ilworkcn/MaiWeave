@@ -57,6 +57,30 @@ async def test_concrete_results_persist_once_and_continue(life):
     assert x.store.all("activity_memory")[0]["next_action"] == "从第四章开始"
 
 
+@pytest.mark.parametrize("outcomes_enabled", [True, False])
+async def test_share_waits_only_for_enabled_activity_results(life, outcomes_enabled, plugin):
+    x = life
+    x.ctx.maisaka = plugin.ctx.maisaka
+    plan = complete(x, title="做午饭", kind="meal")
+    x.cfg.continuity.outcomes_enabled = outcomes_enabled
+    x.cfg.proactive.enabled = True
+    x.cfg.proactive.start_hour = x.cfg.proactive.end_hour = 0
+    x.cfg.proactive.session_ids = ["a"]
+    x.cfg.proactive.share_threshold = 1
+    service = living(x)
+    now = x.now + timedelta(minutes=31)
+    await service.share(now)
+    if outcomes_enabled:
+        x.ctx.maisaka.proactive.trigger.assert_not_awaited()
+        assert "1 条等待" in service.share_decisions[0]["reason"]
+        x.ctx.llm.generate.return_value = result(score_reason="第一次做成了这道菜")
+        await service.continuity.reflect(plan["id"], now)
+        await service.share(now)
+        assert "第一次做成了这道菜" in x.ctx.maisaka.proactive.trigger.await_args.args[1]
+    else:
+        assert "日常用餐" in x.ctx.maisaka.proactive.trigger.await_args.args[1]
+
+
 async def test_reported_experience_is_only_classified_not_invented(life):
     x, c = life, continuity(life)
     plan = x.engine.create_plan(PlanInput(title="一起读书", start=x.now.isoformat(), end=(x.now + timedelta(minutes=30)).isoformat(), participants=["用户"]), "a", x.now)
@@ -108,6 +132,8 @@ async def test_goal_outline_progress_failure_and_next_step(life):
     second = complete(x, start=x.now + timedelta(hours=1), goal_id=goal["id"], goal_step_id=outlined["steps"][0]["id"])
     x.ctx.llm.generate.return_value = result()
     await c.reflect(second["id"], x.now + timedelta(hours=2))
+    event = x.store.get("experience", second["experience_id"])
+    assert event["importance"] == 7 and "读前半部" in event["score_reason"]
     assert c.next_step()[1]["title"] == "读后半部"
     third = complete(x, start=x.now + timedelta(hours=3), goal_id=goal["id"], goal_step_id=outlined["steps"][1]["id"])
     await c.reflect(third["id"], x.now + timedelta(hours=4))
@@ -319,6 +345,9 @@ async def test_full_tick_goal_activity_result_and_webui(plugin, monkeypatch):
     await asyncio.gather(*plugin.background.values())
     assert plugin.last_errors == {}
     assert plugin.store.get("goal", goal["id"])["status"] == "completed"
+    event = plugin.store.get("experience", plugin.store.get("plan", plan["id"])["experience_id"])
+    assert event["importance"] >= 9 and goal["title"] in event["score_reason"]
+    assert "读短文" in event["score_reason"]
     data = await plugin.ui_continuity()
     assert data["steps"][0]["status_label"] == "已完成"
     assert data["continuations"][0]["next_action"] == "下次比较另一篇"

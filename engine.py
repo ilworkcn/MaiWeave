@@ -165,11 +165,11 @@ class LifeEngine:
                 plan["experience_id"] = record["id"]
                 plan["changes"].append({"at": now.isoformat(), "action": "record_completion", "source": value.source})
                 self.store.put("plan", plan)
-                self._progress_goal(plan, confirmed=True)
+                self.progress_goal(plan, confirmed=True)
                 state = self.state()
                 self._completion_effect(state, plan)
                 self.store.put("state", state)
-        return record
+        return self.store.get("experience", record["id"])
 
     def revise_experience(self, record_id: str, details: dict[str, str], summary: str,
                           evidence: str, session: str, now: datetime) -> dict:
@@ -222,7 +222,7 @@ class LifeEngine:
                             self.store.put("plan", trip)
         return goal
 
-    def _progress_goal(self, plan: dict, confirmed=False):
+    def progress_goal(self, plan: dict, confirmed=False):
         if plan.get("goal_step_id"):
             if confirmed:
                 self.progress_stage(plan, 1, "已通过经历确认完成")
@@ -233,7 +233,20 @@ class LifeEngine:
                 goal["completed_sessions"] += 1
                 if goal["completed_sessions"] >= goal["target_sessions"]:
                     goal["status"] = "completed"
+                    self.mark_goal_result(plan, goal, 9, "达成目标")
                 self.store.put("goal", goal)
+
+    def mark_goal_result(self, plan, goal, score, result):
+        milestone = f"{result}：{goal['title']}（累计完成 {goal['completed_sessions']} 次）"
+        event = self.store.get("experience", plan["experience_id"])
+        event.update(goal_score=score, goal_result=milestone)
+        self.score_result(event, event["importance"], event["score_reason"])
+        self.store.put("experience", event)
+
+    @staticmethod
+    def score_result(event, score, reason):
+        event["importance"] = max(score, event.get("goal_score", 0))
+        event["score_reason"] = f"{event['goal_result']}。{reason}" if event.get("goal_result") else reason
 
     def progress_stage(self, plan, units, note):
         if plan.get("goal_progress_applied"):
@@ -246,8 +259,12 @@ class LifeEngine:
             step["completed_sessions"] += added
             step["status"] = "completed" if step["completed_sessions"] >= step["sessions"] else "active"
             goal["completed_sessions"] += added
+            stage_name = step.get("title") or plan["title"]
             if all(s["status"] == "completed" for s in goal["steps"]):
                 goal["status"] = "completed"
+                self.mark_goal_result(plan, goal, 9, f"完成阶段「{stage_name}」并达成目标")
+            elif added and step["status"] == "completed":
+                self.mark_goal_result(plan, goal, 7, f"完成阶段「{stage_name}」")
         plan["goal_progress_applied"] = True
         with self.store.db:
             self.store.put("goal", goal)
@@ -396,7 +413,10 @@ class LifeEngine:
             record["summary"] = f"结束{plan['title']}的阅读时段，正文笔记正在整理"
         plan.update(status="completed", experience_id=record["id"])
         self.store.put("experience", record)
-        self._progress_goal(plan)
+        if plan.get("book_id") and plan.get("goal_id") and not plan.get("goal_step_id"):
+            plan["reading_goal_pending"] = True
+        elif not plan.get("book_id"):
+            self.progress_goal(plan)
 
     def current(self, now: datetime) -> dict | None:
         return next((p for p in self.store.all("plan") if p["status"] in ACTIVE

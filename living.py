@@ -367,6 +367,16 @@ class Living:
     def reading_title(title):
         return any(word in title for word in ("阅读", "读书", "读几页", "翻书", "读一", "看书", "看小说", "读小说", "翻翻《"))
 
+    def pending_share_result(self, event):
+        if event["source"] != "simulated" or not event.get("plan_id"):
+            return False
+        plan = self.engine.store.get("plan", event["plan_id"])
+        if plan.get("book_id"):
+            return True
+        return (self.config.continuity.outcomes_enabled and event["revision"] == 1
+                and not plan["participants"] and plan["kind"] not in {"travel", "sleep", "diary"}
+                and plan["status"] == "completed")
+
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine
         if not config.enabled:
@@ -398,16 +408,17 @@ class Living:
                 next_at = engine.time(sent["last_at"]) + timedelta(minutes=config.cooldown_minutes)
                 record("跳过", f"上次请求在 {engine.time(sent['last_at']):%H:%M}，间隔 {config.cooldown_minutes} 分钟，下次可请求时间 {next_at:%m-%d %H:%M}", session)
                 continue
-            recent = engine.experiences(session, limit=10)
-            in_window = [e for e in recent if timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
-            available = [e for e in in_window if e["id"] not in sent["experience_ids"]]
-            best = max(available, key=lambda e: e["importance"], default=None)
+            in_window = [e for e in engine.store.all("experience") if engine.visible(e, session)
+                         and timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
+            unseen = [e for e in in_window if e["id"] not in sent["experience_ids"]]
+            available = [e for e in unseen if not self.pending_share_result(e)]
+            best = max(available, key=lambda e: (e["importance"], engine.time(e["occurred_at"])), default=None)
             threshold = config.share_threshold
             event = best if best and best["importance"] >= threshold else None
             score = (f"《{best['summary'][:48]}》{best['importance']}/10 分，门槛 {threshold} 分。{best['score_reason']}"
                      if best else "本轮没有可评分的经历")
-            screening = (f"检查最近 {len(recent)} 条经历，近六小时内 {len(in_window)} 条，"
-                         f"其中 {len(in_window) - len(available)} 条已向本聊天流请求分享")
+            screening = (f"近六小时内 {len(in_window)} 条经历，{len(in_window) - len(unseen)} 条已向本聊天流请求分享，"
+                         f"{len(unseen) - len(available)} 条等待笔记或活动回顾")
             notices = []
             for item in Anniversaries(engine.store).upcoming(now.date(), session):
                 if item["enabled"] and item["days_left"] == 0:
@@ -438,7 +449,7 @@ class Living:
             intent = notices[0][1] if notices else (
                 "有一件刚发生的生活经历可能值得分享。结合当前对话判断是否适合开口，可以选择沉默。"
                 "从角色自己的视角分享这次经历，给对方自由接话的空间。"
-                f"经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
+                f"值得分享的原因={event['score_reason']}；经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
             )
             record_id = notices[0][0] if notices else event["id"]
             topic = "经历分享"

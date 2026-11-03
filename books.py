@@ -336,7 +336,7 @@ class Books:
             store.put("book_note", note)
             event = store.get("experience", plan["experience_id"])
             if "importance" in note:
-                event.update(importance=note["importance"], score_reason=note["score_reason"])
+                self.engine.score_result(event, note["importance"], note["score_reason"])
             event.update(summary=f"阅读《{book['title']}》：{note['summary']}", source="observed",
                          evidence=f"模型已阅读上传文件 {book['filename']}，第{note['chapter'] + 1}章字符{note['offset']}至{note['end']}",
                          details={"书名": book["title"], "章节": note["chapter_title"], "内容": note["summary"], "原文摘句": note["quote"],
@@ -344,6 +344,9 @@ class Books:
             store.put("experience", event)
             if plan.get("goal_step_id"):
                 self.engine.progress_stage(plan, 1, note["summary"])
+            elif plan.pop("reading_goal_pending", False):
+                self.engine.progress_goal(plan)
+                store.put("plan", plan)
             if book["status"] == "已读完":
                 for future in store.all("plan"):
                     if future.get("book_id") == book["id"] and future["status"] == "scheduled":

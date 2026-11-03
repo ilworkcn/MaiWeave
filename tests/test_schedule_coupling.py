@@ -9,16 +9,20 @@ from maiweave.continuity import Continuity
 from test_plugin import plugin
 from test_books import upload, answer
 
-async def test_book_progresses_goal_after_notes_complete(plugin):
+@pytest.mark.parametrize("with_stage", [True, False])
+async def test_book_progresses_goal_after_notes_complete(plugin, with_stage):
     now=plugin.now();book=await upload(plugin)
     goal=plugin.engine.create_goal(GoalInput(title='读一章',target_sessions=1),'',now)
-    goal['steps']=[{'id':'chapter','sessions':1,'completed_sessions':0,'status':'pending'}]
+    goal['steps']=[{'id':'chapter','sessions':1,'completed_sessions':0,'status':'pending'}] if with_stage else []
     with plugin.store.db:plugin.store.put('goal',goal)
-    plan=plugin.engine.create_plan(PlanInput(title='读书',book_id=book['id'],goal_id=goal['id'],goal_step_id='chapter',start=now.isoformat(),end=(now+timedelta(minutes=15)).isoformat()),'',now)
+    plan=plugin.engine.create_plan(PlanInput(title='读书',book_id=book['id'],goal_id=goal['id'],goal_step_id='chapter' if with_stage else '',start=now.isoformat(),end=(now+timedelta(minutes=15)).isoformat()),'',now)
     plugin.engine.advance(now+timedelta(minutes=16))
     assert plugin.store.get('goal',goal['id'])['completed_sessions']==0
     answer(plugin);await plugin.books.process(now+timedelta(minutes=16))
     assert plugin.store.get('goal',goal['id'])['status']=='completed'
+    event = plugin.store.get('experience', plugin.store.get('plan', plan['id'])['experience_id'])
+    assert event['importance'] >= 9 and '读一章' in event['score_reason']
+    assert '解开了上次留下的问题' in event['score_reason']
     await plugin.books.process(now+timedelta(minutes=17))
     assert plugin.store.get('goal',goal['id'])['completed_sessions']==1
 

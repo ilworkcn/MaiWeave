@@ -111,8 +111,8 @@ class Continuity:
                     additions = {k: v for k, v in result.details.items() if k not in event["details"]}
                     event = self.engine.revise_experience(event["id"], additions, result.summary,
                                                          "依据已完成计划、已有进度和活动时长生成的角色模拟细节", plan["session_id"], now)
-                    event.update(enjoyment=result.enjoyment, next_action=result.next_action,
-                                 importance=result.importance, score_reason=result.score_reason)
+                    event.update(enjoyment=result.enjoyment, next_action=result.next_action)
+                    self.engine.score_result(event, result.importance, result.score_reason)
                     store.put("experience", event)
                     self.engine.affect(result.mood, result.stress, result.summary, now, duration_hours=48, session=plan["session_id"])
                     previous = store.find("preference", key) or {"id": key, "session_id": plan["session_id"], "activity": result.activity, "score": 0, "samples": 0, "evidence_ids": []}
