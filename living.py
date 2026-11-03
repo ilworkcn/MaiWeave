@@ -205,16 +205,20 @@ class Living:
 
     async def choose_activity(self, now: datetime):
         engine, config = self.engine, self.config.life
-        if config.schedule_enabled and self.awake_until(now):
-            return
-        if not config.autonomous or engine.current(now):
-            return
+        if not config.autonomous:
+            return "自主安排已关闭"
+        awake = self.awake_until(now) if config.schedule_enabled else None
+        if awake:
+            return f"陪伴中，保持清醒至 {awake:%H:%M}"
+        current = engine.current(now)
+        if current:
+            return f"正在{current['title']}，预计 {engine.time(current['end']):%H:%M} 结束"
         busy = engine.store.find("runtime", "busy")
         if busy and engine.time(busy["until"]) > now:
-            return
+            return f"临时有事，预计 {engine.time(busy['until']):%H:%M} 结束"
         free = engine.free_minutes(now)
         if free < 10:
-            return
+            return f"距离下一项安排只剩 {free} 分钟"
         state = engine.state()
         signature = hashlib.sha256(json.dumps({
             "day": now.date().isoformat(), "sleep": config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour),
@@ -225,7 +229,8 @@ class Living:
         }, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         previous = engine.store.find("runtime", "planning")
         if previous and previous.get("signature") == signature and (now - engine.time(previous["at"])).total_seconds() < config.planning_interval_minutes * 60:
-            return
+            check_at = engine.time(previous["at"]) + timedelta(minutes=config.planning_interval_minutes)
+            return f"生活状态未变，预计 {check_at:%H:%M} 再规划"
         with engine.store.db:
             engine.store.put("runtime", {"id": "planning", "at": now.isoformat(), "signature": signature})
         session = ""
@@ -247,15 +252,19 @@ class Living:
                          and r.get("kind") in {"study", "work", "leisure", "rest"}
                          and engine.time(r.get("last_continued_at", r["updated_at"])).date() < now.date()]
         if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
+            source = "日常作息"
             title, kind, location, motivation = "睡觉", "sleep", self.spatial.place("home")["name"], "按习惯休息，恢复精力"
             minutes = free
         elif state["hunger"] >= 65:
+            source = "身体需要 · 用餐"
             title, kind, location, motivation, minutes = "吃饭", "meal", state["location"], "有些饿了", min(free, 30)
             if self.config.world.places_enabled and state["location"] not in {self.spatial.place("home")["name"], self.spatial.place("kitchen")["name"]} and free >= 30:
                 place_query = "餐厅"
         elif state["energy"] <= 25:
+            source = "身体需要 · 休息"
             title, kind, location, motivation, minutes = "休息一会儿", "rest", state["location"], "精力不足", min(free, 45)
         elif habit:
+            source = "延续习惯"
             title, kind, location = habit["title"], habit["kind"], habit["location"]
             motivation, minutes, session = "在熟悉的时间延续已有习惯", min(free, habit["duration_minutes"]), habit["session_id"]
             continuation = next((r for r in reversed(engine.store.all("activity_memory"))
@@ -265,18 +274,21 @@ class Living:
                 title = f"{title}：{continuation['subject']}" if continuation["subject"] else title
                 motivation += "；" + continuation["next_action"]
         elif next_step:
+            source = "推进目标"
             goal, step = next_step
             title, kind, location = step["title"], step["kind"], state["location"]
             minutes, session = min(free, step["minutes"]), goal["session_id"]
             goal_id, goal_step_id = goal["id"], step["id"]
             motivation = f"推进目标：{goal['title']}；阶段依据：{step['criterion']}；上次进展：{step['note']}"
         elif continuations:
+            source = "接续未完活动"
             continuation = max(continuations, key=lambda item: item["updated_at"])
             continuation_id, session = continuation["id"], continuation["session_id"]
             title = f"继续{continuation['activity']}：{continuation['subject']}" if continuation["subject"] else f"继续{continuation['activity']}"
             kind, location = continuation["kind"], continuation["location"] or state["location"]
             motivation, minutes = continuation["next_action"], min(free, 30)
         else:
+            source = "模型自主选择"
             goals = [g for g in engine.store.all("goal") if g["status"] == "active"]
             completed = sorted((p for p in engine.store.all("plan") if p["status"] == "completed"),
                                key=lambda p: engine.time(p["end"]), reverse=True)
@@ -335,7 +347,7 @@ class Living:
             location = found[0]["name"]
         engine.advance(now)
         if engine.current(now):
-            return
+            return "规划期间已有活动开始"
         state = engine.state()
         free = engine.free_minutes(now)
         travel_minutes = self.spatial.route(state["location"], location)["minutes"] if location else 0
@@ -346,7 +358,7 @@ class Living:
                 wake += timedelta(days=1)
             minutes = min(minutes, int((wake - now).total_seconds() / 60) - travel_minutes)
         if minutes < 1:
-            return
+            return "预留出行时间后，剩余空档不足"
         start = now + timedelta(minutes=travel_minutes)
         if not book_id and books and self.reading_title(title):
             current_book = engine.store.find("runtime", "current_book")
@@ -357,11 +369,16 @@ class Living:
         value = PlanInput(title=title, book_id=book_id, start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
                           kind=kind, location=location, motivation=motivation, goal_id=goal_id, goal_step_id=goal_step_id,
                           continuation_id=continuation_id)
-        self.spatial.schedule(value, session, now, autonomous=True)
+        plan = self.spatial.schedule(value, session, now, autonomous=True)
+        with engine.store.db:
+            plan["decision"] = {"at": now.strftime("%m-%d %H:%M"), "source": source, "title": title,
+                                "place": plan["location"], "minutes": minutes, "reason": motivation}
+            engine.store.put("plan", plan)
         if continuation_id:
             with engine.store.db:
                 continuation = engine.store.get("activity_memory", continuation_id)
                 engine.store.put("activity_memory", {**continuation, "last_continued_at": now.isoformat()})
+        return f"已安排：{title}"
 
     @staticmethod
     def reading_title(title):

@@ -13,7 +13,7 @@
       "mode": "declarative",
       "icon": "chart",
       "poll_interval_seconds": 30,
-      "auto_refresh": false,
+      "auto_refresh": true,
       "queries": {
         "data": {
           "api": "ui_overview",
@@ -112,6 +112,85 @@
                     "source": "data",
                     "field": "awake_until"
                   }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "card",
+          "label": "最近一次自主规划",
+          "children": [
+            {
+              "type": "text",
+              "label": "安排",
+              "value": {
+                "source": "data",
+                "field": "planning_latest"
+              }
+            },
+            {
+              "type": "text",
+              "label": "选择理由",
+              "value": {
+                "source": "data",
+                "field": "planning_reason"
+              }
+            },
+            {
+              "type": "text",
+              "label": "本次检查",
+              "value": {
+                "source": "data",
+                "field": "planning_status"
+              }
+            },
+            {
+              "type": "collapsible",
+              "label": "查看最近规划",
+              "default_open": false,
+              "children": [
+                {
+                  "type": "text",
+                  "label": "上次规划失败",
+                  "value": {
+                    "source": "data",
+                    "field": "planning_failure"
+                  }
+                },
+                {
+                  "type": "table",
+                  "label": "最近十次安排",
+                  "value": {
+                    "source": "data",
+                    "field": "planning_history"
+                  },
+                  "columns": [
+                    {
+                      "field": "at",
+                      "label": "时间"
+                    },
+                    {
+                      "field": "source",
+                      "label": "来源"
+                    },
+                    {
+                      "field": "title",
+                      "label": "活动"
+                    },
+                    {
+                      "field": "place",
+                      "label": "地点"
+                    },
+                    {
+                      "field": "minutes",
+                      "label": "分钟"
+                    },
+                    {
+                      "field": "reason",
+                      "label": "理由"
+                    }
+                  ]
                 }
               ]
             }

@@ -125,6 +125,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.living.apply_schedule(self.now())
         self.last_error = ""
         self.last_errors = {}
+        self.planning_status = "等待首次规划检查"
         self.jobs = set()
         self.background = {}
         self.next_share_check = None
@@ -189,6 +190,11 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             self.last_errors.pop(name, None)
         except Exception as error:
             self.last_errors[name] = str(error)
+            if name == "自主生活":
+                reason = str(error) or type(error).__name__
+                self.planning_status = f"{self.now():%m-%d %H:%M} 规划失败：{reason}"
+                with self.store.db:
+                    self.store.put("runtime", {"id": "planning_failure", "message": self.planning_status})
             self.ctx.logger.exception("%s失败", name)
         self.last_error = "；".join(f"{label}：{error}" for label, error in self.last_errors.items())
 
@@ -197,7 +203,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             await self.diary.arrange(now, self.spatial)
 
     async def plan_life(self, now):
-        await self.living.choose_activity(now)
+        self.planning_status = "正在选择下一项活动"
+        self.planning_status = await self.living.choose_activity(now)
 
     async def adjust_life(self, now):
         self.living.adjust(now)
@@ -545,9 +552,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                     recent = max((p for p in store.all("plan") if p["status"] == "completed"),
                                  key=lambda p: p["end"], default=None)
                     card["content"][1:1] = [
-                        {"type": "stat", "label": at.strftime("生活手记 · %m月%d日 %H:%M"),
+                        {"type": "stat", "label": at.strftime("加载时快照 · 数据截至 %m-%d %H:%M"),
                          "value": state["location"] or "麦麦的一天",
-                         "detail": f"已完成 · {recent['title']}" if recent else "新的一天开始了"},
+                         "detail": f"最近完成 · {recent['title']}" if recent else "新的一天开始了"},
                         {"type": "key_value", "entries": {
                             "精力": f"{state['energy']:.0f} / 100", "心情": f"{state['mood']:+.0f}"}},
                     ]
@@ -558,6 +565,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         description="看看麦麦在做什么，接下来有什么安排。",
         link_url="/extensions/ilworkcn.maiweave/overview", link_label="此刻生活",
         content=[{"type": "markdown", "content": "| 🌱 | MaiWeave · 角色生活 |\n|:--:|:--|\n"},
+                 {"type": "markdown", "content": "点「此刻生活」查看实时状态与自主规划。"},
                  {"type": "actions", "actions": [
             {"label": "生活日程", "url": "/extensions/ilworkcn.maiweave/schedule"},
             {"label": "书架", "url": "/extensions/ilworkcn.maiweave/books"},

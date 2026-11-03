@@ -232,6 +232,20 @@ class WebUI:
         now, state = self.now(), self.engine.state()
         current = self.engine.current(now)
         plans = self.store.all("plan")
+        choices = sorted((p for p in plans if p.get("autonomous") and not p.get("activity_id")
+                          and not p.get("routine_id") and p["kind"] not in {"travel", "diary"}),
+                         key=lambda p: p["created_at"], reverse=True)[:10]
+        decisions = []
+        for p in choices:
+            if "decision" in p:
+                decisions.append(p["decision"])
+            else:
+                decisions.append({"at": self.engine.time(p["created_at"]).strftime("%m-%d %H:%M"),
+                                  "source": "已有自主日程", "title": p["title"], "place": p["location"],
+                                  "minutes": round((self.engine.time(p["end"]) - self.engine.time(p["start"])).total_seconds()/60),
+                                  "reason": p["motivation"]})
+        latest = decisions[0] if decisions else None
+        failure = self.store.find("runtime", "planning_failure")
         journey = state.get("journey")
         travel = f"{journey['location']} → {journey['next']}（{journey['progress']}%）" if journey and journey["next"] else "当前没有移动"
         history = sorted(self.store.all("state_history"), key=lambda r: r["at"])[-144:]
@@ -240,6 +254,12 @@ class WebUI:
         if len(trend) > 13:
             trend = [trend[round(i * (len(trend) - 1) / 12)] for i in range(13)]
         return {"state": state, "activity": current["title"] if current else "空闲", "travel": travel,
+                "planning_latest": (f"{latest['at']} · {latest['title']} · {latest['source']} · "
+                                    f"{latest['place']} · {latest['minutes']} 分钟" if latest else "暂无自主安排"),
+                "planning_reason": latest["reason"] if latest else "等待首次安排",
+                "planning_status": self.planning_status if self.config.life.enabled else "生活引擎已关闭",
+                "planning_failure": failure["message"] if failure else "暂无失败记录",
+                "planning_history": decisions,
                 "share_status": "已启用" if self.config.proactive.enabled else "已关闭",
                 "share_decisions": list(self.living.share_decisions),
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",

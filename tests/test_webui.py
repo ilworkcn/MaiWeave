@@ -188,3 +188,30 @@ async def test_diary_progress_matches_current_writing_plan(plugin):
     plugin.store.put("plan", {"id": "later", "start": (start + timedelta(hours=1)).isoformat(), "status": "planned"})
     result = await plugin.ui_operation_status(plan_id="later")
     assert result["done"] and "开始时间" in result["message"]
+
+
+async def test_planning_reason_survives_status_checks(plugin):
+    now = plugin.now().replace(hour=12, minute=0)
+    plugin.config.life.autonomous = True
+    state = plugin.engine.state()
+    with plugin.store.db:
+        plugin.store.put("state", {**state, "hunger": 90})
+    await plugin.plan_life(now)
+    result = await plugin.ui_overview()
+    decision, = result["planning_history"]
+    assert decision["source"] == "身体需要 · 用餐"
+    assert decision["reason"] == "有些饿了"
+    assert decision["minutes"] == 30
+    plugin.engine.advance(now + timedelta(minutes=1))
+    await plugin.plan_life(now + timedelta(minutes=1))
+    waiting = await plugin.ui_overview()
+    assert "预计" in waiting["planning_status"]
+    assert waiting["planning_history"] == [decision]
+
+    async def failed(at):
+        raise ValueError("地点搜索失败")
+
+    await plugin.run_background("自主生活", failed)
+    failure = await plugin.ui_overview()
+    assert "地点搜索失败" in failure["planning_failure"]
+    assert failure["planning_history"] == [decision]
