@@ -139,6 +139,20 @@ async def test_share_schedule_and_recent_decisions(plugin, monkeypatch):
         (start + timedelta(minutes=m)).strftime("%m-%d %H:%M:%S") for m in range(100, 0, -10)]
 
 
+async def test_default_share_threshold(plugin):
+    from maiweave.models import ExperienceInput
+
+    now = plugin.now().replace(hour=12)
+    plugin.config.proactive.enabled = True
+    plugin.config.proactive.session_ids = ["chat-a"]
+    for score in (4, 5):
+        plugin.engine.record_experience(ExperienceInput(
+            summary=f"散步时的发现（{score}分）", importance=score, occurred_at=now.isoformat(),
+            source="simulated", evidence="角色模拟"), "chat-a", now)
+        await plugin.living.share(now)
+        assert plugin.ctx.maisaka.proactive.trigger.await_count == score - 4
+
+
 async def test_proactive_selects_highest_eligible_score(plugin):
     from maiweave.models import ExperienceInput
     now = plugin.now().replace(hour=12)

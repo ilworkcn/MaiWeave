@@ -35,7 +35,7 @@ def test_config_labels_and_controls_are_chinese():
     assert sections["life"]["fields"]["enabled"]["ui_type"] == "switch"
     threshold = sections["proactive"]["fields"]["share_threshold"]
     assert threshold["choices"] == list(range(1, 11)) and threshold["ui_type"] == "select"
-    assert instance.config.proactive.share_threshold == 6
+    assert instance.config.proactive.share_threshold == 5
     assert sections["planning"]["fields"]["tick_seconds"]["ui_type"] == "number"
     assert sections["profile"]["fields"]["interests"]["ui_type"] == "list"
 
