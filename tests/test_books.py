@@ -18,7 +18,7 @@ async def upload(plugin, text=TEXT, filename='银杏书.md'):
     return await plugin.ui_book_upload('finish', upload_id=row['id'])
 
 def answer(plugin, quote='风吹过窗前的银杏树。'):
-    plugin.ctx.llm.generate.return_value = {'success':True,'response':json.dumps({'summary':'窗前的银杏树随风摆动。','thoughts':'想起安静的下午。','quote':quote,'question':'下一章会写什么？'},ensure_ascii=False)}
+    plugin.ctx.llm.generate.return_value = {'success':True,'response':json.dumps({'summary':'窗前的银杏树随风摆动。','thoughts':'想起安静的下午。','importance':6,'score_reason':'解开了上次留下的问题','quote':quote,'question':'下一章会写什么？'},ensure_ascii=False)}
 
 async def begin_reading(plugin, book):
     now=plugin.now()
@@ -46,6 +46,7 @@ async def test_upload_read_finish_context_diary_and_next_chapter(plugin):
     assert note['quote'] in plugin.context_text('group')
     assert plugin.diary.material(end.date(),end+timedelta(seconds=1))['阅读笔记']
     event=plugin.store.get('experience',plugin.store.get('plan',plan['id'])['experience_id'])
+    assert (event['importance'], event['score_reason']) == (6, '解开了上次留下的问题')
     assert event['source']=='observed' and event['details']['书名']=='银杏书'
     calls=plugin.ctx.llm.generate.await_count
     assert (await plugin.continuity.reflect(plan['id'],end))['status']=='阅读笔记由书架整理'
@@ -56,7 +57,7 @@ async def test_upload_read_finish_context_diary_and_next_chapter(plugin):
     await plugin.ui_book_action('schedule', book_id=other['id'], minutes=15)
     plugin.engine.advance(end + timedelta(seconds=3))
     plugin.ctx.llm.generate.return_value = {'success': True, 'response': json.dumps({
-        'summary': '海滩露出了礁石。', 'thoughts': '走近潮水有些紧张。', 'quote': '潮水退去了。', 'question': '潮水几点再来？'})}
+        'importance':3, 'score_reason':'一次普通阅读', 'summary': '海滩露出了礁石。', 'thoughts': '走近潮水有些紧张。', 'quote': '潮水退去了。', 'question': '潮水几点再来？'})}
     await plugin.books.process(end + timedelta(seconds=3))
     assert '想起安静的下午' not in plugin.ctx.llm.generate.call_args.args[0]
     end += timedelta(minutes=16)

@@ -402,9 +402,9 @@ class Living:
             in_window = [e for e in recent if timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
             available = [e for e in in_window if e["id"] not in sent["experience_ids"]]
             best = max(available, key=lambda e: e["importance"], default=None)
-            threshold = 2
+            threshold = config.share_threshold
             event = best if best and best["importance"] >= threshold else None
-            score = (f"《{best['summary'][:48]}》{best['importance']}/3 分，门槛 {threshold} 分"
+            score = (f"《{best['summary'][:48]}》{best['importance']}/10 分，门槛 {threshold} 分。{best['score_reason']}"
                      if best else "本轮没有可评分的经历")
             screening = (f"检查最近 {len(recent)} 条经历，近六小时内 {len(in_window)} 条，"
                          f"其中 {len(in_window) - len(available)} 条已向本聊天流请求分享")

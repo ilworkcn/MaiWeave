@@ -6,7 +6,7 @@ import json
 from datetime import timedelta
 
 from .engine import uid
-from .models import ActivityAssessment, ActivityOutcome, GoalOutline
+from .models import ActivityAssessment, ActivityOutcome, GoalOutline, SCORE_GUIDE
 from .usage import generate
 
 
@@ -84,6 +84,7 @@ class Continuity:
             f"已保存的接续内容：{json.dumps(self.context(plan['session_id'], now)['continuations'], ensure_ascii=False)}。"
         )
         if enrich:
+            prompt += SCORE_GUIDE
             prompt += (
                 "为这次已完成的角色活动补充过程和结果，接续已有作品进度与细节，"
                 "按活动时长安排合理进展，内容围绕角色独自进行的活动展开。"
@@ -110,7 +111,8 @@ class Continuity:
                     additions = {k: v for k, v in result.details.items() if k not in event["details"]}
                     event = self.engine.revise_experience(event["id"], additions, result.summary,
                                                          "依据已完成计划、已有进度和活动时长生成的角色模拟细节", plan["session_id"], now)
-                    event.update(enjoyment=result.enjoyment, next_action=result.next_action)
+                    event.update(enjoyment=result.enjoyment, next_action=result.next_action,
+                                 importance=result.importance, score_reason=result.score_reason)
                     store.put("experience", event)
                     self.engine.affect(result.mood, result.stress, result.summary, now, duration_hours=48, session=plan["session_id"])
                     previous = store.find("preference", key) or {"id": key, "session_id": plan["session_id"], "activity": result.activity, "score": 0, "samples": 0, "evidence_ids": []}

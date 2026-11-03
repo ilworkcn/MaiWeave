@@ -250,7 +250,8 @@ class WebUI:
                 "pending_count": sum(p["status"] in {"scheduled", "active"} for p in plans),
                 "experience_count": len(self.store.all("experience")), "dream_count": len(self.store.all("dream")),
                 "habit_count": sum(h["active"] for h in self.store.all("habit")), "history": history,
-                "energy_trend": [{"time": self.engine.time(r["at"]).strftime("%H:%M"), "energy": r["energy"]} for r in trend],
+                "energy_trend": [{"time": self.engine.time(r["at"]).strftime("%H:%M"),
+                                  "energy": r["energy"], "mood": r["mood"]} for r in trend],
                 "next_plans": [plan_row(p) for p in sorted(plans, key=lambda p: p["start"]) if p["status"] in {"scheduled", "active"}][:12],
                 "errors": "\n".join(f"{name}：{error}" for name, error in self.last_errors.items()) or "无运行错误",
                 "jobs": self.store.all("job")[-10:]}

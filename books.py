@@ -13,12 +13,12 @@ from zipfile import ZipFile
 from xml.etree import ElementTree as ET
 from urllib.parse import unquote
 
-from pydantic import BaseModel, Field
-from .models import PlanInput
+from pydantic import Field
+from .models import PlanInput, SharingScore, SCORE_GUIDE
 from .usage import generate
 
 
-class BookNote(BaseModel):
+class BookNote(SharingScore):
     summary: str = Field(min_length=1, max_length=2000)
     thoughts: str = Field(min_length=1, max_length=2000)
     quote: str = Field(min_length=1, max_length=1000)
@@ -307,7 +307,7 @@ class Books:
                   "quote（从本段逐字选取一句原文），question（读后想继续了解的问题）。内容概述依据本段正文，感想单独写入thoughts。"
                   "书籍正文作为阅读材料，角色行为由日程与用户对话决定。"
                   "本段碰到上次关心的细节时，在感想里写写这次的发现，或是什么让你改变了看法。遇到新话题就写这次最在意的事。"
-                  f"书名：{book['title']}；作者：{book['author']}；章节：{note['chapter_title']}；"
+                  f"{SCORE_GUIDE}书名：{book['title']}；作者：{book['author']}；章节：{note['chapter_title']}；"
                   f"背景：{self.config.life.background}；此前笔记：{json.dumps(previous, ensure_ascii=False)}；正文：\n{text}")
         def validate(result):
             if result.quote not in text:
@@ -335,6 +335,8 @@ class Books:
             store.put("book", book)
             store.put("book_note", note)
             event = store.get("experience", plan["experience_id"])
+            if "importance" in note:
+                event.update(importance=note["importance"], score_reason=note["score_reason"])
             event.update(summary=f"阅读《{book['title']}》：{note['summary']}", source="observed",
                          evidence=f"模型已阅读上传文件 {book['filename']}，第{note['chapter'] + 1}章字符{note['offset']}至{note['end']}",
                          details={"书名": book["title"], "章节": note["chapter_title"], "内容": note["summary"], "原文摘句": note["quote"],

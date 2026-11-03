@@ -47,6 +47,7 @@ async def test_reminders_use_existing_limits_and_do_not_repeat(plugin):
     now = plugin.now().replace(hour=12)
     person = await plugin.ui_save_profile("小明", "chat-a")
     await plugin.ui_save_anniversary(person["id"], "生日", "solar", now.month, now.day)
+    plugin.config.proactive.share_threshold = 10
     plugin.config.proactive.session_ids = ["chat-a", "chat-b"]
     await plugin.living.share(now)
     plugin.ctx.maisaka.proactive.trigger.assert_not_awaited()

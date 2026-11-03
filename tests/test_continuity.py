@@ -24,7 +24,7 @@ def living(x):
 
 def result(**values):
     return {"success": True, "response": json.dumps({"activity": "阅读", "subject": "虚拟小说", "summary": "读完第二章，记住了主角的选择",
-            "details": {"进度": "第二章", "地点": "模型生成的地点", "感受": "情节很吸引人"}, "enjoyment": 3,
+            "details": {"进度": "第二章", "地点": "模型生成的地点", "感受": "情节很吸引人"}, "enjoyment": 3, "importance": 7, "score_reason": "完成了作品的重要阶段",
             "mood": 2, "stress": -1, "next_action": "从第三章开始", "goal_units": 1, **values}, ensure_ascii=False)}
 
 
@@ -43,6 +43,7 @@ async def test_concrete_results_persist_once_and_continue(life):
     await c.reflect(plan["id"], x.now + timedelta(minutes=31))
     await c.reflect(plan["id"], x.now + timedelta(minutes=32))
     event = x.store.get("experience", plan["experience_id"])
+    assert (event["importance"], event["score_reason"]) == (7, "完成了作品的重要阶段")
     assert event["source"] == "simulated" and event["revision"] == 2
     assert event["details"]["进度"] == "第二章" and event["details"]["地点"] == "住处"
     assert len(x.store.all("effect")) == 1 and x.ctx.llm.generate.await_count == 1

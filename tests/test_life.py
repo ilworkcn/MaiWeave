@@ -148,3 +148,19 @@ def test_shared_meal_requires_confirmation_and_changes_hunger(life):
         engine.record_experience(ExperienceInput(summary="吃过饭", source="simulated", occurred_at=later.isoformat(), evidence="模拟", plan_id=p["id"]), "chat-a", later)
     engine.record_experience(ExperienceInput(summary="吃过饭", occurred_at=later.isoformat(), evidence="用户确认", plan_id=p["id"]), "chat-a", later)
     assert engine.state()["hunger"] < before
+
+
+def test_old_sharing_scores_migrate_once(tmp_path):
+    from maiweave.store import Store
+    from maiweave.engine import LifeEngine
+    from datetime import datetime, timezone
+    store = Store(tmp_path / "scores.db")
+    now = datetime.now(timezone.utc)
+    with store.db:
+        for score in (1, 2, 3):
+            store.put("experience", {"id": str(score), "importance": score})
+    LifeEngine(store, "Asia/Shanghai", now)
+    LifeEngine(store, "Asia/Shanghai", now)
+    assert [e["importance"] for e in store.all("experience")] == [2, 6, 9]
+    assert store.get("experience", "2")["score_reason"] == "旧版重要度 2/3 分换算"
+    store.close()

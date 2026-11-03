@@ -33,6 +33,18 @@ class PlanInput(BaseModel):
     flexible: bool = False
 
 
+SCORE_GUIDE = (
+    "importance 填1至10的整数，score_reason 用一句话说明这次发生了什么、为什么值得分享。"
+    "1–2分是日常起居，3–4分是普通活动或目标例行进展，5–6分有具体发现或解开旧疑问，"
+    "7–8分完成重要阶段或明显改变看法，9–10分达成长期目标或带来持续影响。按本次实际结果评分。"
+)
+
+
+class SharingScore(BaseModel):
+    importance: int = Field(ge=1, le=10)
+    score_reason: str = Field(min_length=1, max_length=240)
+
+
 class ExperienceInput(BaseModel):
     summary: str = Field(min_length=1, max_length=1500)
     occurred_at: str
@@ -40,7 +52,8 @@ class ExperienceInput(BaseModel):
     details: dict[str, str] = Field(default_factory=dict)
     evidence: str = Field(min_length=1)
     plan_id: str = ""
-    importance: int = Field(default=1, ge=1, le=3)
+    importance: int = Field(default=2, ge=1, le=10, description=SCORE_GUIDE)
+    score_reason: str = Field(default="", max_length=240)
 
 
 class ActivityChoice(BaseModel):
@@ -126,7 +139,7 @@ class ActivityMeaning(BaseModel):
     subject: str = Field(default="", max_length=160)
 
 
-class ActivityOutcome(ActivityMeaning):
+class ActivityOutcome(ActivityMeaning, SharingScore):
     summary: str = Field(min_length=1, max_length=1500)
     details: dict[str, str]
     enjoyment: float = Field(ge=-5, le=5)

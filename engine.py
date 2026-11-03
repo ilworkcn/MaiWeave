@@ -24,6 +24,13 @@ class LifeEngine:
         self.store = store
         self.timezone = timezone
         ZoneInfo(timezone)
+        if not store.find("runtime", "experience_score_10"):
+            with store.db:
+                for event in store.all("experience"):
+                    old = event["importance"]
+                    event.update(importance={1: 2, 2: 6, 3: 9}[old], score_reason=f"旧版重要度 {old}/3 分换算")
+                    store.put("experience", event)
+                store.put("runtime", {"id": "experience_score_10"})
         if store.find("state", "life") is None:
             with store.db:
                 store.put("state", {"id": "life", **LifeState(updated_at=now.isoformat()).model_dump()})
@@ -149,6 +156,8 @@ class LifeEngine:
         record = {**value.model_dump(), "id": uid(), "session_id": session,
                   "occurred_at": occurred.isoformat(), "recorded_at": now.isoformat(),
                   "revision": 1, "history": [], "memory_id": "", "memory_revision": 0}
+        if not record["score_reason"]:
+            record["score_reason"] = ("记录时指定的重要度" if "importance" in value.model_fields_set else "普通生活记录")
         with self.store.db:
             self.store.put("experience", record)
             if plan:
@@ -370,11 +379,18 @@ class LifeEngine:
         return state
 
     def _complete_simulation(self, plan: dict, now: datetime):
+        score, reason = {
+            "sleep": (1, "按作息睡眠"), "travel": (1, "日常出行"), "rest": (2, "日常休息"),
+            "meal": (2, "日常用餐"), "diary": (3, "写完日记"), "leisure": (3, "完成休闲活动"),
+            "study": (3, "完成学习安排"), "work": (3, "完成工作安排"), "social": (4, "完成社交活动"),
+        }[plan["kind"]]
+        if plan["goal_id"]:
+            score, reason = 4, "完成与目标关联的活动"
         record = {"id": uid(), "session_id": plan["session_id"], "summary": f"完成了{plan['title']}",
                   "occurred_at": plan["end"], "recorded_at": now.isoformat(), "source": "simulated",
                   "details": {"地点": plan["location"], "动机": plan["motivation"]},
                   "evidence": f"角色生活模拟，依据已保存计划 {plan['id']} 推进",
-                  "plan_id": plan["id"], "importance": 2 if plan["goal_id"] else 1, "revision": 1, "history": [],
+                  "plan_id": plan["id"], "importance": score, "score_reason": reason, "revision": 1, "history": [],
                   "memory_id": "", "memory_revision": 0}
         if plan.get("book_id"):
             record["summary"] = f"结束{plan['title']}的阅读时段，正文笔记正在整理"

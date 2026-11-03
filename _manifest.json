@@ -3,7 +3,7 @@
   "plugin_type": "chat",
   "id": "ilworkcn.maiweave",
   "name": "MaiWeave · 麦织｜阅读与生活",
-  "version": "0.7.5",
+  "version": "0.8.0",
   "description": "给麦麦一本书，让它按日程阅读、留下笔记，和你聊读后感。聊天也能改变生活安排，串起日记、人物关系与纪念日。",
   "author": {
     "name": "ilworkcn",

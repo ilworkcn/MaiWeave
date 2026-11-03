@@ -140,7 +140,7 @@ async def test_next_day_continuation_uses_saved_subject_and_progress(plugin):
     plugin.engine.advance(now + timedelta(minutes=31))
     plugin.ctx.llm.generate.return_value = {"success": True, "response": json.dumps({
         "activity": "读小说", "subject": "模型的另一种称呼", "summary": "读完了第三章", "details": {"进度": "第三章"},
-        "enjoyment": 3, "next_action": "从第四章继续", "completed": True})}
+        "importance": 5, "score_reason": "发现新线索", "enjoyment": 3, "next_action": "从第四章继续", "completed": True})}
     await plugin.continuity.reflect(plan["id"], now + timedelta(minutes=31))
     records = plugin.store.all("activity_memory")
     assert len(records) == 1

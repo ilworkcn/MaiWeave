@@ -105,7 +105,7 @@ async def test_proactive_requests_are_limited(plugin):
     plugin.config.proactive.enabled = True
     plugin.config.proactive.session_ids = ["chat-a"]
     from maiweave.models import ExperienceInput
-    plugin.engine.record_experience(ExperienceInput(summary="完成了一个小作品", occurred_at=now.isoformat(), source="simulated", evidence="角色模拟", importance=2), "chat-a", now)
+    plugin.engine.record_experience(ExperienceInput(summary="完成了一个小作品", occurred_at=now.isoformat(), source="simulated", evidence="角色模拟", importance=6), "chat-a", now)
     await plugin.living.share(now)
     await plugin.living.share(now + timedelta(minutes=1))
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 1
@@ -151,17 +151,22 @@ async def test_proactive_selects_highest_eligible_score(plugin):
             source="simulated", evidence="角色模拟"), "chat-a", now)
 
     add("散步", 1, 1)
-    add("昨天的成果", 3, 360)
+    add("昨天的成果", 10, 360)
     await plugin.living.share(now)
     row = (await plugin.ui_overview())["share_decisions"][0]
-    assert row["outcome"] == "跳过" and "1/3 分" in row["score"]
+    assert row["outcome"] == "跳过" and "1/10 分" in row["score"]
     assert "近六小时内 1 条" in row["reason"]
-    add("整理笔记", 2, 2)
-    chosen = add("完成作品", 3, 15)
-    add("之前的突破", 3, 30)
+    add("整理笔记", 6, 2)
+    chosen = add("完成作品", 7, 15)
+    add("之前的突破", 7, 30)
+    plugin.config.proactive.share_threshold = 8
+    await plugin.living.share(now)
+    assert "门槛 8 分" in plugin.living.share_decisions[0]["score"]
+    assert plugin.living.share_decisions[0]["outcome"] == "跳过"
+    plugin.config.proactive.share_threshold = 7
     await plugin.living.share(now)
     row = (await plugin.ui_overview())["share_decisions"][0]
-    assert "完成作品》3/3 分" in row["score"]
+    assert "完成作品》7/10 分" in row["score"]
     assert plugin.store.get("sharing", "chat-a")["experience_ids"] == [chosen["id"]]
 
 
