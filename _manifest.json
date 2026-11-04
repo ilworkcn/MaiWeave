@@ -42,7 +42,8 @@
     "person.get_value",
     "chat.get_all_streams",
     "person.get_id",
-    "llm.get_available_models"
+    "llm.get_available_models",
+    "maisaka.reply.generate"
   ],
   "i18n": {
     "default_locale": "zh-CN",

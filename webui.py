@@ -261,7 +261,7 @@ class WebUI:
                 "planning_status": self.planning_status if self.config.life.enabled else "生活引擎已关闭",
                 "planning_failure": failure["message"] if failure else "暂无失败记录",
                 "planning_history": decisions,
-                "share_status": "已启用" if self.config.proactive.enabled else "已关闭",
+                "share_status": f"已启用 · {self.config.proactive.mode}" if self.config.proactive.enabled else "已关闭",
                 "share_decisions": self.living.receipts.history(self.living.share_decisions),
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
                 "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",

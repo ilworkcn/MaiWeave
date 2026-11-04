@@ -403,7 +403,7 @@ class Living:
 
         def record(outcome, reason, session="全部", score="本轮未筛选经历"):
             self.share_decisions.appendleft({"created": now.isoformat(), "at": now.strftime("%m-%d %H:%M:%S"), "session": session,
-                                             "outcome": outcome, "reason": reason, "score": score})
+                                             "outcome": outcome, "reason": reason, "score": score, "mode": config.mode})
 
         if not in_hours(now.hour, config.start_hour, config.end_hour):
             record("跳过", f"允许交流的时段为 {config.start_hour:02}:00 至 {config.end_hour:02}:00")
@@ -469,7 +469,7 @@ class Living:
                 record("跳过", reason, session, score)
                 continue
             intent = notices[0][1] if notices else (
-                "有一件刚发生的生活经历可能值得分享。结合当前对话判断是否适合开口，可以选择沉默。"
+                "分享一件刚发生的生活经历。"
                 "从角色自己的视角分享这次经历，给对方自由接话的空间。"
                 f"值得分享的原因={event['score_reason']}；经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
             )
@@ -482,15 +482,21 @@ class Living:
                 reason = f"{len(notices)} 条待发提醒，优先处理{topic}（{record_id}）"
             else:
                 reason = f"{topic}：{screening}。选择得分最高的经历，同分时选最近发生的一条"
-            try:
-                result = await self.ctx.maisaka.proactive.trigger(session, intent, reason="MaiWeave 生活跟进", metadata={"maiweave_record_id": record_id})
-                if not result["success"]:
-                    raise RuntimeError(result.get("error") or "主动交流请求失败")
-            except Exception as error:
-                record("请求失败", f"{reason}。MaiBot 返回：{error}", session, score)
-                raise
-            self.receipts.accept(result["task_id"], {"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
-                                                     "reason": reason, "score": score}, now)
+            row = {"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
+                   "reason": reason, "score": score, "mode": config.mode}
+            if config.mode == "主动表达":
+                await self.receipts.express(session, intent, row, now)
+            else:
+                try:
+                    result = await self.ctx.maisaka.proactive.trigger(
+                        session, intent + "结合当前对话判断是否适合开口，可以选择沉默。",
+                        reason="MaiWeave 生活跟进", metadata={"maiweave_record_id": record_id})
+                    if not result["success"]:
+                        raise RuntimeError(result.get("error") or "主动交流请求失败")
+                except Exception as error:
+                    record("请求失败", f"{reason}。MaiBot 返回：{error}", session, score)
+                    raise
+                self.receipts.accept(result["task_id"], row, now)
             if notices:
                 sent.setdefault("notice_ids", []).append(notices[0][0])
                 if notices[0][2]:

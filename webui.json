@@ -309,6 +309,7 @@
           "value": {"source": "data", "field": "share_decisions"},
           "columns": [
             {"field": "at", "label": "判定时间"},
+            {"field": "mode", "label": "交流模式"},
             {"field": "session", "label": "聊天流"},
             {"field": "outcome", "label": "结果"},
             {"field": "delivery", "label": "MaiBot 回执"},

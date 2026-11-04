@@ -2,6 +2,7 @@
 
 import json
 import re
+from uuid import uuid4
 from datetime import datetime, timedelta
 
 TASK = re.compile(r'^<plugin_proactive_task id="(proactive:ilworkcn\.maiweave:\d+)" plugin_id="ilworkcn\.maiweave">')
@@ -33,6 +34,42 @@ class ShareReceipts:
         with self.store.db:
             self.store.put("share_receipt", {**row, "id": task, "created": now.isoformat(), "calls": {},
                                             "outcome": "MaiBot 已受理", "delivery": "等待 Planner 处理"})
+
+    async def express(self, session, intent, row, now):
+        """通过原生 Replyer 生成分享，发送回执用于结算额度。"""
+        row = {**row, "id": f"express:{uuid4().hex}", "created": now.isoformat(),
+               "calls": {}, "outcome": "生成中", "delivery": "正在组织这次分享"}
+        with self.store.db:
+            self.store.put("share_receipt", row)
+        stage = "生成失败"
+        try:
+            history = await self.ctx.db.get("Messages", filters={"session_id": session, "is_command": False},
+                                            order_by="-timestamp", limit=10)
+            context = [{"时间": item["timestamp"], "人物": item["user_nickname"],
+                        "内容": item["processed_plain_text"]} for item in reversed(history)]
+            result = await self.ctx.maisaka.reply.generate(
+                session, intent + "\n最近聊天：" + json.dumps(context, ensure_ascii=False),
+                format_instruction="请以角色自己的口吻向当前聊天中的对方主动说几句话。结合最近聊天承接话题，直接输出可发送的聊天正文。",
+                timeout_ms=95000)
+            if not result["success"]:
+                raise RuntimeError(result.get("error") or "回复生成失败")
+            text = result["text"].strip()
+            if not text:
+                raise RuntimeError("回复生成结果为空")
+            stage = "发送失败"
+            result = await self.ctx.send.text(text, session, return_details=True,
+                                              storage_message=True, sync_to_maisaka_history=True)
+            if not result["sent"]:
+                raise RuntimeError(result.get("error") or "MaiBot 返回发送失败")
+            sent_at = datetime.now(now.tzinfo)
+            row.update(outcome="实际已发送", delivery=f"{sent_at:%H:%M:%S} 已确认投递",
+                       sent_at=sent_at.isoformat(), message_id=result["message_id"])
+        except Exception as error:
+            row.update(outcome=stage, delivery=str(error))
+            raise
+        finally:
+            with self.store.db:
+                self.store.put("share_receipt", row)
 
     def observe(self, session, items):
         task = self.turn.pop(session, "")
@@ -92,7 +129,7 @@ class ShareReceipts:
                     self.store.put("share_receipt", row)
 
     def history(self, skips):
-        rows = [*skips, *self.store.all("share_receipt")]
+        rows = [{"mode": "自然交流", **row} for row in [*skips, *self.store.all("share_receipt")]]
         return sorted(rows, key=lambda row: row["created"], reverse=True)[:10]
 
     def sent_times(self, session, zone):
