@@ -22,8 +22,10 @@ class Store:
         row = self.db.execute("SELECT data FROM records WHERE category=? AND id=?", (category, record_id)).fetchone()
         return json.loads(row[0]) if row else None
 
-    def all(self, category: str) -> list[dict]:
-        rows = self.db.execute("SELECT data FROM records WHERE category=? ORDER BY rowid", (category,)).fetchall()
+    def all(self, category: str, *, omit: tuple[str, ...] = ()) -> list[dict]:
+        expression = "json_remove(data," + ",".join("?" for _ in omit) + ")" if omit else "data"
+        rows = self.db.execute(f"SELECT {expression} FROM records WHERE category=? ORDER BY rowid",
+                               (*("$." + key for key in omit), category)).fetchall()
         return [json.loads(row[0]) for row in rows]
 
     def put(self, category: str, record: dict) -> dict:

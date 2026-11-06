@@ -76,7 +76,7 @@ async def test_upload_read_finish_context_diary_and_next_chapter(plugin):
     items = [{'item_type': 'UserMessageItem', 'parts': [{'type': 'text', 'text': '聊聊《银杏书》？'}]}]
     planner = await plugin.planner_context(session_id='group', items=items)
     reply = await plugin.reply_context(session_id='group', extra_prompt='')
-    for context in (planner['modified_kwargs']['items'][0]['parts'][0]['text'], reply['modified_kwargs']['extra_prompt']):
+    for context in (planner['modified_kwargs']['items'][-1]['parts'][0]['text'], reply['modified_kwargs']['extra_prompt']):
         shelf = json.loads(context.split('\n')[-1])['bookshelf']
         assert [n['book_id'] for n in shelf['notes']] == [book['id']]
         assert shelf['notes'][0]['thoughts'] == '想起安静的下午。'

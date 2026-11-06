@@ -95,7 +95,10 @@
                 {
                   "type": "text",
                   "label": "主动交流",
-                  "value": {"source": "data", "field": "share_status"}
+                  "value": {
+                    "source": "data",
+                    "field": "share_status"
+                  }
                 },
                 {
                   "type": "text",
@@ -306,15 +309,39 @@
         {
           "type": "table",
           "label": "主动交流判定 · 最近 10 条",
-          "value": {"source": "data", "field": "share_decisions"},
+          "value": {
+            "source": "data",
+            "field": "share_decisions"
+          },
           "columns": [
-            {"field": "at", "label": "判定时间"},
-            {"field": "mode", "label": "交流模式"},
-            {"field": "session", "label": "聊天流"},
-            {"field": "outcome", "label": "结果"},
-            {"field": "delivery", "label": "MaiBot 回执"},
-            {"field": "score", "label": "候选经历最高分"},
-            {"field": "reason", "label": "原因"}
+            {
+              "field": "at",
+              "label": "判定时间"
+            },
+            {
+              "field": "mode",
+              "label": "交流模式"
+            },
+            {
+              "field": "session",
+              "label": "聊天流"
+            },
+            {
+              "field": "outcome",
+              "label": "结果"
+            },
+            {
+              "field": "delivery",
+              "label": "MaiBot 回执"
+            },
+            {
+              "field": "score",
+              "label": "候选经历最高分"
+            },
+            {
+              "field": "reason",
+              "label": "原因"
+            }
           ]
         },
         {
@@ -437,6 +464,13 @@
             "query": {
               "type": "string",
               "required": false
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "record_id": {
+              "type": "string"
             }
           }
         },
@@ -485,6 +519,10 @@
             "start_date": {
               "type": "string",
               "required": false
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         },
@@ -503,6 +541,28 @@
             "plan_id": {
               "type": "string",
               "required": false
+            }
+          }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -919,6 +979,13 @@
             "query": {
               "type": "string",
               "required": false
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "record_id": {
+              "type": "string"
             }
           }
         },
@@ -971,6 +1038,28 @@
             "plan_id": {
               "type": "string",
               "required": false
+            }
+          }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -1031,6 +1120,13 @@
             "query": {
               "type": "string",
               "required": false
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "record_id": {
+              "type": "string"
             }
           }
         },
@@ -1102,6 +1198,28 @@
             "plan_id": {
               "type": "string",
               "required": false
+            }
+          }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -1224,6 +1342,13 @@
             "query": {
               "type": "string",
               "required": false
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "record_id": {
+              "type": "string"
             }
           }
         },
@@ -1263,11 +1388,23 @@
         },
         "view_data": {
           "api": "ui_continuity",
-          "version": "1"
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         },
         "view_habit_data": {
           "api": "ui_habits",
-          "version": "1"
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         },
         "operation_status": {
           "api": "ui_operation_status",
@@ -1280,6 +1417,28 @@
             "plan_id": {
               "type": "string",
               "required": false
+            }
+          }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -1520,6 +1679,28 @@
               "required": false
             }
           }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       },
       "actions": {
@@ -1562,7 +1743,10 @@
           "api": "ui_book_action",
           "version": "1",
           "parameters": {
-            "location": {"type": "string", "required": false},
+            "location": {
+              "type": "string",
+              "required": false
+            },
             "action": {
               "type": "string",
               "required": true
@@ -1610,12 +1794,22 @@
           "parameters": {
             "day": {
               "type": "string"
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         },
         "view_dream_data": {
           "api": "ui_dreams",
-          "version": "1"
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         },
         "operation_status": {
           "api": "ui_operation_status",
@@ -1628,6 +1822,28 @@
             "plan_id": {
               "type": "string",
               "required": false
+            }
+          }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }
@@ -1680,6 +1896,28 @@
               "required": false
             }
           }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         }
       },
       "actions": {
@@ -1723,6 +1961,13 @@
             "query": {
               "type": "string",
               "required": false
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "record_id": {
+              "type": "string"
             }
           }
         },
@@ -1779,6 +2024,28 @@
             "plan_id": {
               "type": "string",
               "required": false
+            }
+          }
+        },
+        "record_detail": {
+          "api": "ui_record_detail",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            },
+            "field": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "minimum": 1
             }
           }
         }

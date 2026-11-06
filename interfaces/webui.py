@@ -20,14 +20,40 @@ def display_time(value: str) -> str:
     return value.replace("T", " ")[:19] if value else ""
 
 
+def list_row(row):
+    """列表只携带当前内容，修订历史与写作素材在详情中读取。"""
+    return {key: value for key, value in row.items() if key not in {"history", "changes", "material"}}
+
+
+def page_tables(data, page, keys):
+    """同一查询的记录表按页浏览，保留完整的历史记录。"""
+    pages = max(1, *(math.ceil(len(data[key]) / 20) for key in keys))
+    page = min(pages, max(1, page))
+    total = sum(len(data[key]) for key in keys)
+    for key in keys:
+        data[key] = [list_row(row) for row in data[key][(page - 1) * 20:page * 20]]
+    data["pagination"] = {"page": page, "pages": pages, "total": total}
+    return data
+
+
 def plan_row(plan):
-    return {**plan, "kind_label": KIND[plan["kind"]], "status_label": STATUS[plan["status"]],
+    return {**list_row(plan), "kind_label": KIND[plan["kind"]], "status_label": STATUS[plan["status"]],
             "start_label": display_time(plan["start"]), "end_label": display_time(plan["end"]),
             "scope_label": plan["session_id"] or "公共生活", "participants_label": "、".join(plan["participants"]) or "独自活动",
             "origin_label": "重复日程" if plan.get("routine_id") else ("自主安排" if plan["autonomous"] else "对话或页面安排")}
 
 
 class WebUI:
+    @API("ui_record_detail", description="分页读取修订历史与日记素材")
+    async def ui_record_detail(self, category: str, record_id: str, field: str, page: int = 1) -> dict:
+        fields = {"experience": {"history"}, "relationship": {"history"}, "plan": {"changes"}, "diary": {"material"}}
+        if field not in fields.get(category, set()):
+            raise ValueError("请选择经历修订、关系历史、日程修改或日记素材")
+        text = json.dumps(self.store.get(category, record_id)[field], ensure_ascii=False, indent=2)
+        pages = max(1, math.ceil(len(text) / 12000))
+        page = min(pages, max(1, page))
+        return {"text": text[(page - 1) * 12000:page * 12000], "page": page, "pages": pages}
+
     @API("ui_books", description="书架、阅读进度与笔记")
     async def ui_books(self, book_id: str = "", page: int = 0) -> dict:
         current = self.store.find("runtime", "current_book")
@@ -76,7 +102,7 @@ class WebUI:
             return {"done": status != "进行中", "error": job["error"] if status == "失败" else "",
                     "message": message}
         plan = self.store.get("plan", plan_id)
-        diary = next((row for row in self.store.all("diary") if row.get("plan_id") == plan_id), None)
+        diary = next((row for row in self.store.all("diary", omit=('material',)) if row.get("plan_id") == plan_id), None)
         if diary and diary["status"] == "已生成":
             return {"done": True, "error": "", "message": "日记已生成，可在日记本中阅读"}
         if diary and diary["status"] == "生成失败":
@@ -100,7 +126,9 @@ class WebUI:
 
     @API("ui_change_status", description="查询核对结果")
     async def ui_change_status(self, review_id: str) -> dict:
-        return self.store.get("review", review_id)
+        record = self.store.get("review", review_id)
+        return {key: list_row(value) if key in {"result", "proposed"} and isinstance(value, dict) else value
+                for key, value in record.items()}
 
     @API("ui_change_decide", description="确认或取消有冲突的修改")
     async def ui_change_decide(self, review_id: str, accept: bool) -> dict:
@@ -113,12 +141,12 @@ class WebUI:
         return {"items": [{"id": row["stream_id"], "name": row.get("group_name") or row.get("user_cardname") or row.get("user_nickname") or row["stream_id"]} for row in rows]}
 
     @API("ui_diaries", description="按日期查看生活日记")
-    async def ui_diaries(self, day: str = "") -> dict:
-        rows = sorted(self.store.all("diary"), key=lambda row: row["day"], reverse=True)
+    async def ui_diaries(self, day: str = "", page: int = 1) -> dict:
+        rows = sorted(self.store.all("diary", omit=('material',)), key=lambda row: row["day"], reverse=True)
         if day:
             rows = [row for row in rows if row["day"] == day]
-        return {"entries": [{**row, "coverage": "全天记录" if row["complete"] else "截至写作时刻",
-                              "material_text": json.dumps(row["material"], ensure_ascii=False, indent=2)} for row in rows[:90]]}
+        return page_tables({"entries": [{**list_row(row), "detail_kind": "diary", "coverage": "全天记录" if row["complete"] else "截至写作时刻",
+                              "material_text": ""} for row in rows]}, page, ['entries'])
 
     @API("ui_write_diary", description="生成或重新整理指定日期的生活日记")
     async def ui_write_diary(self, day: str = "") -> dict:
@@ -139,18 +167,22 @@ class WebUI:
         return usage_summary(self.store, self.now(), int(days), "" if feature == "all" else feature)
 
     @API("ui_editor_records", description="按类别查找可编辑记录")
-    async def ui_editor_records(self, category: str, query: str = "") -> dict:
+    async def ui_editor_records(self, category: str, query: str = "", page: int = 1, record_id: str = "") -> dict:
         if category not in {"profile", "anniversary", "plan", "routine", "place", "route", "experience", "thread"}:
             raise ValueError("请选择资料、纪念日、日程、重复规则、地点、路线、经历或跟进事项")
-        rows = self.anniversaries.upcoming(self.now().date()) if category == "anniversary" else self.store.all(category)
+        rows = self.anniversaries.upcoming(self.now().date()) if category == "anniversary" else self.store.all(category, omit=("history", "changes", "material"))
         if category == "profile":
             rows = [{**row, "effective_intimacy": self.living.intimacy(row["session_id"], row["user_id"])} for row in rows]
         if category == "plan":
             rows = [row for row in rows if row["status"] in {"scheduled", "active", "paused", "blocked"}]
         if query.strip():
             rows = [row for row in rows if query.casefold() in json.dumps(row, ensure_ascii=False).casefold()]
-        return {"today": self.now().date().isoformat(), "records": rows[-200:][::-1], "total": len(rows), "profiles": self.store.all("profile"),
-                "places": self.store.all("place"), "memory_enabled": self.config.memory.enabled}
+        if record_id:
+            index = next((i for i, row in enumerate(reversed(rows)) if row["id"] == record_id), None)
+            if index is not None:
+                page = index // 20 + 1
+        return page_tables({"today": self.now().date().isoformat(), "records": rows[::-1], "total": len(rows), "profiles": [{"id": p["id"], "name": p["name"]} for p in self.store.all("profile")],
+                "places": [{"id": p["id"], "name": p["name"]} for p in self.store.all("place")], "memory_enabled": self.config.memory.enabled}, page, ['records'])
 
     @API("ui_anniversaries", description="个人资料和纪念日")
     async def ui_anniversaries(self) -> dict:
@@ -232,7 +264,7 @@ class WebUI:
         await self.living.receipts.refresh(self.now())
         now, state = self.now(), self.engine.state()
         current = self.engine.current(now)
-        plans = self.store.all("plan")
+        plans = self.store.all("plan", omit=('changes',))
         choices = sorted((p for p in plans if p.get("autonomous") and not p.get("activity_id")
                           and not p.get("routine_id") and p["kind"] not in {"travel", "diary"}),
                          key=lambda p: p["created_at"], reverse=True)[:10]
@@ -269,7 +301,7 @@ class WebUI:
                 "mood_label": "心情不错" if state["mood"] > 10 else ("有些低落" if state["mood"] < -10 else "平静"),
                 "updated_at": display_time(state["updated_at"]), "enabled": "已启用" if self.config.life.enabled else "已停用",
                 "pending_count": sum(p["status"] in {"scheduled", "active"} for p in plans),
-                "experience_count": len(self.store.all("experience")), "dream_count": len(self.store.all("dream")),
+                "experience_count": len(self.store.all("experience", omit=('history',))), "dream_count": len(self.store.all("dream")),
                 "habit_count": sum(h["active"] for h in self.store.all("habit")), "history": history,
                 "energy_trend": [{"time": self.engine.time(r["at"]).strftime("%H:%M"),
                                   "energy": r["energy"], "mood": r["mood"]} for r in trend],
@@ -278,20 +310,20 @@ class WebUI:
                 "jobs": self.store.all("job")[-10:]}
 
     @API("ui_schedule", description="日程与重复规则")
-    async def ui_schedule(self, session_id: str = "", start_date: str = "") -> dict:
-        plans = self.store.all("plan")
+    async def ui_schedule(self, session_id: str = "", start_date: str = "", page: int = 1) -> dict:
+        plans = self.store.all("plan", omit=('changes',))
         if session_id:
             plans = [p for p in plans if self.engine.visible(p, session_id)]
         if start_date:
             after = self.engine.time(start_date)
             plans = [p for p in plans if self.engine.time(p["end"]) >= after]
-        plans = sorted(plans, key=lambda p: self.engine.time(p["start"]), reverse=True)[:200]
+        plans = sorted(plans, key=lambda p: self.engine.time(p["start"]), reverse=True)
         rules = [r for r in self.store.all("routine") if not session_id or self.engine.visible(r, session_id)]
-        return {"plans": [plan_row(p) for p in plans],
+        return page_tables({"plans": [plan_row(p) for p in plans],
                 "rules": [{**r, "frequency_label": FREQUENCY[r["frequency"]], "status_label": STATUS[r["status"]],
                            "weekdays_label": "、".join(list(WEEKDAYS)[d] for d in r["weekdays"]), "exceptions_label": "、".join(r["exceptions"]),
-                           "kind_label": KIND[r["kind"]]} for r in rules], "issues": self.store.all("routine_issue")[-100:],
-                "schedule_issues": self.store.all("schedule_issue"), "notices": self.store.all("schedule_notice"), "adjustments": self.store.all("adjustment")[-50:]}
+                           "kind_label": KIND[r["kind"]]} for r in rules], "issues": self.store.all("routine_issue")[::-1],
+                "schedule_issues": self.store.all("schedule_issue"), "notices": self.store.all("schedule_notice"), "adjustments": self.store.all("adjustment")[::-1]}, page, ['plans', 'rules', 'issues', 'schedule_issues', 'notices', 'adjustments'])
 
     @API("ui_create_plan", description="新增生活安排")
     async def ui_create_plan(self, title: str, start: str, end: str, kind: str = "leisure", location: str = "", session_id: str = "", participants: str = "", simulation: bool = True, flexible: bool = False) -> dict:
@@ -306,7 +338,7 @@ class WebUI:
         self.require_life()
         self.engine.advance(self.now())
         plan = self.store.get("plan", plan_id)
-        return self.spatial.transition(plan_id, action, plan["session_id"], self.now())
+        return list_row(self.spatial.transition(plan_id, action, plan["session_id"], self.now()))
 
     @API("ui_update_plan", description="修改所选日程")
     async def ui_update_plan(self, plan_id: str, new_title: str = "", new_start: str = "", new_end: str = "", new_location: str = "") -> dict:
@@ -314,7 +346,7 @@ class WebUI:
         self.engine.advance(self.now())
         plan = self.store.get("plan", plan_id)
         changes = {k: v for k, v in {"title": new_title, "start": new_start, "end": new_end, "location": new_location}.items() if v}
-        return self.spatial.change(plan_id, PlanPatch.model_validate(changes), plan["session_id"], self.now())
+        return list_row(self.spatial.change(plan_id, PlanPatch.model_validate(changes), plan["session_id"], self.now()))
 
     @API("ui_save_routine", description="创建或更新重复日程")
     async def ui_save_routine(self, title: str, anchor_date: str, start_time: str, duration_minutes: int,
@@ -406,11 +438,11 @@ class WebUI:
         return self.spatial.move(destination, "", self.now())
 
     @API("ui_dreams", description="梦境档案与睡眠记录")
-    async def ui_dreams(self) -> dict:
-        dreams = self.store.all("dream")[-100:][::-1]
-        return {"dreams": [{"title": "尚未生成", "story": "", "feeling": "", **d, "source_label": "梦境"} for d in dreams],
-                "sleeps": [{**plan_row(p), "hours": round(p["elapsed_seconds"] / 3600, 1)} for p in self.store.all("plan") if p["kind"] == "sleep"][-100:][::-1],
-                "jobs": self.store.all("job")[-10:]}
+    async def ui_dreams(self, page: int = 1) -> dict:
+        dreams = self.store.all("dream")[::-1]
+        return page_tables({"dreams": [{"title": "尚未生成", "story": "", "feeling": "", **d, "source_label": "梦境"} for d in dreams],
+                "sleeps": [{**plan_row(p), "hours": round(p["elapsed_seconds"] / 3600, 1)} for p in self.store.all("plan", omit=('changes',)) if p["kind"] == "sleep"][::-1],
+                "jobs": self.store.all("job")[-10:]}, page, ['dreams', 'sleeps'])
 
     @API("ui_generate_dream", description="为所选睡眠生成梦境")
     async def ui_generate_dream(self, plan_id: str) -> dict:
@@ -418,11 +450,11 @@ class WebUI:
         return self.start_job("生成梦境", self.dreams.generate(plan_id, self.now()))
 
     @API("ui_habits", description="已学习习惯与长期目标")
-    async def ui_habits(self) -> dict:
-        return {"habits": [{**h, "kind_label": KIND[h["kind"]], "enabled_label": "参与规划" if h["enabled"] else "已忽略",
+    async def ui_habits(self, page: int = 1) -> dict:
+        return page_tables({"habits": [{**h, "kind_label": KIND[h["kind"]], "enabled_label": "参与规划" if h["enabled"] else "已忽略",
                             "active_label": "近期习惯" if h["active"] else "近期未出现", "evidence": "、".join(h["evidence_ids"])} for h in self.store.all("habit")],
                 "goals": [{**g, "status_label": STATUS[g["status"]], "progress": round(g["completed_sessions"] / g["target_sessions"] * 100)} for g in self.store.all("goal")],
-                "relations": [{**r, "history_text": json.dumps(r["history"], ensure_ascii=False)} for r in self.store.all("relationship")][-100:]}
+                "relations": [{**list_row(r), "detail_kind": "relationship", "history_text": ""} for r in self.store.all("relationship", omit=('history',))]}, page, ['habits', 'goals', 'relations'])
 
     @API("ui_habit_action", description="启用或忽略所选习惯")
     async def ui_habit_action(self, habit_id: str, enabled: bool) -> dict:
@@ -437,13 +469,13 @@ class WebUI:
 
     @API("ui_records", description="生活经历与修订历史")
     async def ui_records(self, query: str = "", session_id: str = "", page: int = 1) -> dict:
-        records = [e for e in self.store.all("experience") if (not session_id or self.engine.visible(e, session_id)) and (not query or query in e["summary"])]
+        records = [e for e in self.store.all("experience", omit=('history',)) if (not session_id or self.engine.visible(e, session_id)) and (not query or query in e["summary"])]
         records.sort(key=lambda e: e["occurred_at"], reverse=True)
         pages = max(1, math.ceil(len(records) / 30))
         page = min(pages, max(1, page))
-        rows = [{**e, "source_label": SOURCE[e["source"]], "time_label": display_time(e["occurred_at"]),
+        rows = [{**list_row(e), "detail_kind": "experience", "source_label": SOURCE[e["source"]], "time_label": display_time(e["occurred_at"]),
                  "details_text": "\n".join(f"{k}：{v}" for k, v in e["details"].items()),
-                 "history_text": json.dumps(e["history"], ensure_ascii=False, indent=2),
+                 "history_text": "",
                  "memory_label": "已同步" if e["memory_revision"] == e["revision"] else ("保存在生活档案" if e["source"] == "simulated" else "尚未同步当前修订")}
                 for e in records[(page - 1) * 30:page * 30]]
         return {"records": rows, "pagination": {"page": page, "pages": pages, "total": len(records)}, "jobs": self.store.all("job")[-10:]}
@@ -455,7 +487,7 @@ class WebUI:
         if not detail_key and not summary:
             raise ValueError("请填写需要修改的摘要或细节")
         record = self.engine.revise_experience(experience_id, {detail_key: detail_value} if detail_key else {}, summary, evidence, old["session_id"], self.now())
-        return record
+        return list_row(record)
 
     @API("ui_sync_record", description="后台同步所选经历到原生记忆")
     async def ui_sync_record(self, experience_id: str) -> dict:
@@ -474,20 +506,20 @@ class WebUI:
         return self.engine.close_goal(goal_id, goal["session_id"])
 
     @API("ui_continuity", description="活动接续、阶段目标与待跟进事项")
-    async def ui_continuity(self) -> dict:
+    async def ui_continuity(self, page: int = 1) -> dict:
         goals = self.store.all("goal")
-        active_steps = {p.get("goal_step_id") for p in self.store.all("plan") if p["status"] == "active"}
-        return {
-            "reflections": self.store.all("reflection")[-50:][::-1],
+        active_steps = {p.get("goal_step_id") for p in self.store.all("plan", omit=('changes',)) if p["status"] == "active"}
+        return page_tables({
+            "reflections": self.store.all("reflection")[::-1],
             "preferences": [{**p, "evidence": "、".join(p["evidence_ids"])} for p in self.store.all("preference")],
-            "continuations": [{**p, "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")][-30:],
-            "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")][-50:],
+            "continuations": [{**p, "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")],
+            "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")],
             "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
-                         "request_label": "已向 MaiBot 请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")][-100:],
+                         "request_label": "已向 MaiBot 请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")],
             "goals": [{**g, "outline_status": g.get("outline_status", "待分解"), "outline_error": g.get("outline_error", ""), "status_label": STATUS[g["status"]]} for g in goals],
             "steps": [{**s, "goal_title": g["title"], "status_label": "进行中" if s["id"] in active_steps else {"pending": "未开始", "active": "进行中", "completed": "已完成"}[s["status"]]} for g in goals for s in g.get("steps", [])],
             "jobs": self.store.all("job")[-10:],
-        }
+        }, page, ['reflections', 'preferences', 'continuations', 'effects', 'threads', 'goals', 'steps'])
 
     @API("ui_reflect", description="后台生成或重试活动具体结果")
     async def ui_reflect(self, plan_id: str) -> dict:

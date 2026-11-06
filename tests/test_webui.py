@@ -215,3 +215,15 @@ async def test_planning_reason_survives_status_checks(plugin):
     failure = await plugin.ui_overview()
     assert "地点搜索失败" in failure["planning_failure"]
     assert failure["planning_history"] == [decision]
+
+
+def test_nested_details_and_pagination_buttons():
+    import shutil
+    import subprocess
+    import pytest
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("页面脚本测试需要 Node.js")
+    result = subprocess.run([node, str(Path(__file__).with_name("webui_details.mjs"))],
+                            capture_output=True, text=True, encoding="utf-8")
+    assert result.returncode == 0, result.stdout + result.stderr

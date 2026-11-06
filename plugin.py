@@ -261,12 +261,17 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         return {"action": "continue"}
 
     def context_text(self, session: str, book_id: str = "") -> str:
-        snapshot = self.engine.snapshot(session, self.now())
+        now = self.now()
+        snapshot = self.engine.snapshot(session, now)
+        snapshot["now"] = now.isoformat(timespec="minutes")
+        snapshot["state"].pop("updated_at", None)
         for event in snapshot["experiences"]:
             for key in ("history", "memory_id", "memory_revision"):
                 event.pop(key)
         for plan in snapshot["plans"]:
             plan.pop("changes")
+        if snapshot["current"]:
+            snapshot["current"].pop("changes", None)
         relationships = [r for r in self.store.all("relationship") if r["session_id"] == session]
         snapshot["person_states"] = self.presence.context(session, self.now())
         snapshot["relationships"] = [{k: v for k, v in r.items() if k != "history"} for r in relationships]
@@ -285,7 +290,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         }
         snapshot["profiles"] = [p for p in self.store.all("profile") if p["session_id"] == session]
         snapshot["pending_changes"] = [{"id": r["id"], "action": r["action"], "conflicts": r["conflicts"],
-                                        "proposed": r.get("proposed", r["payload"])}
+                                        "proposed": {k: v for k, v in r.get("proposed", r["payload"]).items() if k != "history"}}
                                        for r in self.store.all("review") if r["session_id"] == session and r["status"] == "待确认"]
         snapshot["anniversaries"] = [item for item in self.anniversaries.upcoming(self.now().date(), session) if item["days_left"] <= 30]
         return (
@@ -328,9 +333,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             self.chat_books[session] = book_id
         else:
             self.chat_books.pop(session, None)
-        kwargs["items"].insert(0, {
-            "item_type": "SystemMessageItem",
-            "meta": {"item_id": "maiweave-" + uuid4().hex, "logical_turn_id": None, "timestamp": self.now().isoformat()},
+        # 动态状态随本轮对话附在末尾，MaiBot 的各模型适配器均保留该位置。
+        kwargs["items"].append({
+            "item_type": "UserMessageItem",
+            "meta": {"item_id": "maiweave-life-context", "logical_turn_id": None, "timestamp": self.now().isoformat(timespec="minutes")},
             "parts": [{"type": "text", "text": self.context_text(session, book_id)}],
         })
         return {"action": "continue", "modified_kwargs": kwargs}
@@ -559,7 +565,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.8.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.9.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
