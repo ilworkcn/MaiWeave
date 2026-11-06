@@ -1,47 +1,125 @@
-# 只读生活状态 API
+# 只读状态 API
 
-MaiWeave 提供 `get_life_status`，供其他 MaiBot 插件读取角色此刻的生活状态，也供展示组件共用数据。调用方可以据此展示活动、安排自己的任务或决定是否主动交流。
+用这个接口可以知道麦麦正在做什么、在哪里、有没有睡觉，以及接下来准备做什么。适合给其他插件读取，也可以用来制作状态面板。
 
-## 快速接入
+## 先跑通一次查询
 
-MaiWeave 启用并加载后，在调用方插件的异步方法中使用：
+启用 MaiWeave 后，把下面的方法放进你自己的 MaiBot 插件类中，在需要查询时调用 `await self.show_maiweave_status()`。
 
 ```python
-response = await self.ctx.api.call(
-    "ilworkcn.maiweave.get_life_status",
-    version="1",
-)
-if not response["success"]:
-    self.ctx.logger.warning("读取 MaiWeave 状态失败：%s", response["error"])
-    return
-
-status = response["result"]
-if not status["ready"]:
-    self.ctx.logger.info("MaiWeave 尚未建立生活状态记录")
-    return
-
-activity = status["current"]
-title = activity["title"] if activity else "空闲"
-self.ctx.logger.info("麦麦正在：%s，精力：%s", title, status["energy"])
+async def show_maiweave_status(self):
+    response = await self.ctx.api.call(
+        "ilworkcn.maiweave.get_life_status",
+        version="1",
+    )
+    self.ctx.logger.info(f"MaiWeave 返回：{response}")
 ```
 
-上例的 `return` 只结束调用方当前方法，具体业务如何继续由调用方安排。
+这里的 `self.ctx` 是 MaiBot 给插件提供的上下文。完整接口名是 `ilworkcn.maiweave.get_life_status`，版本填字符串 `"1"`。接口查询的是麦麦的全局生活状态，群聊、私聊读到同一份结果。
 
-| 项目 | 值 |
-| --- | --- |
-| 提供方插件 ID | `ilworkcn.maiweave` |
-| API 名称 | `get_life_status` |
-| 完整名称 | `ilworkcn.maiweave.get_life_status` |
-| API 版本 | 字符串 `"1"` |
-| 业务入参 | 无 |
-| SDK 调用入口 | `self.ctx.api.call(...)` |
-| 访问方式 | 经 MaiBot 转发的跨插件调用 |
+返回值分两层：
 
-注册时的 `public=True` 表示允许其他插件调用。此接口通过原生插件 API 服务提供，无需另外配置 URL、Cookie 或访问令牌。
+```python
+response["success"]  # 本次调用是否成功
+response["result"]   # 麦麦的生活状态
+```
 
-## 返回示例
+调用失败时，原因放在 `response["error"]` 中。
 
-SDK 跨插件调用的成功结果包含两层：外层是调用结果，`result` 是生活状态。下面是一份阅读中的示例数据：
+## 在自己的插件里使用
+
+先加入下面这个查询方法，后面的三个示例都调用它：
+
+```python
+async def read_maiweave_status(self):
+    response = await self.ctx.api.call(
+        "ilworkcn.maiweave.get_life_status",
+        version="1",
+    )
+    if response["success"]:
+        return response["result"]
+    raise RuntimeError(response["error"])
+```
+
+### 示例一：显示麦麦正在做什么
+
+把这个方法也放进插件类中，调用 `await self.describe_maiweave()` 就能得到一段文字。
+
+```python
+async def describe_maiweave(self):
+    status = await self.read_maiweave_status()
+    if not status["ready"]:
+        return "生活状态正在准备中"
+
+    activity = status["current"]
+    title = activity["title"] if activity else "空闲"
+    location = status["location"] or "地点待登记"
+    return (
+        f"正在：{title}\n"
+        f"地点：{location}\n"
+        f"精力：{status['energy']:.0f}\n"
+        f"心情：{status['mood']:+.0f}"
+    )
+```
+
+例如返回：
+
+```text
+正在：在住处读一会儿书
+地点：住处
+精力：70
+心情：+18
+```
+
+### 示例二：显示睡眠和唤醒状态
+
+`sleeping` 表示当前处于睡眠日程，`awake_until` 表示这次唤醒陪伴会持续到几点。下面按“引擎开关 → 作息开关 → 陪伴时段 → 睡眠”生成展示文字：
+
+```python
+async def describe_maiweave_sleep(self):
+    from datetime import datetime
+
+    status = await self.read_maiweave_status()
+    if not status["ready"]:
+        return "生活状态正在准备中"
+    if not status["enabled"]:
+        return "生活引擎已关闭"
+    if not status["schedule_enabled"]:
+        return "全天候模式"
+    if status["awake_until"]:
+        until = datetime.fromisoformat(status["awake_until"])
+        return f"已唤醒，陪伴到 {until:%H:%M}"
+    if status["sleeping"]:
+        return "正在睡觉"
+    return "清醒"
+```
+
+这个方法返回展示文字。若你的插件想在麦麦睡觉时推迟自己的主动任务，可以用相同字段编写自己的安排规则。
+
+### 示例三：查看下一项安排
+
+```python
+async def describe_maiweave_next_plan(self):
+    from datetime import datetime
+
+    status = await self.read_maiweave_status()
+    if not status["ready"]:
+        return "生活状态正在准备中"
+
+    plan = status["next_plan"]
+    if plan is None:
+        return "接下来暂时空闲"
+
+    start = datetime.fromisoformat(plan["start"])
+    end = datetime.fromisoformat(plan["end"])
+    return f"{start:%m-%d %H:%M}—{end:%H:%M}，{plan['title']}，地点：{plan['location']}"
+```
+
+例如返回：`11-06 18:00—18:40，准备晚饭，地点：厨房`。时间按返回值里的时区显示。
+
+## 完整返回示例
+
+下面是一份阅读中的示例数据：
 
 ```json
 {
@@ -79,98 +157,44 @@ SDK 跨插件调用的成功结果包含两层：外层是调用结果，`result
 }
 ```
 
-## 状态字段
+## 字段速查
 
-下表描述 `result` 中的字段。
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `version` | integer | 返回结构版本，当前为 `1`，与插件发布版本分开编号 |
-| `ready` | boolean | 是否已有生活状态记录 |
-| `enabled` | boolean | `life.enabled` 配置值，即生活引擎开关 |
-| `schedule_enabled` | boolean | 日常作息开关，`false` 对应全天候模式 |
-| `updated_at` | string / null | 身体与心情状态最后推进时间，含时区偏移的 ISO 8601 时间 |
-| `sleeping` | boolean / null | 查询时刻是否落在一项可执行的睡眠日程内 |
-| `awake_until` | string / null | 仍有效的唤醒陪伴截止时间；无记录或已到期时为 `null` |
-| `current` | object / null | 查询时刻正在时间范围内的活动；没有匹配活动时为 `null` |
-| `next_plan` | object / null | 未来开始时间最早的可执行安排；没有后续安排时为 `null` |
-| `location` | string / null | 生活状态中保存的当前位置；尚未登记时可以是空字符串 |
-| `energy` | number / null | 当前保存的精力值 |
-| `mood` | number / null | 当前保存的心情值，正值偏愉快，负值偏低落，零为中性 |
-
-`ready=false` 时，`updated_at` 到 `mood` 这些状态字段均为 `null`，`version` 与两个配置开关仍有值。
-
-### 活动字段
-
-`current` 与 `next_plan` 使用相同结构：
-
-| 字段 | 类型 | 含义 |
-| --- | --- | --- |
-| `id` | string | 日程 ID |
-| `title` | string | 活动名称 |
-| `kind` | string | 活动类型，见下表 |
-| `start` / `end` | string | 计划开始与结束时间，ISO 8601 格式，带时区偏移 |
-| `location` | string | 计划地点 |
-| `status` | string | 已保存的日程状态，本接口选取 `scheduled` 或 `active` |
-
-| kind | 活动 |
+| 字段 | 含义 |
 | --- | --- |
-| `sleep` | 睡眠 |
-| `meal` | 用餐 |
-| `work` | 工作 |
-| `study` | 学习 |
-| `leisure` | 休闲 |
-| `travel` | 出行 |
-| `rest` | 休息 |
-| `social` | 社交 |
-| `diary` | 写日记 |
+| `version` | 数据格式版本，当前为整数 `1` |
+| `ready` | `true` 表示已有生活状态；`false` 时下面的状态数据为 `null`，两个配置开关仍有值 |
+| `enabled` | 生活引擎开关 |
+| `schedule_enabled` | 日常作息开关，`false` 为全天候模式 |
+| `updated_at` | 精力、心情、位置等生活状态最后更新的时间 |
+| `sleeping` | 是否处于睡眠日程，布尔值 |
+| `awake_until` | 有效的唤醒陪伴截止时间，到期后返回 `null` |
+| `current` | 当前活动；空闲时为 `null` |
+| `next_plan` | 下一项安排；暂时空闲时为 `null` |
+| `location` | 当前位置，字符串；待登记时为空字符串 |
+| `energy` | 精力，数值 |
+| `mood` | 心情，数值；正值偏愉快，负值偏低落，零为中性 |
 
-当前活动使用 `start <= 查询时间 < end` 匹配。下一项安排使用 `start > 查询时间`，按开始时间选最早一项。暂停、取消、完成、等待确认和阻塞的日程不参与这两项选择。多项活动同时满足当前时间时，沿用引擎当前活动的记录顺序，返回首个匹配项。
+`current` 和 `next_plan` 都包含以下字段：
 
-`status` 保留数据库值，因此时间已经进入活动窗口、生活循环尚未推进时，`current.status` 仍可能是 `scheduled`。当前活动的计划地点与角色保存的位置分别放在 `current.location` 和顶层 `location`，途中可能不同。
-
-## 睡眠、唤醒和开关怎么读
-
-这几个字段分别描述不同事实，调用方按自己的用途组合使用：
-
-| 情况 | 读取方式 |
+| 字段 | 含义 |
 | --- | --- |
-| 生活引擎已关闭 | `enabled=false`；其余字段仍可用于展示保存的生活数据 |
-| 全天候模式 | `schedule_enabled=false`；若用户明确安排睡眠，仍可能出现睡眠活动 |
-| 当前在睡眠窗口 | `sleeping=true` |
-| 有有效陪伴时段 | `awake_until` 为截止时间 |
-| 当前没有活动 | `ready=true` 且 `current=null` |
-| 尚未建立状态记录 | `ready=false`，状态字段为 `null` |
+| `id` | 日程 ID |
+| `title` | 活动名称 |
+| `kind` | 活动类型 |
+| `start` / `end` | 开始与结束时间，含时区的 ISO 8601 字符串 |
+| `location` | 计划地点；出行途中可以与顶层的当前位置不同 |
+| `status` | 保存的日程状态：`scheduled`（待进行）或 `active`（进行中） |
 
-`sleeping` 按睡眠日程计算，`awake_until` 按唤醒记录计算，二者独立返回。需要展示“睡眠中但正在陪伴”时，可以结合两个字段；普通对话与主动行为是否继续，由使用接口的插件决定。
+活动类型：`sleep` 睡眠、`meal` 用餐、`work` 工作、`study` 学习、`leisure` 休闲、`travel` 出行、`rest` 休息、`social` 社交、`diary` 写日记。
 
-本接口返回角色全局状态，群聊和私聊获得同一份数据，调用时无需传入聊天流或用户 ID。它不返回人物亲密程度、用户短期状态或生日等个人资料，也不判断发送额度、冷却或 Planner 是否愿意回复。
+## 数据什么时候更新
 
-## 时间与刷新
+每次调用都读取当前数据。活动和陪伴期限按查询时刻判断；精力、心情和位置随生活引擎更新，更新时间见 `updated_at`。
 
-一次查询读取已保存的生活状态，并按查询时刻选取当前活动、下一项安排和有效唤醒期限。精力、心情及位置随生活引擎正常更新；查询本身不会推进它们。
+当前活动从 `scheduled`、`active` 日程中选取，时间范围为 `start <= 当前时间 < end`；下一项安排取未来开始时间最早的一项。活动刚开始、引擎还在等待下一次推进时，`current.status` 可以仍是 `scheduled`。多项活动同时满足条件时沿用引擎的记录顺序，返回第一项。
 
-因此，连续调用可能得到相同的 `updated_at` 和数值；活动刚结束或陪伴刚到期时，即使 `updated_at` 没变，`current` 或 `awake_until` 也可能变化。`updated_at` 用于了解身体状态的数据时间，不是整个返回对象的修订号。
+`sleeping` 和 `awake_until` 分别读取睡眠日程与唤醒记录。全天候模式下，用户手动安排的睡眠仍可出现在活动里。关闭生活引擎后，接口继续提供保存的状态，活动时间与陪伴期限仍按查询时刻判断。
 
-调用方可以在需要作出决定时查询一次，并在本次处理内复用结果。展示页面可以按自身刷新周期查询。接口采用请求—响应方式，状态变化不会主动推送。
+做状态面板时，可以每 30 秒查询一次；其他插件也可以在需要时调用。一次查询只读取记录，麦麦的生活仍由原来的生活循环推进。活动结束或陪伴到期时，即使 `updated_at` 相同，相应字段也会变化。
 
-首页卡片与 API 共用 `read_life_status` 读取函数。当前首页卡片是在组件加载时生成快照，卡片标明“加载时快照 · 数据截至”；添加 API 后不会自动变为轮询卡片。「此刻生活」页面继续使用原来的页面查询与刷新流程。
-
-## 查询失败
-
-插件未加载、API 名称或版本无法解析、接口执行失败时，MaiBot API 服务可返回：
-
-```json
-{
-  "success": false,
-  "error": "具体错误信息"
-}
-```
-
-此时读取 `error` 查看原因；`ready=false` 则是调用成功但尚无生活状态，两者含义不同。RPC 连接或传输层异常仍可能通过 SDK 异常上报，由调用方沿用自己的错误处理流程。
-
-## 接口行为
-
-查询只读取生活记录，不写入日程、状态或人物资料，也不调用模型或创建后台任务。MaiWeave 现有睡眠、唤醒、日程规划、主动交流额度和 Planner 流程继续独立运行。
-
-接口提供状态信息，返回结构中没有 `allow`、`deny`、`busy` 或行为评分。其他插件可按自身需求使用这些信息，查询本身不会改变麦麦的行为。
+MaiWeave 自带首页卡片目前展示加载时快照；「此刻生活」页面每 30 秒刷新。两种展示方式的刷新频率由各自页面决定。
