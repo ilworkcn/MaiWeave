@@ -46,7 +46,7 @@ class ProactiveConfig(PluginConfigBase):
 
     __ui_label__ = "主动交流"
     enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求 MaiBot 主动开口")
-    mode: Literal["自然交流", "主动表达"] = setting("主动交流模式", default="自然交流", description="自然交流由 Planner 结合聊天决定是否开口；主动表达直接生成并发送本次分享。两种模式共用时段、额度和间隔。", json_schema_extra={"choices": ["自然交流", "主动表达"]})
+    mode: Literal["自然交流", "主动表达"] = setting("主动交流模式", default="自然交流", description="自然交流：由 Planner 决定是否开口，可能保持沉默。主动表达：选好分享内容后，直接生成并发送。", json_schema_extra={"choices": ["自然交流", "主动表达"]})
     session_ids: list[str] = setting("额外接收聊天流（选填）", default_factory=list, description="个人资料中选择的聊天流自动用于主动交流和纪念日提醒。这里填写额外的群聊或其他聊天流；可发送 /maiweave 获取 ID。")
     share_threshold: int = setting("经历分享最低分", default=5, ge=1, le=10, description="分数越高，主动分享的经历越少。生日祝福、约定提醒按各自时间触发。", json_schema_extra={"choices": list(range(1, 11))})
     daily_limit: int = setting("每日主动发送上限", default=4, ge=0, description="每个聊天流每日实际发送次数，分段回复计一次")
