@@ -1,0 +1,44 @@
+name: "💡 功能建议"
+description: "聊聊希望增加的功能或想改善的体验"
+title: "[建议] "
+labels:
+  - "enhancement | 功能建议"
+  - "triage | 待确认"
+body:
+  - type: "dropdown"
+    id: "area"
+    attributes:
+      label: "相关功能"
+      options:
+        - "日程与作息"
+        - "主动交流与早晚安"
+        - "书架与阅读"
+        - "人物、纪念日与记忆"
+        - "WebUI 页面"
+        - "天气、地点与联网"
+        - "安装、升级与配置"
+        - "日记、梦境与成长"
+        - "其他"
+    validations:
+      required: true
+  - type: "textarea"
+    id: "scenario"
+    attributes:
+      label: "你在什么场景下需要它？"
+      placeholder: "想让麦麦做什么？目前用起来有哪些不方便？"
+    validations:
+      required: true
+  - type: "textarea"
+    id: "proposal"
+    attributes:
+      label: "你希望它怎样工作？"
+      placeholder: "用一次对话或操作举例，说明理想的效果。"
+    validations:
+      required: true
+  - type: "textarea"
+    id: "extra"
+    attributes:
+      label: "参考与补充（选填）"
+      placeholder: "截图、相关链接、替代方案，或你认为有帮助的细节。"
+    validations:
+      required: false

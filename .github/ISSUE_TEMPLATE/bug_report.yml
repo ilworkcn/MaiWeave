@@ -1,0 +1,66 @@
+name: "🐛 问题反馈"
+description: "报告报错、功能异常或与预期不符的行为"
+title: "[问题] "
+labels:
+  - "bug | 问题"
+  - "triage | 待确认"
+body:
+  - type: "input"
+    id: "versions"
+    attributes:
+      label: "MaiWeave / MaiBot 版本"
+      placeholder: "MaiWeave 0.9.0 预发布版；MaiBot 具体版本"
+    validations:
+      required: true
+  - type: "dropdown"
+    id: "area"
+    attributes:
+      label: "相关功能"
+      options:
+        - "日程与作息"
+        - "主动交流与早晚安"
+        - "书架与阅读"
+        - "人物、纪念日与记忆"
+        - "WebUI 页面"
+        - "天气、地点与联网"
+        - "安装、升级与配置"
+        - "日记、梦境与成长"
+        - "其他"
+    validations:
+      required: true
+  - type: "input"
+    id: "environment"
+    attributes:
+      label: "运行环境（选填）"
+      placeholder: "例如：Docker / Windows + uv；界面问题可补充浏览器"
+    validations:
+      required: false
+  - type: "textarea"
+    id: "behavior"
+    attributes:
+      label: "发生了什么？你期望怎样？"
+      placeholder: "描述实际现象与期望结果。可在这里粘贴截图。"
+    validations:
+      required: true
+  - type: "textarea"
+    id: "steps"
+    attributes:
+      label: "怎样复现？"
+      placeholder: "1. 打开哪个页面或发送什么消息\n2. 点击或设置了什么\n3. 出现了什么现象\n偶发问题可描述出现前正在做的事。"
+    validations:
+      required: true
+  - type: "textarea"
+    id: "logs"
+    attributes:
+      label: "相关日志（选填）"
+      description: "粘贴出问题时的时间与日志片段，账号、令牌等内容请隐去。"
+      render: "text"
+    validations:
+      required: false
+  - type: "textarea"
+    id: "extra"
+    attributes:
+      label: "补充信息（选填）"
+      placeholder: "相关配置、模型名称、截图或其他线索。"
+    validations:
+      required: false
