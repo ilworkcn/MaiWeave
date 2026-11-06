@@ -19,6 +19,31 @@ def bounded(value: float, low: float = 0, high: float = 100) -> float:
     return round(min(high, max(low, value)), 3)
 
 
+def read_life_status(store: Store, now: datetime, *, enabled: bool, schedule_enabled: bool) -> dict:
+    """读取生活状态，供插件 API 和首页卡片共用。"""
+    state = store.find("state", "life")
+    result = {"version": 1, "ready": state is not None, "enabled": enabled,
+              "schedule_enabled": schedule_enabled, "updated_at": None,
+              "sleeping": None, "awake_until": None, "current": None,
+              "next_plan": None, "location": None, "energy": None, "mood": None}
+    if state is None:
+        return result
+    plans = store.all("plan", omit=("changes",))
+    current = next((p for p in plans if p["status"] in ACTIVE
+                    and datetime.fromisoformat(p["start"]) <= now < datetime.fromisoformat(p["end"])), None)
+    upcoming = min((p for p in plans if p["status"] in ACTIVE
+                    and datetime.fromisoformat(p["start"]) > now),
+                   key=lambda p: datetime.fromisoformat(p["start"]), default=None)
+    def brief(plan):
+        return {key: plan[key] for key in ("id", "title", "kind", "start", "end", "location", "status")} if plan else None
+    awakening = store.find("runtime", "awakening")
+    until = awakening["until"] if awakening and datetime.fromisoformat(awakening["until"]) > now else None
+    result.update(updated_at=state["updated_at"], sleeping=bool(current and current["kind"] == "sleep"),
+                  awake_until=until, current=brief(current), next_plan=brief(upcoming),
+                  location=state["location"], energy=state["energy"], mood=state["mood"])
+    return result
+
+
 class LifeEngine:
     def __init__(self, store: Store, timezone: str, now: datetime):
         self.store = store

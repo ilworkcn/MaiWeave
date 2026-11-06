@@ -136,7 +136,7 @@ uv pip install --python .venv -r plugins/MaiWeave/requirements.txt
 
 ## 📚 使用与致谢
 
-具体操作见[使用手册](docs/使用手册.md)，默认设置和连接方法见[配置指南](docs/配置指南.md)，接口说明见[架构与接口](docs/架构与接口.md)。
+具体操作见[使用手册](docs/使用手册.md)，默认设置和连接方法见[配置指南](docs/配置指南.md)，接口说明见[架构与接口](docs/架构与接口.md)，其他插件接入生活状态见[只读状态 API](docs/只读状态API.md)。
 
 人物画像和通用记忆沿用 MaiBot 的 A_Memorix。生活记录、书籍文件和解析正文保存在插件数据目录；备份时保留整个数据目录与配置。
 

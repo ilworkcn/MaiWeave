@@ -11,10 +11,10 @@ from urllib.error import URLError
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from maibot_sdk import HomeCard, HookHandler, MaiBotPlugin, Tool
+from maibot_sdk import API, HomeCard, HookHandler, MaiBotPlugin, Tool
 
 from .config import MaiWeaveConfig
-from .core.engine import LifeEngine
+from .core.engine import LifeEngine, read_life_status
 from .life.living import Living
 from .life.presence import Presence
 from .integrations.memory import NativeMemory
@@ -572,14 +572,20 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         )
         return await self.ctx.send.text(message, session, storage_message=False, sync_to_maisaka_history=False)
 
+    @API("get_life_status", description="只读查询当前生活状态", version="1", public=True)
+    async def get_life_status(self) -> dict:
+        return read_life_status(self.store, self.now(), enabled=self.config.life.enabled,
+                                schedule_enabled=self.config.life.schedule_enabled)
+
     def get_components(self):
         components = super().get_components()
         card = next(item["metadata"] for item in components if item["name"] == "maiweave_home")
         path = Path(self.ctx.paths.data_dir) / "maiweave.sqlite3" if self._ctx else None
         if path and path.is_file():
             with closing(Store(path)) as store:
-                state = store.find("state", "life")
-                if state:
+                state = read_life_status(store, self.now(), enabled=self.config.life.enabled,
+                                         schedule_enabled=self.config.life.schedule_enabled)
+                if state["ready"]:
                     at = datetime.fromisoformat(state["updated_at"])
                     recent = max((p for p in store.all("plan") if p["status"] == "completed"),
                                  key=lambda p: p["end"], default=None)
