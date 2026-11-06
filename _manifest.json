@@ -2,9 +2,9 @@
   "manifest_version": 2,
   "plugin_type": "chat",
   "id": "ilworkcn.maiweave",
-  "name": "MaiWeave · 麦织｜阅读与生活",
+  "name": "MaiWeave · 麦织｜与你共织日常",
   "version": "0.9.0",
-  "description": "麦麦会从书架挑书，记下摘句和疑问，读到有感触的地方还会主动找你聊。你也可以和它约时间、改日程，翻看它写的生活日记。",
+  "description": "把对话织进持续的生活：约定影响日程，天气与真实地点参与安排，读过的书留下进度和感想。关联 MaiBot 人物画像，让昨天的经历接上今天的聊天。",
   "author": {
     "name": "ilworkcn",
     "url": "https://github.com/ilworkcn"

@@ -1,7 +1,7 @@
 [project]
 name = "maiweave"
 version = "0.9.0"
-description = "MaiBot 持续角色生活引擎"
+description = "与你共织日常，让对话、现实资料与麦麦的生活相互接续"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
