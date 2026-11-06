@@ -3,9 +3,9 @@ import asyncio
 from datetime import timedelta
 from unittest.mock import AsyncMock
 import pytest
-from maiweave.models import PlanInput, GoalInput
-from maiweave.dreams import Dreams
-from maiweave.continuity import Continuity
+from maiweave.core.models import PlanInput, GoalInput
+from maiweave.life.dreams import Dreams
+from maiweave.life.continuity import Continuity
 from test_plugin import plugin
 from test_books import upload, answer
 

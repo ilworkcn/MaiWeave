@@ -4,7 +4,7 @@ import json
 from uuid import uuid4
 from typing import Literal
 from pydantic import BaseModel
-from .usage import generate
+from ..integrations.usage import generate
 
 
 class Assessment(BaseModel):

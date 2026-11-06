@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
-from maiweave.memory import NativeMemory
+from maiweave.integrations.memory import NativeMemory
 from maiweave.config import MemoryConfig
 from test_plugin import plugin
 from test_memory import server

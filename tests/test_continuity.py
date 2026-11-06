@@ -7,9 +7,9 @@ from datetime import timedelta
 
 import pytest
 
-from maiweave.continuity import Continuity
-from maiweave.living import Living
-from maiweave.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
+from maiweave.life.continuity import Continuity
+from maiweave.life.living import Living
+from maiweave.core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from test_features import life
 from test_plugin import plugin
 

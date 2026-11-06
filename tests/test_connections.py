@@ -7,8 +7,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from maiweave.models import PlanInput, ExperienceInput, RoutineInput
-from maiweave.memory import NativeMemory
+from maiweave.core.models import PlanInput, ExperienceInput, RoutineInput
+from maiweave.integrations.memory import NativeMemory
 from maiweave.config import MemoryConfig
 from test_plugin import plugin
 from test_memory import server

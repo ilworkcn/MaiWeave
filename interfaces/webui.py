@@ -6,8 +6,8 @@ from datetime import date, timedelta
 
 from maibot_sdk import API
 
-from .models import GoalInput, PlanInput, PlanPatch, RoutineInput
-from .usage import summary as usage_summary
+from ..core.models import GoalInput, PlanInput, PlanPatch, RoutineInput
+from ..integrations.usage import summary as usage_summary
 
 KIND = {"sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "写日记"}
 STATUS = {"scheduled": "未开始", "active": "进行中", "completed": "已完成", "cancelled": "已取消", "paused": "已暂停", "awaiting_confirmation": "等待完成确认", "blocked": "需要调整"}
@@ -33,7 +33,7 @@ class WebUI:
         current = self.store.find("runtime", "current_book")
         notes = self.books.notes(book_id, page)
         return {"current_book": current["book_id"] if current else "", "books": self.store.all("book"),
-                "notes": notes["items"], "notes_total": notes["total"], "page": notes["page"], "capacity": self.books.capacity(),
+                "places": self.world.planning_places(), "notes": notes["items"], "notes_total": notes["total"], "page": notes["page"], "capacity": self.books.capacity(),
                 "sessions": [{**n, "status": "日程已取消" if self.store.get("plan", n["id"])["status"] == "cancelled" else n["status"]} for n in self.store.all("book_note")[-10:]], "now": self.now().isoformat()}
 
     @API("ui_book_upload", description="上传书籍资料")
@@ -49,14 +49,14 @@ class WebUI:
         raise ValueError("请选择开始上传、上传片段或完成导入")
 
     @API("ui_book_action", description="选书、安排阅读与重试阅读")
-    async def ui_book_action(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, plan_id: str = "", title: str = "", author: str = "") -> dict:
+    async def ui_book_action(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, plan_id: str = "", title: str = "", author: str = "", location: str = "") -> dict:
         if action in {"edit", "archive", "restore", "delete"}:
             return self.books.manage(action, book_id, title, author)
         self.require_life()
         if action == "select":
             return self.books.select(book_id)
         if action == "schedule":
-            return self.books.schedule(book_id, start, minutes, self.spatial, self.now())
+            return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), location=location)
         if action == "retry":
             note = self.store.get("book_note", plan_id)
             if note["status"] == "阅读失败":

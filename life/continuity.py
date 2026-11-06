@@ -5,9 +5,9 @@ import hashlib
 import json
 from datetime import timedelta
 
-from .engine import uid
-from .models import ActivityAssessment, ActivityOutcome, GoalOutline, SCORE_GUIDE
-from .usage import generate
+from ..core.engine import uid
+from ..core.models import ActivityAssessment, ActivityOutcome, GoalOutline, SCORE_GUIDE
+from ..integrations.usage import generate
 
 
 class Continuity:

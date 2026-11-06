@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 import pytest
 
 from maiweave.config import MemoryConfig
-from maiweave.memory import NativeMemory
+from maiweave.integrations.memory import NativeMemory
 
 
 @pytest.fixture

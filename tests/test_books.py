@@ -5,7 +5,7 @@ import json
 from datetime import timedelta
 from zipfile import ZipFile
 import pytest
-from maiweave.books import parse_book
+from maiweave.life.books import parse_book
 from test_plugin import plugin
 
 TEXT = '# 第一章 风\n风吹过窗前的银杏树。\n# 第二章 灯\n夜里一盏灯照着书页。'
@@ -170,3 +170,62 @@ def test_chinese_text_encoding_and_empty_file(tmp_path):
     assert parse_book(p,'','')[2][0]['title']=='第一章 风'
     p.write_text('',encoding='utf-8')
     with pytest.raises(ValueError,match='正文'):parse_book(p,'','')
+
+
+async def test_reading_place_travel_and_weather_continuation(plugin):
+    """先到公园阅读，天气变化后回家继续，进度在完成时写入。"""
+    book = await upload(plugin)
+    now = plugin.now()
+    plugin.now = lambda: now
+    plan = await plugin.ui_book_action('schedule', book_id=book['id'], minutes=30, location='公园')
+    travel = plugin.store.get('plan', plan['travel_id'])
+    assert plugin.engine.time(travel['end']) == plugin.engine.time(plan['start']) == now + timedelta(minutes=15)
+    assert not plugin.store.all('book_note')
+    arrived = now + timedelta(minutes=15)
+    plugin.engine.advance(arrived)
+    answer(plugin)
+    await plugin.books.process(arrived)
+    assert plugin.store.get('book_note', plan['id'])['location'] == '公园'
+    assert plugin.store.get('book', book['id'])['read_characters'] == 0
+    # 将这次独自阅读设为可调整，模拟自主日程的天气响应。
+    plan = plugin.store.get('plan', plan['id'])
+    with plugin.store.db:
+        plugin.store.put('plan', {**plan, 'flexible': True})
+        plugin.store.put('world', {'id': 'weather', 'city': '大庆', 'label': '降雨', 'outdoor_suitable': False, 'retrieved_at': arrived.isoformat()})
+    plugin.living.adjust(arrived)
+    changed = plugin.store.get('plan', plan['id'])
+    assert changed['location'] == '住处' and changed['book_id'] == book['id']
+    assert changed['title'] == plan['title']
+    returned = plugin.engine.time(changed['start'])
+    assert returned >= arrived + timedelta(minutes=15)
+    plugin.engine.advance(returned)
+    await plugin.books.process(returned)
+    end = plugin.engine.time(changed['end']) + timedelta(seconds=1)
+    plugin.engine.advance(end)
+    await plugin.books.process(end)
+    note = plugin.store.get('book_note', plan['id'])
+    assert note['status'] == '已完成' and note['location'] == '住处'
+    assert plugin.store.get('book', book['id'])['chapter'] == 1
+    event = plugin.store.get('experience', plugin.store.get('plan', plan['id'])['experience_id'])
+    assert event['details']['阅读地点'] == '住处'
+
+
+async def test_autonomous_reading_chooses_park_and_keeps_book(plugin):
+    book = await upload(plugin)
+    plugin.config.life.autonomous = True
+    plugin.config.life.schedule_enabled = False
+    plugin.ctx.llm.generate.return_value = {'success': True, 'response': json.dumps({
+        'title': '去公园看书', 'kind': 'leisure', 'minutes': 30, 'location': '公园',
+        'motivation': '天气舒适，换个环境接着读', 'book_id': book['id']})}
+    await plugin.living.choose_activity(plugin.now())
+    plan = next(p for p in plugin.store.all('plan') if p.get('book_id'))
+    assert plan['location'] == '公园' and plan['book_id'] == book['id']
+    assert plugin.store.get('plan', plan['travel_id'])['kind'] == 'travel'
+    assert any(p['name'] == '公园' for p in (await plugin.ui_books())['places'])
+
+
+async def test_chat_reading_can_select_library(plugin):
+    book = await upload(plugin)
+    plan = await plugin.books_tool('schedule', book_id=book['id'], minutes=15, location='图书馆', stream_id='a', user_id='reader')
+    assert plan['location'] == '图书馆' and plan['book_id'] == book['id']
+    assert plugin.store.get('plan', plan['travel_id'])['location'] == '图书馆'

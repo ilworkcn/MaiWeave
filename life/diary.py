@@ -5,8 +5,8 @@ import json
 from datetime import date, datetime, time, timedelta
 
 from pydantic import BaseModel
-from .models import PlanInput
-from .usage import generate
+from ..core.models import PlanInput
+from ..integrations.usage import generate
 
 
 class DiarySlot(BaseModel):

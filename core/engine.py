@@ -359,7 +359,7 @@ class LifeEngine:
                 if current:
                     current["elapsed_seconds"] += seconds
                     if current.get("route"):
-                        from .spatial import travel_position
+                        from ..life.spatial import travel_position
                         position = travel_position(current, right, self)
                         state["location"] = position["location"]
                         state["journey"] = position

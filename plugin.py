@@ -14,23 +14,23 @@ from zoneinfo import ZoneInfo
 from maibot_sdk import HomeCard, HookHandler, MaiBotPlugin, Tool
 
 from .config import MaiWeaveConfig
-from .engine import LifeEngine
-from .living import Living
-from .memory import NativeMemory
-from .models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
-from .store import Store
-from .share_receipts import planner_task
-from .world import World
-from .spatial import Spatial
-from .rhythm import Rhythm
-from .dreams import Dreams
-from .books import Books
-from .diary import Diary
-from .feature_tools import FeatureTools
-from .webui import WebUI
-from .continuity import Continuity
-from .anniversaries import Anniversaries
-from .review import Reviews
+from .core.engine import LifeEngine
+from .life.living import Living
+from .integrations.memory import NativeMemory
+from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
+from .core.store import Store
+from .integrations.share_receipts import planner_task
+from .integrations.world import World
+from .life.spatial import Spatial
+from .life.rhythm import Rhythm
+from .life.dreams import Dreams
+from .life.books import Books
+from .life.diary import Diary
+from .interfaces.feature_tools import FeatureTools
+from .interfaces.webui import WebUI
+from .life.continuity import Continuity
+from .life.anniversaries import Anniversaries
+from .interfaces.review import Reviews
 
 
 def schema(properties: dict, required: list[str]) -> dict:

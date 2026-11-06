@@ -2,7 +2,7 @@
 import json
 from datetime import timedelta
 import pytest
-from maiweave.models import PlanInput
+from maiweave.core.models import PlanInput
 from test_plugin import plugin
 
 

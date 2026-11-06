@@ -11,7 +11,7 @@ from maibot_sdk.context import PluginContext
 from maibot_sdk.capabilities.maisaka import MaisakaReplyCapability
 from maibot_sdk.capabilities.send import SendCapability
 from maiweave.config import MaiWeaveConfig
-from maiweave.models import ExperienceInput
+from maiweave.core.models import ExperienceInput
 from maiweave.plugin import create_plugin
 from test_plugin import plugin
 
@@ -37,7 +37,7 @@ def test_mode_config_roundtrip():
 
 def prepare(plugin, monkeypatch):
     now = plugin.now().replace(hour=12, minute=0, second=0, microsecond=0)
-    import maiweave.share_receipts as receipts
+    import maiweave.integrations.share_receipts as receipts
     class Clock(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -149,7 +149,7 @@ async def test_real_sdk_expression_capabilities(plugin, monkeypatch):
 
 
 async def test_expression_sends_reminder_once(plugin, monkeypatch):
-    from maiweave.models import PlanInput
+    from maiweave.core.models import PlanInput
     now = prepare(plugin, monkeypatch)
     plan = plugin.engine.create_plan(PlanInput(title="一起散步", participants=["读者"],
         start=(now + timedelta(minutes=15)).isoformat(), end=(now + timedelta(minutes=45)).isoformat()), "chat-a", now)

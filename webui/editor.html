@@ -19,7 +19,7 @@ label.inline-checkbox{display:flex;align-items:center;gap:8px;margin:12px 0;curs
 <button id="uploadBook" class="maibot-button">上传到书架</button></details>
 <p id="bookStatus" role="status" aria-live="polite"></p>
 <div class="fields"><label>筛选书籍<select id="bookFilter" class="maibot-select"><option value="all">全部书籍</option><option value="reading">正在书架上</option><option value="archived">已归档</option><option value="finished">已读完</option></select></label><label>搜索书名或作者<input id="bookSearch" class="maibot-input" placeholder="输入关键词"></label></div><div class="fields"><label>选择书籍<select id="bookChoice" class="maibot-select"></select></label><label>阅读时长<select id="bookMinutes" class="maibot-select"><option value="15">15分钟</option><option value="30" selected>30分钟</option><option value="45">45分钟</option><option value="60">60分钟</option></select></label>
-<label>阅读开始时间（选填，留空立即开始）<input id="bookStart" class="maibot-input" type="datetime-local"></label></div>
+<label>阅读地点<select id="bookLocation" class="maibot-select"><option value="">当前地点</option></select></label><label>阅读开始时间（选填，留空先出行再阅读）<input id="bookStart" class="maibot-input" type="datetime-local"></label></div>
 <div class="actions"><button id="selectBook" class="maibot-button">设为当前读物</button><button id="scheduleBook" class="maibot-button">安排阅读日程</button><button id="refreshBooks" class="maibot-button">刷新书架</button><button id="retryBook" class="maibot-button" hidden>重试阅读</button></div>
 <p id="bookInfo"></p>
 <details><summary>管理所选书籍</summary><div class="fields"><label>书名（必填）<input id="editBookTitle" maxlength="200" class="maibot-input"></label><label>作者（选填）<input id="editBookAuthor" maxlength="120" class="maibot-input"></label></div>
@@ -299,7 +299,7 @@ function renderBook(){
  }else{$('bookInfo').textContent='当前没有符合条件的书籍。';$('editBookTitle').value='';$('editBookAuthor').value='';$('editBookTitle').dataset.book=''}
  const opened=new Set(Array.from($('bookNotes').querySelectorAll('details[open]'),x=>x.dataset.note));
  $('bookNotes').replaceChildren();
- for(const n of shelf.notes){const box=document.createElement('details');box.dataset.note=n.id;box.open=opened.has(n.id);const heading=document.createElement('summary'),body=document.createElement('pre');heading.textContent=`${n.book_title} · ${n.chapter_title} · ${n.finished_at.replace('T',' ').slice(0,19)}`;body.textContent=`内容：${n.summary}\n原文：${n.quote}\n感想：${n.thoughts}\n读后问题：${n.question||'暂无'}`;box.append(heading,body);$('bookNotes').append(box)}
+ for(const n of shelf.notes){const box=document.createElement('details');box.dataset.note=n.id;box.open=opened.has(n.id);const heading=document.createElement('summary'),body=document.createElement('pre');heading.textContent=`${n.book_title} · ${n.chapter_title} · ${n.finished_at.replace('T',' ').slice(0,19)}`;body.textContent=`地点：${n.location||'未记录'}\n内容：${n.summary}\n原文：${n.quote}\n感想：${n.thoughts}\n读后问题：${n.question||'暂无'}`;box.append(heading,body);$('bookNotes').append(box)}
  if(!shelf.notes.length)$('bookNotes').textContent='阅读日程完成后，笔记会显示在这里。';
  $('notesPage').textContent=`第 ${notePage+1} 页 · 共 ${shelf.notes_total} 条`;$('prevNotes').disabled=notePage===0;$('nextNotes').disabled=(notePage+1)*10>=shelf.notes_total;
  const c=shelf.capacity;$('bookCapacity').textContent=`书籍 ${c.count}/${c.max_books} 本 · 文件 ${c.used_bytes<1048576?(c.used_bytes/1024).toFixed(1)+" KB":(c.used_bytes/1048576).toFixed(2)+" MB"} / ${c.storage_mb} MB · 单本上限 ${c.max_file_mb} MB · 磁盘剩余 ${(c.free_bytes/1073741824).toFixed(2)} GB · 每次正文最多 ${c.reading_chars} 字 · 对话书架信息最多 ${c.context_chars} 字符`;
@@ -307,6 +307,9 @@ function renderBook(){
 async function showBooks(prefer=''){
  let selected=prefer||$('bookChoice').value;
  shelf=await maibot.query('books',{book_id:$('notesScope').value==='all'?'':selected,page:notePage});
+ const location=$('bookLocation').value;
+ $('bookLocation').replaceChildren(new Option('当前地点',''),...shelf.places.map(p=>new Option(p.name,p.name)));
+ if(shelf.places.some(p=>p.name===location))$('bookLocation').value=location;
  const filter=$('bookFilter').value,q=$('bookSearch').value.trim().toLowerCase();
  const list=shelf.books.filter(b=>(filter==='all'||filter==='reading'&&!b.archived||filter==='archived'&&b.archived||filter==='finished'&&b.status==='已读完')&&`${b.title} ${b.author}`.toLowerCase().includes(q));
  $('bookChoice').replaceChildren(...list.map(b=>new Option(`${b.archived?'[已归档] ':''}${b.title}`,b.id)));
@@ -338,7 +341,7 @@ $('archiveBook').onclick=()=>run(async()=>{const b=shelf.books.find(x=>x.id===$(
 $('deleteBook').onclick=()=>{const b=shelf.books.find(x=>x.id===$('bookChoice').value);$('confirmDeleteBook').dataset.book=b.id;$('deleteBookText').textContent=`删除《${b.title}》的原文件和解析正文？已完成的阅读笔记和经历会保留。`;$('deleteBookConfirm').hidden=false};
 $('cancelDeleteBook').onclick=()=>{$('deleteBookConfirm').hidden=true};
 $('confirmDeleteBook').onclick=()=>run(async()=>{const r=await maibot.action('book_action',{action:'delete',book_id:$('confirmDeleteBook').dataset.book});$('deleteBookConfirm').hidden=true;notePage=0;await showBooks();$('bookStatus').textContent=r.status});
-$('scheduleBook').onclick=()=>run(async()=>{const p=await maibot.action('book_action',{action:'schedule',book_id:$('bookChoice').value,start:$('bookStart').value?new Date($('bookStart').value).toISOString():'',minutes:Number($('bookMinutes').value)});$('bookStatus').textContent=`已安排：${p.title}，${p.start.replace('T',' ').slice(0,19)} 开始。可在日程与作息中暂停、继续或取消。`;});
+$('scheduleBook').onclick=()=>run(async()=>{const p=await maibot.action('book_action',{action:'schedule',book_id:$('bookChoice').value,start:$('bookStart').value?new Date($('bookStart').value).toISOString():'',minutes:Number($('bookMinutes').value),location:$('bookLocation').value});$('bookStatus').textContent=`已安排：${p.title}，地点：${p.location}，${p.start.replace('T',' ').slice(0,19)} 开始。可在日程与作息中暂停、继续或取消。`;});
 $('retryBook').onclick=()=>run(()=>tracked($('retryBook'),'书籍阅读',async show=>{const r=await maibot.action('book_action',{action:'retry',plan_id:$('retryBook').dataset.plan});const result=await waitOperation(r,show);await showBooks();return result}));
 
 await maibot.ready;

@@ -2,7 +2,7 @@
 
 from maibot_sdk import Tool
 
-from .models import RoutineInput
+from ..core.models import RoutineInput
 
 
 def parameters(properties, required):
@@ -10,11 +10,12 @@ def parameters(properties, required):
 
 
 class FeatureTools:
-    @Tool("maiweave_books", description="list按page分页查看书目，notes按book_id与page查询已读笔记；page从0开始。select选择当前读物，schedule安排阅读日程。", parameters=parameters({
+    @Tool("maiweave_books", description="list按page分页查看书目，notes按book_id与page查询已读笔记；page从0开始。select选择当前读物，schedule安排阅读日程，location可指定已有地点，start留空时先出行再阅读。", parameters=parameters({
         "action": {"type": "string", "enum": ["list", "notes", "select", "schedule"]}, "book_id": {"type": "string"},
+        "location": {"type": "string", "description": "阅读地点名称，留空使用当前地点"},
         "start": {"type": "string"}, "minutes": {"type": "integer", "enum": [15,30,45,60]}, "page": {"type": "integer"},
     }, ["action"]))
-    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, page: int = 0, **kwargs):
+    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, page: int = 0, location: str = "", **kwargs):
         self.require_life()
         if action == "list":
             books = [b for b in self.store.all("book") if not b.get("archived")]
@@ -25,7 +26,7 @@ class FeatureTools:
             return {"total": len(rows), "page": max(0, page), "items": [{k: n[k][:500] for k in ("book_id", "book_title", "chapter_title", "summary", "thoughts", "quote", "question")} for n in rows[max(0,page)*2:(max(0,page)+1)*2]]}
         if action == "select":
             return self.books.select(book_id)
-        return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""))
+        return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""), location=location)
 
     @Tool("maiweave_continuity", description="管理生活接续。status 查看偏好和持续事项；reflect 为已完成活动生成或重试具体结果；outline/revise_goal 分解或调整目标阶段；replan 根据临时事件重排可变动安排；save_thread 保存有明确上下文的后续关心事项，resolve_thread 关闭已解决事项。", parameters=parameters({
         "action": {"type": "string", "enum": ["status", "reflect", "outline", "revise_goal", "replan", "save_thread", "resolve_thread"]},

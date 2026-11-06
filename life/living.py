@@ -6,12 +6,12 @@ import hashlib
 from collections import deque
 from datetime import datetime, timedelta
 
-from .config import MaiWeaveConfig
-from .engine import LifeEngine
-from .models import ActivityChoice, PlanInput
+from ..config import MaiWeaveConfig
+from ..core.engine import LifeEngine
+from ..core.models import ActivityChoice, PlanInput
 from .anniversaries import Anniversaries
-from .usage import generate
-from .share_receipts import ShareReceipts
+from ..integrations.usage import generate
+from ..integrations.share_receipts import ShareReceipts
 
 
 def in_hours(hour: int, start: int, end: int) -> bool:
@@ -184,9 +184,16 @@ class Living:
             duration = engine.time(plan["end"]) - max(now, engine.time(plan["start"]))
             start = max(now, engine.time(plan["start"]), until)
             if not temporary:
-                plan.update(title="室内休息" if state["energy"] < 25 or state["stress"] >= 70 else "室内休闲",
-                            kind="rest" if state["energy"] < 25 or state["stress"] >= 70 else "leisure",
-                            location=self.spatial.place("home")["name"], goal_id="", goal_step_id="", book_id="", continuation_id="")
+                if plan.get("book_id") and bad_weather and outdoor and state["energy"] >= 25 and state["stress"] < 70:
+                    plan["location"] = self.spatial.place("home")["name"]
+                    note = store.find("book_note", plan["id"])
+                    if note and note["status"] == "等待活动结束":
+                        with store.db:
+                            store.delete("book_note", plan["id"])
+                else:
+                    plan.update(title="室内休息" if state["energy"] < 25 or state["stress"] >= 70 else "室内休闲",
+                                kind="rest" if state["energy"] < 25 or state["stress"] >= 70 else "leisure",
+                                location=self.spatial.place("home")["name"], goal_id="", goal_step_id="", book_id="", continuation_id="")
                 start += timedelta(minutes=self.spatial.route(state["location"], plan["location"])["minutes"])
             plan.update(start=start.isoformat(), end=(start + duration).isoformat(), status="scheduled", motivation=why)
             plan["changes"].append({"at": now.isoformat(), "action": "动态调整", "before": before, "reason": why})
@@ -319,6 +326,8 @@ class Living:
                 "根据本次活动决定是否需要新地点，例如喝咖啡找咖啡馆、吃饭找餐厅、购物找商场，类别自由选择。"
                 f"书架：{json.dumps(books, ensure_ascii=False)}；阅读书架中的书时填写book_id，从已读位置继续。"
                 f"城市地点联网可用：{search_ready}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
+                "阅读可以在住处、图书馆、安静的咖啡馆或公园进行。结合有效天气、时段、精力、出行耗时和近期地点选择；"
+                "天气舒适时可偶尔在公园阅读，寒冷、降雨、风大时选择室内。想换环境时可搜索适合阅读的场所。"
                 "外出时优先复用当前城市已收录的合适地点；居家活动使用住处或厨房。"
                 f"；可选地点名称：{json.dumps(places, ensure_ascii=False)}；"
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"

@@ -6,10 +6,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
 from maiweave.config import MemoryConfig
-from maiweave.memory import NativeMemory
-from maiweave.models import PlanInput
-from maiweave.review import Assessment
-from maiweave.usage import generate
+from maiweave.integrations.memory import NativeMemory
+from maiweave.core.models import PlanInput
+from maiweave.interfaces.review import Assessment
+from maiweave.integrations.usage import generate
 from test_plugin import plugin
 
 

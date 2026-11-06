@@ -1562,6 +1562,7 @@
           "api": "ui_book_action",
           "version": "1",
           "parameters": {
+            "location": {"type": "string", "required": false},
             "action": {
               "type": "string",
               "required": true

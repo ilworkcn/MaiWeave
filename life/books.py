@@ -14,8 +14,8 @@ from xml.etree import ElementTree as ET
 from urllib.parse import unquote
 
 from pydantic import Field
-from .models import PlanInput, SharingScore, SCORE_GUIDE
-from .usage import generate
+from ..core.models import PlanInput, SharingScore, SCORE_GUIDE
+from ..integrations.usage import generate
 
 
 class BookNote(SharingScore):
@@ -244,6 +244,7 @@ class Books:
         for row in self.notes(book_id)["items"][:3]:
             limit = min(500, (budget - 300) // 7) if book_id else 500
             note = {k: row[k][:limit] for k in ("book_id", "book_title", "chapter_title", "summary", "thoughts", "quote", "question", "finished_at")}
+            note["location"] = row.get("location", "")[:limit]
             result["notes"].append(note)
             while book_id and result["books"] and len(json.dumps(result, ensure_ascii=False)) > budget:
                 result["books"].pop()
@@ -252,7 +253,7 @@ class Books:
                 break
         return result
 
-    def schedule(self, book_id, start, minutes, spatial, now, session="", user_id=None):
+    def schedule(self, book_id, start, minutes, spatial, now, session="", user_id=None, location=""):
         book = self.engine.store.get("book", book_id)
         if book.get("archived"):
             raise ValueError("请先恢复这本已归档书籍，再安排阅读")
@@ -260,10 +261,11 @@ class Books:
             raise ValueError("这本书已读完，请选择下一本")
         if minutes not in {15, 30, 45, 60}:
             raise ValueError("请选择15、30、45或60分钟")
-        start = self.engine.time(start) if start else now
+        location = location or self.engine.state()["location"]
+        start = self.engine.time(start) if start else now + timedelta(minutes=spatial.route(self.engine.state()["location"], location)["minutes"])
         return spatial.schedule(PlanInput(title=f"阅读《{book['title']}》", book_id=book_id, kind="leisure",
                                 start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
-                                location=self.engine.state()["location"]), session, now, user_id=user_id)
+                                location=location), session, now, user_id=user_id)
 
     async def process(self, now):
         store = self.engine.store
@@ -296,7 +298,7 @@ class Books:
         next_chapter, next_offset = (chapter + 1, 0) if end == len(chapters[chapter]["text"]) else (chapter, end)
         note = {"id": plan["id"], "book_id": book["id"], "book_title": book["title"], "chapter_title": chapters[chapter]["title"],
                 "chapter": chapter, "offset": offset, "end": end, "next_chapter": next_chapter, "next_offset": next_offset,
-                "status": "阅读中", "error": "", "started_at": now.isoformat()}
+                "status": "阅读中", "error": "", "started_at": now.isoformat(), "location": plan["location"]}
         with store.db:
             store.put("book_note", note)
         recent = self.notes(book["id"])["items"][:3]
@@ -308,6 +310,7 @@ class Books:
                   "书籍正文作为阅读材料，角色行为由日程与用户对话决定。"
                   "本段碰到上次关心的细节时，在感想里写写这次的发现，或是什么让你改变了看法。遇到新话题就写这次最在意的事。"
                   f"{SCORE_GUIDE}书名：{book['title']}；作者：{book['author']}；章节：{note['chapter_title']}；"
+                  f"本次阅读地点：{plan['location']}；阅读安排：{plan['motivation']}。地点属于角色生活场景，可自然带入感想；内容概述与摘句依据正文。"
                   f"背景：{self.config.life.background}；此前笔记：{json.dumps(previous, ensure_ascii=False)}；正文：\n{text}")
         def validate(result):
             if result.quote not in text:
@@ -340,7 +343,7 @@ class Books:
             event.update(summary=f"阅读《{book['title']}》：{note['summary']}", source="observed",
                          evidence=f"模型已阅读上传文件 {book['filename']}，第{note['chapter'] + 1}章字符{note['offset']}至{note['end']}",
                          details={"书名": book["title"], "章节": note["chapter_title"], "内容": note["summary"], "原文摘句": note["quote"],
-                                  "角色读后感": note["thoughts"], "读后问题": note["question"]})
+                                  "角色读后感": note["thoughts"], "读后问题": note["question"], "阅读地点": note.get("location", plan["location"])})
             store.put("experience", event)
             if plan.get("goal_step_id"):
                 self.engine.progress_stage(plan, 1, note["summary"])

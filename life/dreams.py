@@ -4,8 +4,8 @@ import asyncio
 import json
 from datetime import timedelta
 
-from .models import DreamContent
-from .usage import generate
+from ..core.models import DreamContent
+from ..integrations.usage import generate
 
 
 class Dreams:

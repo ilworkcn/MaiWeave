@@ -9,13 +9,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 from maiweave.config import MaiWeaveConfig
-from maiweave.dreams import Dreams
-from maiweave.engine import LifeEngine
-from maiweave.models import PlanInput, PlanPatch, RoutineInput
-from maiweave.rhythm import Rhythm, matches
-from maiweave.spatial import Spatial
-from maiweave.store import Store
-from maiweave.world import World, parse_feed
+from maiweave.life.dreams import Dreams
+from maiweave.core.engine import LifeEngine
+from maiweave.core.models import PlanInput, PlanPatch, RoutineInput
+from maiweave.life.rhythm import Rhythm, matches
+from maiweave.life.spatial import Spatial
+from maiweave.core.store import Store
+from maiweave.integrations.world import World, parse_feed
 
 
 @pytest.fixture
@@ -195,7 +195,7 @@ async def test_weather_real_response_shape_and_failure_visible(life, monkeypatch
     geo = {"results": [{"name": "上海", "latitude": 31.2, "longitude": 121.4}]}
     data = {"current": {"time": "2026-10-31T12:00", "weather_code": 61, "precipitation": 1, "wind_speed_10m": 10, "apparent_temperature": 18, "temperature_2m": 19},
             "daily": {"time": ["2026-10-31"], "weather_code": [61], "temperature_2m_max": [20], "temperature_2m_min": [15], "precipitation_probability_max": [80], "sunrise": ["06:00"], "sunset": ["18:00"]}}
-    monkeypatch.setattr("maiweave.world.download", lambda url: json.dumps(geo if "geocoding" in url else data).encode())
+    monkeypatch.setattr("maiweave.integrations.world.download", lambda url: json.dumps(geo if "geocoding" in url else data).encode())
     await x.world.refresh(x.now)
     weather = x.world.context(x.now)["weather"]
     assert weather["label"] == "小雨" and not weather["outdoor_suitable"]
@@ -203,7 +203,7 @@ async def test_weather_real_response_shape_and_failure_visible(life, monkeypatch
     assert x.world.context(x.now + timedelta(hours=3))["weather"]["stale"]
     def failed(url):
         raise OSError("服务不可用")
-    monkeypatch.setattr("maiweave.world.download", failed)
+    monkeypatch.setattr("maiweave.integrations.world.download", failed)
     with pytest.raises(RuntimeError, match="服务不可用"):
         await x.world.refresh(x.now + timedelta(hours=3))
     assert x.store.get("world_status", "weather")["status"] == "更新失败"

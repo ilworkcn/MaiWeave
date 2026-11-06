@@ -103,8 +103,8 @@ async def test_sleep_trip_arrives_before_sleep_and_wakes_on_time(plugin):
 
 @pytest.mark.parametrize("tool, outcome", [("reply", "实际已发送"), ("stop", "Planner 选择沉默")])
 async def test_proactive_delivery_controls_budget(plugin, tool, outcome):
-    from maiweave.models import ExperienceInput
-    from maiweave.share_receipts import planner_task
+    from maiweave.core.models import ExperienceInput
+    from maiweave.integrations.share_receipts import planner_task
     now = plugin.now().replace(hour=12)
     cfg = plugin.config.proactive
     cfg.enabled, cfg.session_ids, cfg.daily_limit, cfg.cooldown_minutes = True, ["chat-a"], 1, 60
@@ -144,7 +144,7 @@ async def test_proactive_requests_are_limited(plugin, monkeypatch):
     monkeypatch.setattr(plugin, "now", lambda: now + timedelta(minutes=1))
     plugin.config.proactive.enabled = True
     plugin.config.proactive.session_ids = ["chat-a"]
-    from maiweave.models import ExperienceInput
+    from maiweave.core.models import ExperienceInput
     plugin.engine.record_experience(ExperienceInput(summary="完成了一个小作品", occurred_at=now.isoformat(), source="simulated", evidence="角色模拟", importance=6), "chat-a", now)
     await plugin.living.share(now)
     await plugin.living.share(now + timedelta(minutes=1))
@@ -180,7 +180,7 @@ async def test_share_schedule_and_recent_decisions(plugin, monkeypatch):
 
 
 async def test_default_share_threshold(plugin):
-    from maiweave.models import ExperienceInput
+    from maiweave.core.models import ExperienceInput
 
     now = plugin.now().replace(hour=12)
     plugin.config.proactive.enabled = True
@@ -194,7 +194,7 @@ async def test_default_share_threshold(plugin):
 
 
 async def test_proactive_selects_highest_eligible_score(plugin):
-    from maiweave.models import ExperienceInput
+    from maiweave.core.models import ExperienceInput
     now = plugin.now().replace(hour=12)
     plugin.config.proactive.enabled = True
     plugin.config.proactive.session_ids = ["chat-a"]
@@ -263,7 +263,7 @@ async def test_model_task_dropdown_uses_host_tasks_and_keeps_selection(plugin):
     plugin.config.life.model_task = "planner"
     field = plugin.get_webui_config_schema()["sections"]["planning"]["fields"]["model_task"]
     assert field["choices"] == ["utils", "replyer", "planner"]
-    from maiweave.usage import generate
+    from maiweave.integrations.usage import generate
     plugin.ctx.llm.generate.return_value = {"success": True, "response": "已完成"}
     await generate(plugin.ctx, plugin.store, plugin.config, "测试任务选择", "测试")
     assert plugin.ctx.llm.generate.call_args.kwargs["task_name"] == "planner"

@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import pytest
 
-from maiweave.usage import generate, summary
+from maiweave.integrations.usage import generate, summary
 from test_plugin import plugin
 from test_sleep_policy import sleep_plan
 

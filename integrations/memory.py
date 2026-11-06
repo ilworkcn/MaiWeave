@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode, quote
 from urllib.request import Request, urlopen
 
-from .config import MemoryConfig
+from ..config import MemoryConfig
 
 
 class NativeMemory:

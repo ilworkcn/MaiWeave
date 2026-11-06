@@ -31,7 +31,7 @@ async def test_expanded_text_counts_toward_storage(plugin):
     assert plugin.store.all('book')==[] and list(plugin.books.directory.iterdir())==[]
 
 async def test_disk_and_write_errors_leave_no_partial_book(plugin):
-    with patch('maiweave.books.shutil.disk_usage',return_value=SimpleNamespace(free=1024)):
+    with patch('maiweave.life.books.shutil.disk_usage',return_value=SimpleNamespace(free=1024)):
         with pytest.raises(ValueError,match='磁盘剩余'):await upload(plugin)
     row=await plugin.ui_book_upload('begin',filename='写入测试.txt')
     await plugin.ui_book_upload('append',upload_id=row['id'],content=base64.b64encode('正文'.encode()).decode())
@@ -69,7 +69,7 @@ async def test_context_is_bounded_and_notes_are_paginated(plugin):
     assert result['total']==40 and len(result['items'])==2 and len(result['items'][0]['summary'])==500
 
 async def test_restart_cleans_interrupted_upload(plugin):
-    from maiweave.books import Books
+    from maiweave.life.books import Books
     row=await plugin.ui_book_upload('begin',filename='未完成.txt')
     await plugin.ui_book_upload('append',upload_id=row['id'],content=base64.b64encode(b'partial').decode())
     Books(plugin.engine,plugin.ctx,plugin.config,plugin.ctx.paths.data_dir)

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from urllib.error import HTTPError
 import pytest
 from maiweave.config import WorldConfig, MemoryConfig
-from maiweave.memory import NativeMemory
+from maiweave.integrations.memory import NativeMemory
 from test_plugin import plugin
 
 
@@ -117,7 +117,7 @@ async def test_existing_place_is_reused_by_autonomous_planning(plugin):
 
 
 async def test_place_cache_survives_restart_and_query_updates(plugin):
-    from maiweave.store import Store
+    from maiweave.core.store import Store
     from datetime import timedelta
     plugin.config.world.search_enabled = True
     plugin.config.world.places_enabled = True

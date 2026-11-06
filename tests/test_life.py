@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from maiweave.engine import LifeEngine
-from maiweave.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
-from maiweave.store import Store
+from maiweave.core.engine import LifeEngine
+from maiweave.core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
+from maiweave.core.store import Store
 
 
 @pytest.fixture
@@ -151,8 +151,8 @@ def test_shared_meal_requires_confirmation_and_changes_hunger(life):
 
 
 def test_old_sharing_scores_migrate_once(tmp_path):
-    from maiweave.store import Store
-    from maiweave.engine import LifeEngine
+    from maiweave.core.store import Store
+    from maiweave.core.engine import LifeEngine
     from datetime import datetime, timezone
     store = Store(tmp_path / "scores.db")
     now = datetime.now(timezone.utc)
