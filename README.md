@@ -2,6 +2,8 @@
 
 ![MaiWeave：聊天之外，也有自己的生活](assets/banner.png)
 
+<img src="assets/icon.png" width="128" alt="MaiWeave 插件图标">
+
 # MaiWeave · 麦织
 
 **把你们的对话，织进持续发生的生活。**
