@@ -4,7 +4,7 @@
 
 ## 先跑通一次查询
 
-启用 MaiWeave 后，把下面的方法放进你自己的 MaiBot 插件类中，在需要查询时调用 `await self.show_maiweave_status()`。
+启用 MaiWeave 后，在调用方插件的 `_manifest.json` 的 `capabilities` 数组中加入 `"api.call"`，与已有能力一起保留。然后把下面的方法放进插件类中，在需要查询时调用 `await self.show_maiweave_status()`。
 
 ```python
 async def show_maiweave_status(self):
@@ -17,14 +17,7 @@ async def show_maiweave_status(self):
 
 这里的 `self.ctx` 是 MaiBot 给插件提供的上下文。完整接口名是 `ilworkcn.maiweave.get_life_status`，版本填字符串 `"1"`。接口查询的是麦麦的全局生活状态，群聊、私聊读到同一份结果。
 
-返回值分两层：
-
-```python
-response["success"]  # 本次调用是否成功
-response["result"]   # 麦麦的生活状态
-```
-
-调用失败时，原因放在 `response["error"]` 中。
+`ctx.api.call()` 直接返回生活状态字典，例如 `response["current"]`、`response["sleeping"]`。调用异常由 MaiBot SDK 抛出，可按调用方插件的错误处理方式记录或展示。
 
 ## 在自己的插件里使用
 
@@ -32,13 +25,10 @@ response["result"]   # 麦麦的生活状态
 
 ```python
 async def read_maiweave_status(self):
-    response = await self.ctx.api.call(
+    return await self.ctx.api.call(
         "ilworkcn.maiweave.get_life_status",
         version="1",
     )
-    if response["success"]:
-        return response["result"]
-    raise RuntimeError(response["error"])
 ```
 
 ### 示例一：显示麦麦正在做什么
@@ -123,37 +113,34 @@ async def describe_maiweave_next_plan(self):
 
 ```json
 {
-  "success": true,
-  "result": {
-    "version": 1,
-    "ready": true,
-    "enabled": true,
-    "schedule_enabled": true,
-    "updated_at": "2026-11-06T17:15:00+08:00",
-    "sleeping": false,
-    "awake_until": null,
-    "current": {
-      "id": "reading-example",
-      "title": "在住处读一会儿书",
-      "kind": "study",
-      "start": "2026-11-06T17:00:00+08:00",
-      "end": "2026-11-06T17:30:00+08:00",
-      "location": "住处",
-      "status": "active"
-    },
-    "next_plan": {
-      "id": "meal-example",
-      "title": "准备晚饭",
-      "kind": "meal",
-      "start": "2026-11-06T18:00:00+08:00",
-      "end": "2026-11-06T18:40:00+08:00",
-      "location": "厨房",
-      "status": "scheduled"
-    },
+  "version": 1,
+  "ready": true,
+  "enabled": true,
+  "schedule_enabled": true,
+  "updated_at": "2026-11-06T17:15:00+08:00",
+  "sleeping": false,
+  "awake_until": null,
+  "current": {
+    "id": "reading-example",
+    "title": "在住处读一会儿书",
+    "kind": "study",
+    "start": "2026-11-06T17:00:00+08:00",
+    "end": "2026-11-06T17:30:00+08:00",
     "location": "住处",
-    "energy": 70.055,
-    "mood": 18.161
-  }
+    "status": "active"
+  },
+  "next_plan": {
+    "id": "meal-example",
+    "title": "准备晚饭",
+    "kind": "meal",
+    "start": "2026-11-06T18:00:00+08:00",
+    "end": "2026-11-06T18:40:00+08:00",
+    "location": "厨房",
+    "status": "scheduled"
+  },
+  "location": "住处",
+  "energy": 70.055,
+  "mood": 18.161
 }
 ```
 
