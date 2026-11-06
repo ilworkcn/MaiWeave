@@ -405,6 +405,38 @@ class Living:
                 and not plan["participants"] and plan["kind"] not in {"travel", "sleep", "diary"}
                 and plan["status"] == "completed")
 
+    def share_activity(self, event):
+        """用书籍关联和已有活动分类归类分享话题。"""
+        plan = self.engine.store.find("plan", event.get("plan_id", ""))
+        if not plan:
+            return "生活经历"
+        if plan.get("book_id"):
+            return "阅读"
+        return plan.get("activity_label") or {
+            "sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习",
+            "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "日记",
+        }[plan["kind"]]
+
+    def select_share(self, available, session, now):
+        """重要经历优先，日常话题参考本聊天流最近一天实际分享的类别。"""
+        eligible = [e for e in available if e["importance"] >= self.config.proactive.share_threshold]
+        counts = {}
+        for row in self.engine.store.all("share_receipt"):
+            activity = row.get("share_activity")
+            if row["session"] == session and row.get("sent_at") and activity:
+                age = now - self.engine.time(row["sent_at"])
+                if timedelta() <= age < timedelta(days=1):
+                    counts[activity] = counts.get(activity, 0) + 1
+        important = [e for e in eligible if e["importance"] >= 7]
+        if important:
+            event = max(important, key=lambda e: (e["importance"], self.engine.time(e["occurred_at"])))
+            return event, "优先分享达到7分的重要经历"
+        event = max(eligible, key=lambda e: (-counts.get(self.share_activity(e), 0), e["importance"], self.engine.time(e["occurred_at"])), default=None)
+        if event:
+            activity = self.share_activity(event)
+            return event, f"优先选择近24小时向本聊天流较少分享的活动：{activity}，已实际发送{counts.get(activity, 0)}次；同次数按分数和时间选择"
+        return None, ""
+
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine
         if not config.enabled:
@@ -445,7 +477,8 @@ class Living:
             available = [e for e in unseen if not self.pending_share_result(e)]
             best = max(available, key=lambda e: (e["importance"], engine.time(e["occurred_at"])), default=None)
             threshold = config.share_threshold
-            event = best if best and best["importance"] >= threshold else None
+            event, selection_reason = self.select_share(available, session, now)
+            best = event or best
             score = (f"《{best['summary'][:48]}》{best['importance']}/10 分，门槛 {threshold} 分。{best['score_reason']}"
                      if best else "本轮没有可评分的经历")
             screening = (f"近六小时内 {len(in_window)} 条经历，{len(in_window) - len(unseen)} 条已向本聊天流请求分享，"
@@ -490,9 +523,11 @@ class Living:
                 topic = topics[record_id.split(":", 1)[0]]
                 reason = f"{len(notices)} 条待发提醒，优先处理{topic}（{record_id}）"
             else:
-                reason = f"{topic}：{screening}。选择得分最高的经历，同分时选最近发生的一条"
+                reason = f"{topic}：{screening}。{selection_reason}"
             row = {"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
-                   "reason": reason, "score": score, "mode": config.mode}
+                   "reason": reason, "score": score, "mode": config.mode,
+                   "experience_id": event["id"] if not notices else "",
+                   "share_activity": self.share_activity(event) if not notices else ""}
             if config.mode == "主动表达":
                 await self.receipts.express(session, intent, row, now)
             else:
