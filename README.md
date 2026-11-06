@@ -75,6 +75,13 @@ MaiWeave 是 MaiBot 的角色生活插件。麦麦可以安排日程、阅读上
 
 **此刻生活**展示当前活动与进度、地点天气、每日时间轴，以及最近的阅读感想与日记。主动交流回执和运行记录可展开查看。日程、经历和日记连在一起，你可以查看安排、补充细节，再回头读麦麦写下的一天。
 
+### 📷 实机演示：麦麦的一天
+
+<p align="center">
+  <a href="assets/life-overview.png"><img src="assets/life-overview.png" width="1000" alt="新版此刻生活实机界面：麦麦正在厨房做晚饭，展示活动进度、精力心情和全天日程时间线"></a><br>
+  <sub>正在做什么、为什么这样安排、今天过得怎样，打开「此刻生活」就能看到。</sub>
+</p>
+
 <p align="center">
   <a href="assets/home-life-card.png"><img src="assets/home-life-card.png" width="480" alt="MaiWeave 首页生活卡片，展示带时间的活动快照、地点、精力与心情"></a><br>
   <sub>首页卡片保留加载时的生活快照；进入「此刻生活」查看持续更新的状态。</sub>
