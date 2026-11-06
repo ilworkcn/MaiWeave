@@ -20,7 +20,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/ilworkcn/MaiWeave?label=Last%20Commit&color=7ba989)](https://github.com/ilworkcn/MaiWeave/commits/main/)
 [![Issues](https://img.shields.io/github/issues/ilworkcn/MaiWeave?label=Issues&color=c58b75)](https://github.com/ilworkcn/MaiWeave/issues)
 
-[下载安装](https://github.com/ilworkcn/MaiWeave/releases/latest) · [使用手册](docs/使用手册.md) · [配置指南](docs/配置指南.md) · [更新日志](CHANGELOG.md)
+[下载安装](https://github.com/ilworkcn/MaiWeave/releases/latest) · [使用手册](docs/使用手册.md) · [配置指南](docs/配置指南.md) · [状态 API](docs/只读状态API.md) · [更新日志](CHANGELOG.md)
 
 </div>
 
@@ -39,6 +39,7 @@ MaiWeave 是 MaiBot 的角色生活插件。麦麦可以安排日程、阅读上
 | 🌦️ **窗外的变化，影响今天怎么过** | 按活动搜索所在城市的真实地点，结合天气安排外出阅读，预留模拟出行时间；天气变了，可以回到室内接着读 |
 | 🤝 **换个聊天的地方，还是熟悉的你** | 关联 MaiBot 原生人物画像，群聊与私聊共享同一人的关系和近期状态。亲密程度影响日程调整与唤醒，生日和纪念日也能记下来 |
 | 🧶 **昨天留下的事，今天继续** | 保存作品阶段、长期目标和未完话题，让空闲时的安排有前因后续。日记把当天的经历与心情串起来，随时可以回看 |
+| 🔌 **让其他插件读懂麦麦的状态** | 提供只读状态 API，可查询睡眠、唤醒时段、当前活动、下一项安排、地点、精力和心情。其他插件可据此展示状态或安排自己的任务。[查看调用示例](docs/只读状态API.md) |
 
 ### 从一个约定，到下一次聊天
 
