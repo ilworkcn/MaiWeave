@@ -20,6 +20,7 @@ from .life.presence import Presence
 from .integrations.memory import NativeMemory
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
+from .core.retention import Retention
 from .integrations.share_receipts import planner_task
 from .integrations.world import World
 from .life.spatial import Spatial
@@ -95,7 +96,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
             {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary", "books"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
-            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "plugin"], "order": 3},
+            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "retention", "plugin"], "order": 3},
         ]}
         return schema
 
@@ -114,6 +115,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.anniversaries = Anniversaries(self.store)
         self.reviews = Reviews(self)
         self.engine = LifeEngine(self.store, self.config.life.timezone, self.now())
+        self.retention = Retention(self.store, self.config)
         self.spatial = Spatial(self.engine)
         self.world = World(self.engine, self.ctx, self.config)
         self.rhythm = Rhythm(self.engine, self.spatial, self.config)
@@ -159,7 +161,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def tick(self):
         now = self.now()
         self.living.apply_schedule(now)
-        for name, job in [("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn), ("生活调整", self.living.adjust)]:
+        for name, job in [("数据清理", self.retention.daily), ("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn), ("生活调整", self.living.adjust)]:
             try:
                 job(now)
                 self.last_errors.pop(name, None)

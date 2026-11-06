@@ -128,6 +128,20 @@ class BooksConfig(PluginConfigBase):
     context_chars: int = setting("对话书架信息上限（字符）", default=4000, ge=1000, le=16000, description="限制书目和近期笔记带入对话的总长度；详细笔记可按书查询。")
 
 
+class RetentionConfig(PluginConfigBase):
+    """每天整理已结束的记录，保留正在使用的生活关联。"""
+
+    __ui_label__ = "数据保留"
+    enabled: bool = setting("每日自动清理", default=True, description="每天清理一次；经历与记忆页面可预览数量和立即清理。")
+    log_days: int = setting("运行记录保留天数", default=7, ge=0, description="主动交流回执、已结束任务及资料核对记录；0 表示按数量管理。")
+    log_count: int = setting("每类运行记录上限", default=1000, ge=0, description="每类分别计数；0 表示按天数管理，两项均为 0 时长期保留。")
+    plan_days: int = setting("已结束日程保留天数", default=90, ge=0, description="保留习惯观察期和仍有任务关联的日程；0 表示按数量管理。")
+    plan_count: int = setting("已结束日程条数上限", default=2000, ge=0, description="优先清理最早结束的日程；0 表示按天数管理。")
+    experience_days: int = setting("普通经历保留天数", default=180, ge=0, description="7分及以上、长期保留和仍用于生活接续的经历继续保存；0 表示按数量管理。")
+    experience_count: int = setting("普通经历条数上限", default=3000, ge=0, description="优先清理最早发生的普通经历；0 表示按天数管理。")
+    history_count: int = setting("每条经历保留修订数", default=10, ge=0, description="保留最近的修订历史；0 表示保留全部版本。")
+
+
 class MaiWeaveConfig(PluginConfigBase):
     plugin: PluginSection = Field(default_factory=PluginSection)
     life: LifeConfig = Field(default_factory=LifeConfig)
@@ -139,3 +153,4 @@ class MaiWeaveConfig(PluginConfigBase):
     diary: DiaryConfig = Field(default_factory=DiaryConfig)
     continuity: ContinuityConfig = Field(default_factory=ContinuityConfig)
     books: BooksConfig = Field(default_factory=BooksConfig)
+    retention: RetentionConfig = Field(default_factory=RetentionConfig)

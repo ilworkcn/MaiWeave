@@ -423,7 +423,9 @@ class Living:
     def pending_share_result(self, event):
         if event["source"] != "simulated" or not event.get("plan_id"):
             return False
-        plan = self.engine.store.get("plan", event["plan_id"])
+        plan = self.engine.store.find("plan", event["plan_id"])
+        if plan is None:
+            return False
         if plan.get("book_id"):
             return True
         return (self.config.continuity.outcomes_enabled and event["revision"] == 1

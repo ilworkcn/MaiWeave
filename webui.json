@@ -1222,6 +1222,10 @@
               "minimum": 1
             }
           }
+        },
+        "retention": {
+          "api": "ui_retention",
+          "version": "1"
         }
       },
       "actions": {
@@ -1319,6 +1323,24 @@
         "check_memory": {
           "api": "ui_check_memory",
           "version": "1"
+        },
+        "cleanup": {
+          "api": "ui_cleanup",
+          "version": "1"
+        },
+        "keep_experience": {
+          "api": "ui_keep_experience",
+          "version": "1",
+          "parameters": {
+            "experience_id": {
+              "type": "string",
+              "required": true
+            },
+            "keep": {
+              "type": "boolean",
+              "required": true
+            }
+          }
         }
       }
     },

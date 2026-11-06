@@ -195,7 +195,7 @@ class Books:
             plans = [p for p in store.all("plan") if p.get("book_id") == book_id]
             if any(p["status"] in {"scheduled", "active", "paused", "blocked"} for p in plans):
                 raise ValueError("这本书还有阅读日程，请先完成或取消，再删除")
-            if any(n["book_id"] == book_id and n["status"] in {"阅读中", "等待活动结束", "待阅读", "阅读失败"} and store.get("plan", n["id"])["status"] != "cancelled" for n in store.all("book_note")):
+            if any(n["book_id"] == book_id and n["status"] in {"阅读中", "等待活动结束", "待阅读", "阅读失败"} and (store.find("plan", n["id"]) or {"status": n.get("plan_status", "completed")})["status"] != "cancelled" for n in store.all("book_note")):
                 raise ValueError("这本书的阅读笔记正在处理，请完成后再删除")
             for path in self.directory.glob(book_id + ".*"):
                 path.unlink()

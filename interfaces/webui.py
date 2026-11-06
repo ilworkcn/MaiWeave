@@ -44,6 +44,21 @@ def plan_row(plan):
 
 
 class WebUI:
+    @API("ui_retention", description="预览数据保留与预计清理数量")
+    async def ui_retention(self) -> dict:
+        return self.retention.preview(self.now())
+
+    @API("ui_cleanup", description="按当前保留设置清理旧记录")
+    async def ui_cleanup(self) -> dict:
+        return self.retention.clean(self.now())
+
+    @API("ui_keep_experience", description="设置经历是否长期保留")
+    async def ui_keep_experience(self, experience_id: str, keep: bool) -> dict:
+        row = self.store.get("experience", experience_id)
+        with self.store.db:
+            self.store.put("experience", {**row, "keep": keep})
+        return {"keep": keep}
+
     @API("ui_record_detail", description="分页读取修订历史与日记素材")
     async def ui_record_detail(self, category: str, record_id: str, field: str, page: int = 1) -> dict:
         fields = {"experience": {"history"}, "relationship": {"history"}, "plan": {"changes"}, "diary": {"material"}}
@@ -60,7 +75,7 @@ class WebUI:
         notes = self.books.notes(book_id, page)
         return {"current_book": current["book_id"] if current else "", "books": self.store.all("book"),
                 "places": self.world.planning_places(), "notes": notes["items"], "notes_total": notes["total"], "page": notes["page"], "capacity": self.books.capacity(),
-                "sessions": [{**n, "status": "日程已取消" if self.store.get("plan", n["id"])["status"] == "cancelled" else n["status"]} for n in self.store.all("book_note")[-10:]], "now": self.now().isoformat()}
+                "sessions": [{**n, "status": "日程已取消" if (self.store.find("plan", n["id"]) or {"status": n.get("plan_status", "completed")})["status"] == "cancelled" else n["status"]} for n in self.store.all("book_note")[-10:]], "now": self.now().isoformat()}
 
     @API("ui_book_upload", description="上传书籍资料")
     async def ui_book_upload(self, action: str, upload_id: str = "", filename: str = "", title: str = "", author: str = "", content: str = "", size: int = 0) -> dict:
