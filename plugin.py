@@ -73,7 +73,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
             ("search", "world", "联网搜索", "复用 MaiBot 已配置的搜索服务。", ["search_enabled", "places_enabled"]),
-            ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "mode", "session_ids", "share_threshold"]),
+            ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "mode", "natural_greetings", "session_ids", "share_threshold"]),
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
         original = schema["sections"]

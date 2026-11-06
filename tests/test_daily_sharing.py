@@ -52,7 +52,7 @@ def test_important_events_and_threshold_keep_priority(plugin):
 
 @pytest.mark.parametrize("mode", ["自然交流", "主动表达"])
 async def test_meal_reflection_reaches_share_and_receipt(plugin, mode):
-    now = plugin.now().replace(hour=12, minute=0, second=0, microsecond=0)
+    now = (plugin.now() + timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
     plugin.now = lambda: now + timedelta(minutes=16)
     cfg = plugin.config.proactive
     cfg.enabled, cfg.session_ids, cfg.mode = True, ["a"], mode

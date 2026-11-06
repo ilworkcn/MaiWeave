@@ -10,6 +10,7 @@ from ..config import MaiWeaveConfig
 from ..core.engine import LifeEngine
 from ..core.models import ActivityChoice, PlanInput
 from .anniversaries import Anniversaries
+from .greetings import Greetings
 from ..integrations.usage import generate
 from ..integrations.share_receipts import ShareReceipts
 
@@ -27,6 +28,7 @@ class Living:
         self.continuity = continuity
         self.share_decisions = deque(maxlen=10)
         self.receipts = ShareReceipts(engine.store, context)
+        self.greetings = Greetings(self)
 
     def person_key(self, session, user):
         identity = self.engine.store.find("identity", f"{session}:{user}")
@@ -469,7 +471,9 @@ class Living:
             self.share_decisions.appendleft({"created": now.isoformat(), "at": now.strftime("%m-%d %H:%M:%S"), "session": session,
                                              "outcome": outcome, "reason": reason, "score": score, "mode": config.mode})
 
-        if not in_hours(now.hour, config.start_hour, config.end_hour):
+        greeting_window = self.greetings.window(now)
+        ordinary_hours = in_hours(now.hour, config.start_hour, config.end_hour)
+        if not ordinary_hours and not greeting_window:
             record("跳过", f"允许交流的时段为 {config.start_hour:02}:00 至 {config.end_hour:02}:00")
             return
         current = engine.current(now)
@@ -493,6 +497,10 @@ class Living:
             if any(row["session"] == session and row["outcome"] == "MaiBot 已受理"
                    for row in self.engine.store.all("share_receipt")):
                 record("跳过", "上一次主动交流正在等待回执", session)
+                continue
+            greeting = await self.greetings.candidate(session, now, greeting_window) if greeting_window else None
+            if not ordinary_hours and not greeting:
+                record("跳过", "当前处于作息问候窗口，本聊天流暂无合适问候", session)
                 continue
             in_window = [e for e in engine.store.all("experience") if engine.visible(e, session)
                          and timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
@@ -527,6 +535,12 @@ class Living:
                 if item["session_id"] == session:
                     notices.append((f"issue:{item['id']}:{item['reason']}", f"安排需要调整：{item['title']}。原因：{item['reason']}。说明当前待调整的状态。", None))
             notices = [n for n in notices if n[0] not in sent.get("notice_ids", [])]
+            if not ordinary_hours:
+                notices, event = [], None
+            if greeting and not notices and (not event or event["importance"] < 7):
+                notices.append(("greeting:" + greeting["key"], greeting["intent"], None))
+            else:
+                greeting = None
             if not notices and not event:
                 reason = f"没有待发提醒。{screening}"
                 if best:
@@ -542,7 +556,7 @@ class Living:
             topic = "经历分享"
             if notices:
                 topics = {"anniversary": "纪念日", "reminder": "共同安排提醒", "confirmation": "安排确认",
-                          "thread": "话题跟进", "issue": "日程调整"}
+                          "thread": "话题跟进", "issue": "日程调整", "greeting": greeting["kind"] if greeting else "作息问候"}
                 topic = topics[record_id.split(":", 1)[0]]
                 reason = f"{len(notices)} 条待发提醒，优先处理{topic}（{record_id}）"
             else:
@@ -551,7 +565,10 @@ class Living:
                    "reason": reason, "score": score, "mode": config.mode,
                    "experience_id": event["id"] if not notices else "",
                    "share_activity": self.share_activity(event) if not notices else ""}
-            if config.mode == "主动表达":
+            if greeting:
+                row.update(mode="自然交流", greeting_key=greeting["key"], greeting_kind=greeting["kind"],
+                           greeting_until=greeting["until"], score="作息问候，按近期互动与关系判断")
+            if config.mode == "主动表达" and not greeting:
                 await self.receipts.express(session, intent, row, now)
             else:
                 try:
