@@ -212,6 +212,13 @@ class Living:
                     store.delete("schedule_notice", notice["id"])
         return changes
 
+    def bedtime(self, now):
+        config = self.config.life
+        if not config.schedule_enabled or in_hours(now.hour, config.sleep_hour, config.wake_hour):
+            return None
+        start = now.replace(hour=config.sleep_hour, minute=0, second=0, microsecond=0)
+        return start if start > now else start + timedelta(days=1)
+
     async def choose_activity(self, now: datetime):
         engine, config = self.engine, self.config.life
         if not config.autonomous:
@@ -264,6 +271,9 @@ class Living:
             source = "日常作息"
             title, kind, location, motivation = "睡觉", "sleep", self.spatial.place("home")["name"], "按习惯休息，恢复精力"
             minutes = free
+        elif self.bedtime(now) and (self.bedtime(now) - now).total_seconds() / 60 <= self.spatial.route(state["location"], self.spatial.place("home")["name"])["minutes"] + 10:
+            source = "睡前收尾"
+            title, kind, location, motivation, minutes = "回家准备休息", "rest", self.spatial.place("home")["name"], "收好手边的事，准备睡觉", free
         elif state["hunger"] >= 65:
             source = "身体需要 · 用餐"
             title, kind, location, motivation, minutes = "吃饭", "meal", state["location"], "有些饿了", min(free, 30)
@@ -363,11 +373,24 @@ class Living:
         free = engine.free_minutes(now)
         travel_minutes = self.spatial.route(state["location"], location)["minutes"] if location else 0
         minutes = min(minutes, free - travel_minutes)
+        if source == "睡前收尾" and self.bedtime(now) and (self.bedtime(now) - now).total_seconds() / 60 <= travel_minutes:
+            title, kind, motivation = "睡觉", "sleep", "回到住处后按作息休息"
+            minutes = free - travel_minutes
         if kind == "sleep":
             wake = now.replace(hour=config.wake_hour, minute=0, second=0, microsecond=0)
             if wake <= now:
                 wake += timedelta(days=1)
             minutes = min(minutes, int((wake - now).total_seconds() / 60) - travel_minutes)
+        bedtime = self.bedtime(now)
+        if bedtime and kind != "sleep":
+            home = self.spatial.place("home")["name"]
+            return_minutes = self.spatial.route(location or state["location"], home)["minutes"]
+            minutes = min(minutes, int((bedtime - now).total_seconds() / 60) - travel_minutes - return_minutes)
+            if minutes < 1 and location != home:
+                title, kind, location, motivation = "回家准备休息", "rest", home, "收好手边的事，准备睡觉"
+                source, book_id, goal_id, goal_step_id, continuation_id = "睡前收尾", "", "", "", ""
+                travel_minutes = self.spatial.route(state["location"], home)["minutes"]
+                minutes = min(free - travel_minutes, max(1, int((bedtime - now).total_seconds() / 60) - travel_minutes))
         if minutes < 1:
             return "预留出行时间后，剩余空档不足"
         start = now + timedelta(minutes=travel_minutes)

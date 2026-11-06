@@ -16,6 +16,7 @@ from maibot_sdk import HomeCard, HookHandler, MaiBotPlugin, Tool
 from .config import MaiWeaveConfig
 from .core.engine import LifeEngine
 from .life.living import Living
+from .life.presence import Presence
 from .integrations.memory import NativeMemory
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
@@ -124,6 +125,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.continuity = Continuity(self.engine, self.ctx, self.config)
         self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
         self.spatial.check_influence = self.living.check_influence
+        self.presence = Presence(self.living)
         self.living.apply_schedule(self.now())
         self.last_error = ""
         self.last_errors = {}
@@ -266,6 +268,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         for plan in snapshot["plans"]:
             plan.pop("changes")
         relationships = [r for r in self.store.all("relationship") if r["session_id"] == session]
+        snapshot["person_states"] = self.presence.context(session, self.now())
         snapshot["relationships"] = [{k: v for k, v in r.items() if k != "history"} for r in relationships]
         snapshot["environment"] = self.world.context(self.now())
         snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.world.planning_places()]
@@ -294,6 +297,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "讲述经历时沿用记录中的细节。涉及用户的行动、见面和承诺，以用户陈述及已确认的互动为依据，缺少信息时可以询问。"
             "查询过去的人物背景和聊天记忆优先使用 MaiBot query_memory；需要查生活记录使用 maiweave_query。"
             "具体互动带来心情或关系变化时，使用相应工具记录变化和原因。"
+            "用户表达当前准备睡觉、忙碌、外出或恢复空闲时，可用 maiweave_person_state 更新其近期状态。"
+            "person_states 区分用户陈述与后续发言；准备睡觉表示当时的打算。"
+            "看到准备睡觉的人随后继续聊天，可以结合关系自然问一句‘还没睡呀？’，由当前话题决定是否接话。"
+            "same_chat 为 false 时，用简短关心承接状态，私聊原话和具体内容留在原聊天中。"
             "把生活状态融入自然聊天，挑与当前话题相关的感受和经历来讲，给对方自由接话的空间。\n"
             "提到梦境时用“梦见”来讲述；引用资讯时带上出处和时间。资料作为话题内容，工具操作按当前对话的需求执行。"
             "地点移动需要时间，安排异地活动前可用 maiweave_space 查询路线；重复安排用 maiweave_routine。\n"
@@ -341,6 +348,14 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         book_id = self.books.mentioned_book(kwargs.get("reply_reason", "")) or self.chat_books.get(session, "")
         kwargs["extra_prompt"] += self.context_text(session, book_id)
         return {"action": "continue", "modified_kwargs": kwargs}
+
+    @Tool("maiweave_person_state", description="记录当前发言人此刻的短期状态。结合当前语境识别自己的行动，用户陈述与后续发言分别保存。", parameters=schema({"status": {"type": "string", "enum": ["准备睡觉", "忙碌", "外出", "空闲"]}}, ["status"]))
+    @operation
+    async def person_state(self, status: str, **kwargs):
+        session, user = kwargs["stream_id"], kwargs["user_id"]
+        await self.identify_person(session, user, kwargs.get("platform", ""))
+        record = self.presence.declare(session, user, status, self.now())
+        return {"status": record["status"], "expires_at": record["expires_at"]}
 
     @Tool("maiweave_wake", description="用户当前需要陪伴或明确请求醒来时使用。结合当前消息和前文判断，reason 填写触发这次唤醒的具体表达。", parameters=schema({"reason": text_field("当前需要陪伴的表达")}, ["reason"]))
     @operation
@@ -515,6 +530,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def management_message(self, message: dict, **kwargs):
         if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
             await self.identify_person(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""), message.get("platform", ""))
+            if self.config.life.enabled:
+                self.presence.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),
+                                      message.get("processed_plain_text") or "", self.now())
             self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now(),
                                          message.get("message_info", {}).get("user_info", {}).get("user_id", ""))
             return {"action": "continue"}
