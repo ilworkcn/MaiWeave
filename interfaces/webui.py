@@ -324,6 +324,51 @@ class WebUI:
                 "errors": "\n".join(f"{name}：{error}" for name, error in self.last_errors.items()) or "无运行错误",
                 "jobs": self.store.all("job")[-10:]}
 
+    @API("ui_dashboard", description="此刻生活总览与每日轨迹")
+    async def ui_dashboard(self, day_offset: int = 0) -> dict:
+        if day_offset not in {-1, 0, 1}:
+            raise ValueError("请选择昨天、今天或明天")
+        data = await self.ui_overview()
+        now = self.now()
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=day_offset)
+        end = start + timedelta(days=1)
+        plans = self.store.all("plan", omit=("changes",))
+        daily = sorted((p for p in plans if p["status"] != "cancelled" and self.engine.time(p["start"]) < end
+                        and self.engine.time(p["end"]) > start), key=lambda p: self.engine.time(p["start"]))
+        def brief(plan):
+            return {**{key: plan[key] for key in ("id", "title", "kind", "location", "status", "start", "end", "motivation")},
+                    "kind_label": KIND[plan["kind"]], "status_label": STATUS[plan["status"]],
+                    "source_label": "角色模拟" if plan["simulation"] and not plan["participants"] else ("共同安排" if plan["participants"] else "个人安排")}
+        current = self.engine.current(now)
+        upcoming = min((p for p in plans if p["status"] == "scheduled" and self.engine.time(p["start"]) > now),
+                       key=lambda p: self.engine.time(p["start"]), default=None)
+        weather = self.world.context(now)["weather"]
+        weather_brief = None if not weather else {"city": weather["city"], "label": weather["label"],
+            "temperature": weather["current"]["temperature_2m"], "stale": weather["stale"], "at": display_time(weather["observed_at"])}
+        pointer = self.store.find("runtime", "current_book")
+        book = self.store.find("book", pointer["book_id"]) if pointer else None
+        notes = self.books.notes(book["id"])["items"] if book else []
+        shelf = None if not book else {**{key: book[key] for key in ("title", "author", "status", "read_characters", "characters")},
+            "progress": round(book["read_characters"] / book["characters"] * 100),
+            "thoughts": notes[0]["thoughts"][:300] if notes else "", "question": notes[0]["question"][:200] if notes else ""}
+        diaries = sorted(self.store.all("diary", omit=("material",)), key=lambda r: r["day"], reverse=True)
+        diary = next((r for r in diaries if r["status"] == "已生成"), None)
+        events = sorted(self.store.all("experience", omit=("history",)), key=lambda r: r["occurred_at"], reverse=True)[:4]
+        data.pop("history")
+        data.update(now=now.isoformat(timespec="seconds"), day=start.date().isoformat(), day_offset=day_offset,
+            current=brief(current) if current else None, upcoming=brief(upcoming) if upcoming else None,
+            timeline=[{**brief(plan),
+                "start_minute": max(0, (self.engine.time(plan["start"]) - start).total_seconds()/60),
+                "end_minute": min(1440, (self.engine.time(plan["end"]) - start).total_seconds()/60),
+                "time_label": self.engine.time(plan["start"]).strftime("%H:%M") + "–" + self.engine.time(plan["end"]).strftime("%H:%M")}
+                for plan in daily[:200]], timeline_total=len(daily),
+            weather=weather_brief, book=shelf,
+            diary={"day": diary["day"], "content": diary["content"][:450]} if diary else None,
+            moments=[{"summary": r["summary"][:400], "source": SOURCE[r["source"]],
+                      "time": display_time(r["occurred_at"]), "importance": r["importance"]} for r in events],
+            usage=usage_summary(self.store, now, 1)["totals"])
+        return data
+
     @API("ui_schedule", description="日程与重复规则")
     async def ui_schedule(self, session_id: str = "", start_date: str = "", page: int = 1) -> dict:
         plans = self.store.all("plan", omit=('changes',))

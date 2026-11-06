@@ -31,8 +31,8 @@ def test_mode_config_roundtrip():
     root = Path(__file__).resolve().parents[1]
     assert "maisaka.reply.generate" in json.loads((root / "_manifest.json").read_text(encoding="utf-8"))["capabilities"]
     page = json.loads((root / "webui.json").read_text(encoding="utf-8"))["pages"][0]
-    table = next(item for item in page["content"] if item.get("value", {}).get("field") == "share_decisions")
-    assert {"field": "mode", "label": "交流模式"} in table["columns"]
+    html = (root / page["entry"]).read_text(encoding="utf-8")
+    assert "esc(r.mode)" in html and "esc(r.delivery)" in html
 
 
 def prepare(plugin, monkeypatch):
