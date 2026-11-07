@@ -86,8 +86,10 @@ async def test_replan_respects_relationship_and_keeps_original_on_rejection(plug
     assert plugin.store.get("plan", plan["id"])["start"] == until
 
 
-async def test_travel_time_and_recurring_plans_use_relationship(plugin):
-    now=plugin.now()
+async def test_travel_time_and_recurring_plans_use_relationship(plugin, monkeypatch):
+    # 固定在次日中午，重复规则和活动使用同一天的时间。
+    now=(plugin.now()+timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+    monkeypatch.setattr(plugin, "now", lambda: now)
     plan=plugin.engine.create_plan(PlanInput(title="学习",kind="study",start=(now+timedelta(minutes=5)).isoformat(),
         end=(now+timedelta(minutes=20)).isoformat()),"",now,autonomous=True)
     # 活动本身在学习之后，前往公园的路程会占用学习时间。

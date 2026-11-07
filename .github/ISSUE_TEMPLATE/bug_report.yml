@@ -9,7 +9,7 @@ body:
     id: "versions"
     attributes:
       label: "MaiWeave / MaiBot 版本"
-      placeholder: "MaiWeave 0.9.1；MaiBot 具体版本"
+      placeholder: "MaiWeave 0.9.2；MaiBot 具体版本"
     validations:
       required: true
   - type: "dropdown"
