@@ -1,6 +1,6 @@
 [project]
 name = "maiweave"
-version = "0.9.0"
+version = "0.9.1"
 description = "与你共织日常，让对话、现实资料与麦麦的生活相互接续"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]

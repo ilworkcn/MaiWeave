@@ -77,7 +77,7 @@ async def test_person_sleep_is_separate_from_bot_sleep(plugin):
 async def test_activity_finishes_before_bedtime(plugin, enabled):
     plugin.config.life.autonomous = True
     plugin.config.life.schedule_enabled = enabled
-    now = plugin.now().replace(hour=22, minute=30, second=0, microsecond=0)
+    now = (plugin.now() + timedelta(days=1)).replace(hour=22, minute=30, second=0, microsecond=0)
     plugin.ctx.llm.generate.return_value = {"success": True, "response": json.dumps({
         "title": "听音乐", "kind": "leisure", "minutes": 90, "location": "住处", "motivation": "想听新专辑"})}
     await plugin.living.choose_activity(now)

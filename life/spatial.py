@@ -337,14 +337,3 @@ class Spatial:
                 self.engine.store.put("plan", plan)
         self.reconcile(now)
         return self.engine.store.get("plan", plan["id"])
-
-
-def travel_position(plan: dict, at, engine) -> dict:
-    route = plan["route"]
-    elapsed = plan["elapsed_seconds"] / 60
-    for leg in route["legs"]:
-        if elapsed < leg["minutes"]:
-            return {"location": leg["origin"], "next": leg["destination"], "mode": leg["mode"],
-                    "progress": round(elapsed / leg["minutes"] * 100), "destination": route["destination"]}
-        elapsed -= leg["minutes"]
-    return {"location": route["destination"], "next": "", "mode": "已到达", "progress": 100, "destination": route["destination"]}

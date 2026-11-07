@@ -19,6 +19,17 @@ def bounded(value: float, low: float = 0, high: float = 100) -> float:
     return round(min(high, max(low, value)), 3)
 
 
+def travel_position(plan: dict) -> dict:
+    route = plan["route"]
+    elapsed = plan["elapsed_seconds"] / 60
+    for leg in route["legs"]:
+        if elapsed < leg["minutes"]:
+            return {"location": leg["origin"], "next": leg["destination"], "mode": leg["mode"],
+                    "progress": round(elapsed / leg["minutes"] * 100), "destination": route["destination"]}
+        elapsed -= leg["minutes"]
+    return {"location": route["destination"], "next": "", "mode": "已到达", "progress": 100, "destination": route["destination"]}
+
+
 def read_life_status(store: Store, now: datetime, *, enabled: bool, schedule_enabled: bool) -> dict:
     """读取生活状态，供插件 API 和首页卡片共用。"""
     state = store.find("state", "life")
@@ -384,8 +395,7 @@ class LifeEngine:
                 if current:
                     current["elapsed_seconds"] += seconds
                     if current.get("route"):
-                        from ..life.spatial import travel_position
-                        position = travel_position(current, right, self)
+                        position = travel_position(current)
                         state["location"] = position["location"]
                         state["journey"] = position
                     elif current["location"]:

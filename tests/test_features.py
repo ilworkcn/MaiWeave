@@ -219,3 +219,18 @@ async def test_native_web_results_are_persisted_with_sources(life):
     await x.world.read(result["results"][0]["url"], x.now)
     assert x.store.all("reading")[0]["content"] == "正文"
     assert x.store.all("experience") == []
+
+
+def test_travel_advances_after_loader_releases_package(life, monkeypatch):
+    """运行时释放动态包名后，出行推进和上下文继续使用已加载的引擎。"""
+    import sys
+    trip = life.spatial.move("图书馆", "a", life.now)
+    with monkeypatch.context() as patch:
+        for name in list(sys.modules):
+            if name == "maiweave" or name.startswith("maiweave."):
+                patch.delitem(sys.modules, name)
+        life.engine.advance(life.now + timedelta(minutes=9))
+        assert life.engine.state()["journey"]["progress"] == 33
+        life.engine.snapshot("a", life.now + timedelta(minutes=21))
+        assert life.engine.state()["location"] == "图书馆"
+        assert life.store.get("plan", trip["id"])["status"] == "completed"
