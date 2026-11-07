@@ -11,7 +11,7 @@
 与你的约定、窗外的天气、读过的书，都能成为下一次相遇的话题。
 
 [![Release](https://img.shields.io/github/v/release/ilworkcn/MaiWeave?label=Release&color=7ba989)](https://github.com/ilworkcn/MaiWeave/releases)
-[![MaiBot](https://img.shields.io/badge/MaiBot-1.3.19–1.3.x-7ba989)](https://docs.maibot.chat/)
+[![MaiBot](https://img.shields.io/badge/MaiBot-1.3.19–1.4.x-7ba989)](https://docs.maibot.chat/)
 [![SDK](https://img.shields.io/badge/SDK-2.21.x-79a7b8)](https://github.com/Mai-with-u/maibot-plugin-sdk)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-79a7b8?logo=python&logoColor=white)](pyproject.toml)
 [![License](https://img.shields.io/badge/License-GPL--3.0-orange)](LICENSE)
@@ -109,7 +109,7 @@ MaiWeave 是 MaiBot 的角色生活插件。麦麦可以安排日程、阅读上
 
 ## 🚀 安装与设置
 
-适配 **MaiBot 1.3.19–1.3.x、插件 SDK 2.21.x**，搭配支持 WebUI v2 页面协议的 WebUI。
+适配 **MaiBot 1.3.19–1.4.x、插件 SDK 2.21.x**，搭配支持 WebUI v2 页面协议的 WebUI。
 
 1. 从 [Release](https://github.com/ilworkcn/MaiWeave/releases/latest) 下载对应版本的 ZIP 安装包。
 2. 在 MaiBot 的 **插件扩展 → 更多操作 → 从 ZIP 安装插件** 中上传，然后启用。
@@ -127,6 +127,8 @@ MaiWeave 是 MaiBot 的角色生活插件。麦麦可以安排日程、阅读上
 | 按城市安排外出 | 在「天气与见闻」设置城市，开启 MaiBot 联网搜索和自动搜索生活地点；默认城市为大庆、国家代码为 CN |
 | 关联人物和生日 | 开启原生记忆连接，确认 MaiBot 网页地址，再到「人物与纪念日」选择画像 |
 | 收到主动消息和祝福 | 开启主动交流，模式可选「自然交流」或「主动表达」。在个人资料中选择「交流与提醒聊天流」；群聊等其他对象填入「额外接收聊天流」 |
+
+MaiBot 1.4 自动读取 `host/webui.json` 的登录凭据，通过当前 Bot 的接口访问人物画像与记忆。多个 Bot 共用网页登录，但各自读取自己的记忆。连接远程 MaiBot 1.4 时，网页地址填写 `http://地址:端口/api/host/bots/BotID/proxy`，网页登录凭据填写该 MaiBot 的登录密码；Bot ID 可从 WebUI 的 Bot 管理中查看。
 
 天气使用 Open-Meteo，联网搜索使用 MaiBot 已配置的联网服务。人物画像和经历同步使用 MaiBot A_Memorix，连接状态可在人物页面查看。
 

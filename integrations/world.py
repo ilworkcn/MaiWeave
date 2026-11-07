@@ -6,6 +6,7 @@ from .usage import generate
 import asyncio
 import hashlib
 import json
+import os
 import time
 import tomllib
 from pathlib import Path
@@ -86,6 +87,10 @@ class World:
         try:
             raw = await asyncio.to_thread(self.host_config_path.read_text, encoding="utf-8")
             config = tomllib.loads(raw)
+            catalog = os.environ.get("MAIBOT_SHARED_MODEL_CATALOG")
+            if catalog:
+                shared = tomllib.loads(await asyncio.to_thread(Path(catalog).read_text, encoding="utf-8"))
+                config.setdefault("web", {})["services"] = shared.get("web", {}).get("services", {})
         except (OSError, tomllib.TOMLDecodeError) as error:
             state["configuration"] = f"MaiBot 联网配置读取失败：{error}"
         else:

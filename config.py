@@ -62,7 +62,7 @@ class MemoryConfig(PluginConfigBase):
     __ui_label__ = "原生记忆"
     enabled: bool = setting("启用原生记忆连接", default=False, description="读取和同步 MaiBot A_Memorix")
     base_url: str = setting("MaiBot 网页地址（启用记忆后必填）", default="http://127.0.0.1:8001", description="已填本机默认地址；WebUI 在其他机器或端口时修改。")
-    session_cookie: str = setting("网页登录凭据（远程 MaiBot 选填）", default="", description="默认读取 MaiBot 运行目录的 webui.json 或 data/webui.json；连接远程 MaiBot 时可填写其 Cookie。", json_schema_extra={"x-widget": "password", "input_type": "password", "placeholder": "填写实际的 maibot_session 值"})
+    session_cookie: str = setting("网页登录凭据（远程 MaiBot 选填）", default="", description="自动读取 MaiBot 的 host/webui.json 登录；1.3 版本沿用旧凭据路径。远程 1.4 填登录密码，并在网页地址中指定目标 Bot 的代理路径。", json_schema_extra={"x-widget": "password", "input_type": "password", "placeholder": "1.4 填登录密码；1.3 填 maibot_session 值"})
 
 
 class WorldConfig(PluginConfigBase):

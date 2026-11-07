@@ -9,7 +9,6 @@
     {
       "id": "overview",
       "title": "此刻生活",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "chart",
       "entry": "webui/overview.html",
@@ -32,7 +31,6 @@
     {
       "id": "schedule",
       "title": "日程与作息",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "list",
       "entry": "webui/editor.html",
@@ -547,7 +545,6 @@
     {
       "id": "anniversaries",
       "title": "人物与纪念日",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "list",
       "entry": "webui/editor.html",
@@ -688,7 +685,6 @@
     {
       "id": "records",
       "title": "经历与记忆",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "list",
       "entry": "webui/editor.html",
@@ -932,7 +928,6 @@
     {
       "id": "continuity",
       "title": "成长与接续",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "list",
       "entry": "webui/editor.html",
@@ -1254,7 +1249,6 @@
     {
       "id": "books",
       "title": "书架与阅读",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "database",
       "entry": "webui/editor.html",
@@ -1389,7 +1383,6 @@
     {
       "id": "diary",
       "title": "日记与梦境",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "list",
       "entry": "webui/editor.html",
@@ -1480,7 +1473,6 @@
     {
       "id": "world",
       "title": "天气与见闻",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "database",
       "entry": "webui/editor.html",
@@ -1551,7 +1543,6 @@
     {
       "id": "space",
       "title": "地点与移动",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "list",
       "entry": "webui/editor.html",
@@ -1823,7 +1814,6 @@
     {
       "id": "usage",
       "title": "模型用量",
-      "placement": "workspace",
       "mode": "custom",
       "icon": "chart",
       "entry": "webui/editor.html",
