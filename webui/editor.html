@@ -11,7 +11,8 @@ label.inline-checkbox{display:flex;align-items:center;gap:8px;margin:12px 0;curs
 .panel{background:var(--card);border-radius:14px;padding:20px;margin-bottom:16px;min-width:0}.panel h2{font-size:19px;margin:0 0 15px}.panel h3{font-size:16px;margin:20px 0 12px}button.maibot-button,.record{border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--maibot-foreground);padding:8px 13px;box-shadow:none;min-height:36px}button:hover{border-color:var(--accent)}button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}#save,#scheduleBook,#uploadBook{background:var(--accent);color:white;border-color:var(--accent)}input.maibot-input,select.maibot-select,textarea.maibot-input{border:1px solid var(--line);border-radius:7px;background:var(--maibot-background,#f4f3ed);color:var(--maibot-foreground);padding:9px 11px;min-height:38px;box-shadow:none}label{gap:5px;font-size:13px}.fields{gap:14px}.toolbar{align-items:center;background:var(--card);padding:12px;border:1px solid var(--line);border-radius:12px}.toolbar input{min-width:180px}.workspace{grid-template-columns:minmax(240px,.85fr) minmax(0,1.65fr);gap:18px}.record{width:100%;border-left:3px solid var(--line);line-height:1.6}.record:hover,.record[aria-pressed=true]{border-left-color:var(--accent);background:color-mix(in srgb,var(--accent) 7%,var(--card))}#records{max-height:570px}.actions{align-items:center;margin-top:14px}summary{cursor:pointer;font-weight:600;padding:4px 0}details[open]>summary{margin-bottom:14px}#cityPanel>label:not(.inline-checkbox){max-width:680px}#connectionPanel p,#cityPanel p{font-size:13px;margin:8px 0}#status:empty{display:none}#status{padding:10px 14px;background:color-mix(in srgb,var(--accent) 9%,var(--card));border-radius:8px}#saveProgress{border:1px solid var(--accent);border-radius:10px;box-shadow:none;background:var(--card)}.view-card{border:1px solid var(--line);border-radius:10px;padding:16px}.view-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.view-grid>h3{grid-column:1/-1}.view-metric{padding:14px;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--card));border-radius:6px;white-space:pre-wrap}.view-table{max-height:530px;overflow:auto;border:1px solid var(--line);border-radius:8px}.maibot-table{border-collapse:collapse;font-size:13px;width:100%}.maibot-table th{text-align:left;position:sticky;top:0;background:var(--card);padding:10px;white-space:nowrap}.maibot-table td{border-top:1px solid var(--line);padding:10px;min-width:75px;max-width:400px;overflow-wrap:anywhere}.maibot-table tr:hover td{background:color-mix(in srgb,var(--accent) 6%,var(--card))}dialog{color:var(--maibot-foreground);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px;width:min(800px,92vw)}dialog::backdrop{background:#0006}#bookPanel>details{border-top:1px solid var(--line);padding:14px 0;margin:12px 0}#bookPanel>.fields{margin:14px 0}#bookNotes>details{padding:14px;border:1px solid var(--line);border-radius:10px;margin:10px 0}#retentionCounts{overflow:auto}#pageDetails>label{max-width:540px}#pageDetails>pre{font-size:14px}
 @media(max-width:760px){body{padding:14px}.workspace,.view-grid{grid-template-columns:1fr}.panel{padding:16px}.page-nav{gap:5px}.page-nav button{padding:5px 8px}.fields{grid-template-columns:1fr}label.wide{grid-column:auto}.maibot-table{font-size:12px}}
 body.maibot-page{max-width:1328px;margin:0 auto;padding:24px}.maibot-button.record{display:block;text-align:left}.maibot-button.record small{display:block}.panel:has(#records){align-self:start}@media(max-width:760px){body.maibot-page{padding:14px}}
-dialog{top:calc(var(--maibot-viewport-top,0px) + 24px);bottom:auto;margin:0 auto;max-height:calc(var(--maibot-viewport-height,80vh) - 48px);overflow:auto}
+dialog{top:calc(var(--maibot-viewport-top,0px) + 88px);bottom:auto;margin:0 auto;max-height:calc(var(--maibot-viewport-height,80vh) - 112px);overflow:auto}
+.dialog-header{position:sticky;top:-24px;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--card);margin:-24px -24px 16px;padding:16px 24px;border-bottom:1px solid var(--line)}.dialog-header h2{margin:0;font-size:19px}.dialog-header button{flex:none}.pagination{display:flex;justify-content:flex-end;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0 20px}.pagination span{margin-right:auto;color:var(--maibot-muted,#68766d)}
 .record-title,.maibot-button.record small{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden}.maibot-button.record small{-webkit-line-clamp:2}#pageDetails label.inline-checkbox{display:flex}
 .usage-bars{max-height:320px;overflow:auto;padding:12px 0}.usage-bar{display:grid;grid-template-columns:90px 1fr 100px;align-items:center;gap:14px;margin:8px 0}.usage-bar>div{height:12px;background:color-mix(in srgb,var(--accent) 8%,var(--card));border-radius:4px}.usage-bar span{display:block;height:100%;background:var(--accent);border-radius:4px}.usage-bar>small:last-child{text-align:right}@media(max-width:500px){.usage-bar{grid-template-columns:78px 1fr 85px;gap:7px}}
 </style></head>
@@ -158,7 +159,7 @@ async function reviewed(action,payload){
   if(record.status==='已取消'){show(action==='sync'?'已取消同步，原生记忆保持原样；修改后可重新同步':'已取消，资料保持原样',false);return null;}
   if(record.status==='待确认'){
    const accept=await new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.style.maxWidth='680px';
-    const title=document.createElement('h2');title.textContent='这次修改存在冲突';dialog.append(title);
+    const header=document.createElement('header');header.className='dialog-header';const title=document.createElement('h2');title.textContent='这次修改存在冲突';const close=document.createElement('button');close.className='maibot-button';close.textContent='关闭';close.onclick=()=>{dialog.close();dialog.remove();resolve(false)};header.append(title,close);dialog.append(header);
     for(const [label,content] of [['冲突原因',record.conflicts.join('\n')],['已有记录',JSON.stringify(record.existing,null,2)],['拟写入内容',JSON.stringify(record.proposed||record.payload,null,2)]]){const h=document.createElement('h3');h.textContent=label;const pre=document.createElement('pre');pre.textContent=content;dialog.append(h,pre)}
     for(const [text,answer] of [['取消，返回修改',false],['强制写入',true]]){const b=document.createElement('button');b.className='maibot-button';b.textContent=text;b.onclick=()=>{dialog.close();dialog.remove();resolve(answer)};dialog.append(b)}
     dialog.oncancel=e=>{e.preventDefault();dialog.close();dialog.remove();resolve(false)};document.body.append(dialog);dialog.showModal();});
@@ -196,7 +197,7 @@ function valueOf(value){
 }
 function condition(rule){if(!rule)return true;const value=valueOf(rule.reference);return rule.operator==='equals'?value===rule.expected:rule.operator==='empty'?!value:rule.operator==='not_empty'||rule.operator==='truthy'?Boolean(value):false}
 function renderPager(host,info,load){
- host.replaceChildren();if(!info)return;
+ host.replaceChildren();host.className='pagination';if(!info)return;
  const label=document.createElement('span');label.textContent=`第 ${info.page} / ${info.pages} 页`;host.append(label);
  for(const [name,delta] of [['上一页',-1],['下一页',1]]){const button=document.createElement('button');button.className='maibot-button';button.textContent=name;button.disabled=info.page+delta<1||info.page+delta>info.pages;button.onclick=()=>run(()=>load(info.page+delta));host.append(button)}
 }
@@ -213,7 +214,7 @@ async function renderView(){
 function findDialog(items,name){for(const item of items){if(item.type==='dialog'&&item.name===name)return item;const found=findDialog(item.children||[],name);if(found)return found}}
 async function showDetail(declaration,row){
  const dialog=document.createElement('dialog');dialog.style.maxWidth='800px';document.body.append(dialog);dialog.showModal();
- const close=document.createElement('button');close.textContent='关闭';close.onclick=()=>dialog.remove();dialog.append(close);
+ const header=document.createElement('header');header.className='dialog-header';const title=document.createElement('h2');title.textContent=declaration.label||'记录详情';const close=document.createElement('button');close.className='maibot-button';close.textContent='关闭';close.onclick=()=>dialog.remove();header.append(title,close);dialog.append(header);
  async function render(items,parent){
   for(const child of items){
    if(child.children){const box=document.createElement(child.type==='collapsible'?'details':'section');const title=document.createElement(child.type==='collapsible'?'summary':'h3');title.textContent=child.label||'';box.append(title);parent.append(box);await render(child.children,box);continue}
@@ -228,7 +229,7 @@ function drawView(host){
  if(host.contains($('saveProgress')))host.after($('saveProgress'));
  const opened=new Set([...host.querySelectorAll('details[open]')].map(x=>x.querySelector('summary')?.textContent));
  host.replaceChildren();const heading=document.createElement('summary');heading.textContent=pageMeta.categories.length?'历史记录与更多操作':'记录与操作';host.append(heading);const refreshButton=document.createElement('button');refreshButton.className='maibot-button';refreshButton.textContent='刷新页面记录';refreshButton.onclick=()=>run(async()=>{if(pageMeta.categories.length)await refresh(selected?.id);await renderView();message('已更新')});host.append(refreshButton);
- for(const [alias,result] of Object.entries(viewData)){if(result.pagination){const nav=document.createElement('div');nav.className='actions';renderPager(nav,result.pagination,async page=>{viewPages[alias]=page;await renderView()});const label=document.createElement('strong');label.textContent={ui_schedule:'日程与作息',ui_diaries:'日记记录',ui_dreams:'睡眠与梦境',ui_records:'生活经历',ui_continuity:'生活接续',ui_habits:'习惯与关系'}[pageMeta.view.queries[alias].api]||'记录';nav.prepend(label);host.append(nav)}}
+
  function draw(item,parent){
   if(item.when&&!condition(item.when))return;
   if(item.type==='dialog')return;
@@ -282,7 +283,12 @@ function drawView(host){
     tr.onclick=()=>run(async()=>{if(item.selection)viewSelection[item.selection]=row;const target={plan:'plan',rule:'routine',record:'experience',thread:'thread',place:'place',route:'route'}[item.selection];if(target&&pageMeta.categories.includes(target)){category=target;$('category').value=target;$('query').value='';await refresh(row.id)}if(item.selection)viewSelection[item.selection]=row;drawView(host);
      if(item.detail)await showDetail(findDialog(pageMeta.view.content,item.detail),row)
     });
-   }wrap.append(table);parent.append(wrap);return;
+   }wrap.append(table);parent.append(wrap);
+   const alias=item.value?.source,field=item.value?.field;
+   const pagedFields={ui_schedule:['plans'],ui_diaries:['entries'],ui_records:['records'],ui_dreams:['dreams','sleeps'],ui_habits:['habits','goals','relations'],ui_continuity:['reflections','preferences','continuations','effects','threads','goals','steps']};
+   if(((valueOf(item.value)||[]).length||viewData[alias]?.pagination?.page>1)&&viewData[alias]?.pagination&&pagedFields[pageMeta.view.queries[alias]?.api]?.includes(field)){
+    const nav=document.createElement('div');renderPager(nav,viewData[alias].pagination,async page=>{viewPages[alias]=page;await renderView()});parent.append(nav);
+   }return;
   }
   if(item.type==='progress'){const bar=document.createElement('progress');bar.max=100;bar.value=Number(valueOf(item.value)||0);bar.setAttribute('aria-label',item.label||'进度');parent.append(bar);return}
   if(item.type==='pagination')return;
