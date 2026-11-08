@@ -24,6 +24,16 @@
               "maximum": 1
             }
           }
+        },
+        "timeline": {
+          "api": "ui_life_timeline",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            }
+          }
         }
       },
       "actions": {}

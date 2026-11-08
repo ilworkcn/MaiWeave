@@ -29,6 +29,7 @@ class ShareReceipts:
         self.store = store
         self.ctx = ctx
         self.turn = {}
+        self.incoming = {}
 
     def accept(self, task, row, now):
         with self.store.db:
@@ -128,6 +129,49 @@ class ShareReceipts:
                 with self.store.db:
                     self.store.put("share_receipt", row)
 
+    @staticmethod
+    def time(value, zone):
+        """MaiBot 的本地回执时间使用角色时区。"""
+        at = datetime.fromisoformat(value)
+        return at.replace(tzinfo=zone) if at.tzinfo is None else at.astimezone(zone)
+
+    def context(self, session, now):
+        rows = sorted((r for r in self.store.all("share_receipt") if r["session"] == session and r.get("sent_at")
+                       and timedelta() <= now - self.time(r["sent_at"], now.tzinfo) < timedelta(days=2)),
+                      key=lambda r: r["sent_at"], reverse=True)[:3]
+        return [{"id": r["id"], "topic": r.get("topic", r.get("share_activity", "生活分享")), "sent_at": r["sent_at"],
+                 "status": r.get("followup", "waiting"), "response": r.get("response", ""),
+                 "observation": r.get("observation", ""), "experience_id": r.get("experience_id", "")}
+                for r in rows]
+
+    def receive(self, session, user, text, now):
+        if not text.strip() or text.lstrip().startswith("/"):
+            return
+        self.incoming = {key: value for key, value in self.incoming.items()
+                         if now - datetime.fromisoformat(value["at"]) < timedelta(hours=2)}
+        self.incoming[(session, user)] = {"text": text[:600], "at": now.isoformat()}
+        rows = self.context(session, now)
+        if rows:
+            row = self.store.get("share_receipt", rows[0]["id"])
+            row.update(observation="分享后收到用户发言", observed_at=now.isoformat())
+            with self.store.db:
+                self.store.put("share_receipt", row)
+
+    def respond(self, receipt_id, session, user, summary, status, now):
+        row = self.store.get("share_receipt", receipt_id)
+        if row["session"] != session or not row.get("sent_at"):
+            raise ValueError("请选择本聊天流实际发出的分享")
+        message = self.incoming.get((session, user))
+        if not message or datetime.fromisoformat(message["at"]) < self.time(row["sent_at"], now.tzinfo):
+            raise ValueError("当前用户尚未在这次分享后发言")
+        if status not in {"answered", "closed"}:
+            raise ValueError("请选择已接话或已聊完")
+        row.update(followup=status, response=summary[:400], response_user=user,
+                   response_text=message["text"], responded_at=message["at"])
+        with self.store.db:
+            self.store.put("share_receipt", row)
+        return {"topic": row.get("topic", "生活分享"), "status": status, "response": row["response"]}
+
     def history(self, skips):
         rows = [{"mode": "自然交流", **row} for row in [*skips, *self.store.all("share_receipt")]]
         return sorted(rows, key=lambda row: row["created"], reverse=True)[:10]
@@ -136,6 +180,5 @@ class ShareReceipts:
         times = []
         for row in self.store.all("share_receipt"):
             if row["session"] == session and row.get("sent_at"):
-                at = datetime.fromisoformat(row["sent_at"])
-                times.append(at.astimezone(zone))
+                times.append(self.time(row["sent_at"], zone))
         return times

@@ -132,7 +132,7 @@ async def test_autonomous_and_native_book_tools(plugin):
     assert (await plugin.books_tool('list',stream_id='a'))['books'][0]['id']==book['id']
     assert any(c['name']=='maiweave_books' for c in plugin.get_components())
 
-async def test_planning_changes_activity_after_long_reading(plugin):
+async def test_planning_considers_long_reading_and_allows_model_to_change_activity(plugin):
     book = await upload(plugin)
     start = plugin.now()
     for minutes in (0, 45):
@@ -145,7 +145,7 @@ async def test_planning_changes_activity_after_long_reading(plugin):
                'motivation': '想看下一章', 'book_id': book['id']}
     other = {**reading, 'title': '翻翻冰箱准备午饭', 'kind': 'meal', 'book_id': ''}
     plugin.ctx.llm.generate.side_effect = [
-        {'success': True, 'response': json.dumps(choice, ensure_ascii=False)} for choice in (reading, other)]
+        {'success': True, 'response': json.dumps(choice, ensure_ascii=False)} for choice in (other,)]
     now = start + timedelta(minutes=90)
     await plugin.living.choose_activity(now)
     plan = plugin.engine.current(now)

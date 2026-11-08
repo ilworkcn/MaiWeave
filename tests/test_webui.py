@@ -78,6 +78,7 @@ def test_all_page_bindings_match_real_registered_api():
     assert len(pages) == 10
     for page in pages:
         for binding in [*page["queries"].values(), *page["actions"].values()]:
+            assert "required" not in binding
             component = components[binding["api"]]
             assert component["metadata"]["version"] == binding["version"]
             method = getattr(instance, component["metadata"]["handler_name"])

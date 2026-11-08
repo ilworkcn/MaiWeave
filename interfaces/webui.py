@@ -369,6 +369,40 @@ class WebUI:
             usage=usage_summary(self.store, now, 1)["totals"])
         return data
 
+    @API("ui_life_timeline", description="查看一项活动从安排到完成的来龙去脉")
+    async def ui_life_timeline(self, plan_id: str) -> dict:
+        plan = self.store.get("plan", plan_id)
+        decision = plan.get("decision", {})
+        rows = [{"at": plan["created_at"], "title": decision.get("source", "安排活动"),
+                 "text": decision.get("reason") or plan["motivation"] or plan["title"]}]
+        labels = {"title": "活动", "start": "开始", "end": "结束", "location": "地点", "motivation": "缘由", "kind": "类型"}
+        actions = {"cancel": "取消活动", "pause": "暂停活动", "resume": "继续活动", "record_completion": "确认完成"}
+        for change in plan["changes"][-30:]:
+            after = change.get("after", {})
+            text = change.get("reason", "")
+            if after:
+                before = change.get("before", {})
+                text = "；".join(f"{labels.get(k, k)}：{before.get(k, '')} → {v}" for k, v in after.items())
+            action = change.get("action", "修改安排")
+            rows.append({"at": change["at"], "title": actions.get(action, action), "text": text})
+        event = self.store.find("experience", plan.get("experience_id", ""))
+        if event:
+            rows.append({"at": event["occurred_at"], "title": "活动结果 · " + SOURCE[event["source"]], "text": event["summary"]})
+        note = self.store.find("book_note", plan_id)
+        if note and note["status"] == "已完成":
+            rows.append({"at": note["finished_at"], "title": "读后感想", "text": note["thoughts"] + ("\n还在想：" + note["question"] if note["question"] else "")})
+        reflection = self.store.find("reflection", plan_id)
+        memory = next((r for r in self.store.all("activity_memory") if event and r["experience_id"] == event["id"]), None)
+        if memory and memory["next_action"]:
+            rows.append({"at": memory["updated_at"], "title": "留下的念头", "text": memory["next_action"] + (" · " + memory["next_date"] + "再接着做" if memory.get("next_date") else "")})
+        balance = decision.get("balance")
+        if balance:
+            for item in balance["totals"]:
+                item["activity"] = KIND.get(item["activity"], item["activity"])
+            balance["last_activity"] = KIND.get(balance["last_activity"], balance["last_activity"])
+        return {"title": plan["title"], "events": sorted(rows, key=lambda r: r["at"]),
+                "balance": balance, "reflection": reflection["status"] if reflection else ""}
+
     @API("ui_schedule", description="日程与重复规则")
     async def ui_schedule(self, session_id: str = "", start_date: str = "", page: int = 1) -> dict:
         plans = self.store.all("plan", omit=('changes',))
@@ -572,7 +606,7 @@ class WebUI:
         return page_tables({
             "reflections": self.store.all("reflection")[::-1],
             "preferences": [{**p, "evidence": "、".join(p["evidence_ids"])} for p in self.store.all("preference")],
-            "continuations": [{**p, "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")],
+            "continuations": [{**p, "next_date": p.get("next_date") or "有兴致时", "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")],
             "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")],
             "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
                          "request_label": "已向 MaiBot 请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")],

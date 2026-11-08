@@ -1,6 +1,6 @@
 """生活业务模型；时间统一保存为带时区的 ISO 字符串。"""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -58,6 +58,7 @@ class ExperienceInput(BaseModel):
 
 
 class ActivityChoice(BaseModel):
+    continuation_id: str = ""
     title: str = Field(min_length=1, max_length=160)
     kind: Kind
     minutes: int = Field(ge=10, le=120)
@@ -141,6 +142,7 @@ class ActivityMeaning(BaseModel):
 
 
 class ActivityOutcome(ActivityMeaning, SharingScore):
+    next_date: date | None = None
     summary: str = Field(min_length=1, max_length=1500)
     details: dict[str, str]
     enjoyment: float = Field(ge=-5, le=5)

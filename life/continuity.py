@@ -89,7 +89,8 @@ class Continuity:
                 "为这次已完成的角色活动补充过程和结果，接续已有作品进度与细节，"
                 "按活动时长安排合理进展，内容围绕角色独自进行的活动展开。"
                 "返回activity、subject、summary、details（中文键和值的对象，包含过程、结果、进度）、"
-                "enjoyment（-5到5）、mood和stress（-5到5）、next_action（下一次从哪里接着做）、"
+                "enjoyment（-5到5）、mood和stress（-5到5）、next_action（留下一件具体想尝试的事或尚未想明白的问题，顺其自然时可留空）、"
+                "next_date（适合接续的日期 YYYY-MM-DD，例如周末再做一道菜；随时可做时为null）。"
                 "goal_units（本次有实质进展为1，失败或没有进展为0）、completed（这件作品或任务已经完成时为true）。所有新细节均属于角色模拟。"
             )
         else:
@@ -123,6 +124,7 @@ class Continuity:
                     store.put("activity_memory", {"id": memory_key, "session_id": plan["session_id"], "activity": result.activity,
                                                    "subject": result.subject, "next_action": result.next_action, "details": event["details"],
                                                    "experience_id": event["id"], "updated_at": now.isoformat(),
+                                                   "next_date": result.next_date.isoformat() if result.next_date else "",
                                                    "kind": plan["kind"], "location": plan["location"], "completed": result.completed,
                                                    "last_continued_at": now.isoformat()})
                     if plan.get("goal_step_id"):

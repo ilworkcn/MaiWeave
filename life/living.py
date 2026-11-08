@@ -11,6 +11,7 @@ from ..core.engine import LifeEngine
 from ..core.models import ActivityChoice, PlanInput
 from .anniversaries import Anniversaries
 from .greetings import Greetings
+from .presence import Presence
 from ..integrations.usage import generate
 from ..integrations.share_receipts import ShareReceipts
 
@@ -29,6 +30,7 @@ class Living:
         self.share_decisions = deque(maxlen=10)
         self.receipts = ShareReceipts(engine.store, context)
         self.greetings = Greetings(self)
+        self.presence = Presence(self)
 
     def person_key(self, session, user):
         identity = self.engine.store.find("identity", f"{session}:{user}")
@@ -221,6 +223,33 @@ class Living:
         start = now.replace(hour=config.sleep_hour, minute=0, second=0, microsecond=0)
         return start if start > now else start + timedelta(days=1)
 
+    def activity_balance(self, now):
+        """汇总今天实际进行的活动，以及最近连续的生活节奏。"""
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        plans = sorted((p for p in self.engine.store.all("plan", omit=("changes",))
+                        if p.get("elapsed_seconds", 0) > 0 and self.engine.time(p["start"]) <= now),
+                       key=lambda p: self.engine.time(p["end"]))
+        totals = {}
+        recent = []
+        for plan in plans:
+            activity = "阅读" if plan.get("book_id") or self.reading_title(plan["title"]) else plan.get("activity_label") or {"sleep":"睡眠", "meal":"用餐", "work":"工作", "study":"学习", "leisure":"休闲", "travel":"出行", "rest":"休息", "social":"社交", "diary":"写日记"}[plan["kind"]]
+            seconds = min(plan["elapsed_seconds"], max(0, (min(now, self.engine.time(plan["end"])) - max(start, self.engine.time(plan["start"]))).total_seconds()))
+            if seconds:
+                item = totals.setdefault(activity, {"activity": activity, "minutes": 0, "sessions": 0})
+                item["minutes"] += seconds / 60
+                item["sessions"] += 1
+            if plan["status"] == "completed" and plan["kind"] != "travel":
+                recent.append({"activity": activity, "title": plan["title"], "end": plan["end"],
+                               "minutes": round(plan["elapsed_seconds"] / 60)})
+        consecutive = 0
+        for item in reversed(recent):
+            if item["activity"] != recent[-1]["activity"]:
+                break
+            consecutive += 1
+        return {"day": now.date().isoformat(), "totals": [{**r, "minutes": round(r["minutes"])} for r in totals.values()],
+                "recent": recent[-8:], "consecutive": consecutive,
+                "last_activity": recent[-1]["activity"] if recent else ""}
+
     async def choose_activity(self, now: datetime):
         engine, config = self.engine, self.config.life
         if not config.autonomous:
@@ -243,6 +272,7 @@ class Living:
             "body": [state["hunger"] >= 65, state["energy"] <= 25, state["stress"] >= 70],
             "plans": [(p["id"], p["status"], p["start"], p["end"], len(p["changes"])) for p in engine.store.all("plan")],
             "goals": engine.store.all("goal"), "interests": config.interests,
+            "continuations": [(r["id"], r["updated_at"]) for r in engine.store.all("activity_memory")],
             "weather": self.world.context(now)["weather"],
         }, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         previous = engine.store.find("runtime", "planning")
@@ -262,13 +292,18 @@ class Living:
         current_book = engine.store.find("runtime", "current_book")
         books.sort(key=lambda b: b["id"] != (current_book or {}).get("book_id"))
         books = [{k: b[k] for k in ("id", "title", "author", "status", "chapter", "chapter_count")} for b in books[:10]]
+        for book in books:
+            notes = [n for n in engine.store.all("book_note") if n["book_id"] == book["id"] and n["status"] == "已完成"]
+            if notes:
+                note = max(notes, key=lambda n: n["finished_at"])
+                book.update(thoughts=note["thoughts"][:300], question=note["question"][:200])
         habit = self.rhythm.candidate(now)
         if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
             habit = None
         next_step = self.continuity.next_step()
-        continuations = [r for r in engine.store.all("activity_memory") if r["next_action"] and not r.get("completed", False)
-                         and r.get("kind") in {"study", "work", "leisure", "rest"}
-                         and engine.time(r.get("last_continued_at", r["updated_at"])).date() < now.date()]
+        continuations = [r for r in engine.store.all("activity_memory") if r["next_action"]
+                         and r.get("kind") in {"study", "work", "leisure", "rest", "meal", "social"}
+                         and (not r.get("next_date") or r["next_date"] <= now.date().isoformat())]
         if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
             source = "日常作息"
             title, kind, location, motivation = "睡觉", "sleep", self.spatial.place("home")["name"], "按习惯休息，恢复精力"
@@ -284,32 +319,9 @@ class Living:
         elif state["energy"] <= 25:
             source = "身体需要 · 休息"
             title, kind, location, motivation, minutes = "休息一会儿", "rest", state["location"], "精力不足", min(free, 45)
-        elif habit:
-            source = "延续习惯"
-            title, kind, location = habit["title"], habit["kind"], habit["location"]
-            motivation, minutes, session = "在熟悉的时间延续已有习惯", min(free, habit["duration_minutes"]), habit["session_id"]
-            continuation = next((r for r in reversed(engine.store.all("activity_memory"))
-                                 if r["activity"] == title and r["session_id"] == session and not r.get("completed", False)), None)
-            if continuation:
-                continuation_id = continuation["id"]
-                title = f"{title}：{continuation['subject']}" if continuation["subject"] else title
-                motivation += "；" + continuation["next_action"]
-        elif next_step:
-            source = "推进目标"
-            goal, step = next_step
-            title, kind, location = step["title"], step["kind"], state["location"]
-            minutes, session = min(free, step["minutes"]), goal["session_id"]
-            goal_id, goal_step_id = goal["id"], step["id"]
-            motivation = f"推进目标：{goal['title']}；阶段依据：{step['criterion']}；上次进展：{step['note']}"
-        elif continuations:
-            source = "接续未完活动"
-            continuation = max(continuations, key=lambda item: item["updated_at"])
-            continuation_id, session = continuation["id"], continuation["session_id"]
-            title = f"继续{continuation['activity']}：{continuation['subject']}" if continuation["subject"] else f"继续{continuation['activity']}"
-            kind, location = continuation["kind"], continuation["location"] or state["location"]
-            motivation, minutes = continuation["next_action"], min(free, 30)
         else:
             source = "模型自主选择"
+            balance = self.activity_balance(now)
             goals = [g for g in engine.store.all("goal") if g["status"] == "active"]
             completed = sorted((p for p in engine.store.all("plan") if p["status"] == "completed"),
                                key=lambda p: engine.time(p["end"]), reverse=True)
@@ -327,7 +339,14 @@ class Living:
                 "根据人格、兴趣、精力和长期目标，在角色的生活空间中安排活动。"
                 "读书、工作、休闲和休息都可以。kind 从 study/work/leisure/rest/meal/social 中选择，出行由地点路线自动安排。"
                 "字段 title、kind、minutes（10到120）、location、motivation、goal_id（无关联填空字符串）。"
-                f"当前时间：{now.isoformat()}；可用分钟：{free}；"
+                f"当前时间：{now.isoformat(timespec='minutes')}；可用分钟：{free}；"
+                f"今日实际活动与最近节奏：{json.dumps(balance, ensure_ascii=False)}；"
+                "结合累计时长、连续次数、饭点和身体状态决定继续还是换活动；有具体进展或兴致时可以继续。"
+                "motivation 简短说明这次继续或切换的具体理由。"
+                f"此刻的习惯候选：{json.dumps(habit, ensure_ascii=False)}；目标下一步：{json.dumps(next_step, ensure_ascii=False)}；"
+                f"可接续的具体念头：{json.dumps(continuations[-12:], ensure_ascii=False)}。"
+                "选择接续时填写 continuation_id，并在活动里回应该念头；选择目标时填写 goal_id 和 goal_step_id。"
+                "习惯、目标、接续与新活动一起权衡；next_date 表示适合接续的日期，日期未到的念头留到之后。"
                 f"上次用餐结束：{last_meal}。过去两小时已读书 {reading_minutes} 分钟。到饭点可以安排做饭、用餐。"
                 f"人格：{json.dumps(personality, ensure_ascii=False)}；补充背景：{config.background}；"
                 f"兴趣：{config.interests}；状态：{json.dumps(state, ensure_ascii=False)}；"
@@ -346,11 +365,8 @@ class Living:
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
             def validate_activity(choice):
-                if reading_minutes >= 90 and (choice.book_id or self.reading_title(choice.title)):
-                    raise ValueError("这段时间已经读了很久，请选一项别的日常活动，book_id 填空字符串")
-
-            if reading_minutes >= 90:
-                prompt += "这次换一件事做，结合时间和角色的兴趣安排用餐、家务、运动或其他活动。"
+                if choice.continuation_id and not any(r["id"] == choice.continuation_id for r in continuations):
+                    raise ValueError("continuation_id 请选择本次可接续念头的 ID，新活动填空字符串")
             choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice, validate_activity)
             if choice.kind not in {"study", "work", "leisure", "rest", "meal", "social"}:
                 raise ValueError("自主规划返回了未允许的活动类型")
@@ -360,6 +376,10 @@ class Living:
             book_id = choice.book_id
             goal_id = choice.goal_id
             goal_step_id = choice.goal_step_id
+            if choice.continuation_id:
+                continuation = next(r for r in continuations if r["id"] == choice.continuation_id)
+                continuation_id, session = continuation["id"], continuation["session_id"]
+                source = "接续生活念头"
             if goal_id:
                 goal = engine.store.get("goal", goal_id)
                 session = goal["session_id"]
@@ -408,7 +428,7 @@ class Living:
         plan = self.spatial.schedule(value, session, now, autonomous=True)
         with engine.store.db:
             plan["decision"] = {"at": now.strftime("%m-%d %H:%M"), "source": source, "title": title,
-                                "place": plan["location"], "minutes": minutes, "reason": motivation}
+                                "place": plan["location"], "minutes": minutes, "reason": motivation, "balance": self.activity_balance(now)}
             engine.store.put("plan", plan)
         if continuation_id:
             with engine.store.db:
@@ -453,7 +473,7 @@ class Living:
             if row["session"] == session and row.get("sent_at") and activity:
                 age = now - self.engine.time(row["sent_at"])
                 if timedelta() <= age < timedelta(days=1):
-                    counts[activity] = counts.get(activity, 0) + 1
+                    counts[activity] = counts.get(activity, 0) + (1 if row.get("followup") == "answered" else 2)
         important = [e for e in eligible if e["importance"] >= 7]
         if important:
             event = max(important, key=lambda e: (e["importance"], self.engine.time(e["occurred_at"])))
@@ -461,7 +481,7 @@ class Living:
         event = max(eligible, key=lambda e: (-counts.get(self.share_activity(e), 0), e["importance"], self.engine.time(e["occurred_at"])), default=None)
         if event:
             activity = self.share_activity(event)
-            return event, f"优先选择近24小时向本聊天流较少分享的活动：{activity}，已实际发送{counts.get(activity, 0)}次；同次数按分数和时间选择"
+            return event, f"优先选择近24小时向本聊天流较少分享且有接话的活动：{activity}，重复权重{counts.get(activity, 0)}；尚待回应的话题留出更多间隔"
         return None, ""
 
     async def share(self, now: datetime):
@@ -487,6 +507,18 @@ class Living:
         if not sessions:
             record("跳过", "请在个人资料或额外接收列表中选择聊天流")
         for session in sessions:
+            presence = self.presence.targets(session, now)
+            if presence and all(p["status"] in {"准备睡觉", "忙碌", "外出"} and not p["active_here"] for p in presence):
+                streams = await self.ctx.chat.get_all_streams(platform="all_platforms")
+                stream = next((s for s in streams if s["stream_id"] == session), None)
+                if stream and not stream.get("group_id"):
+                    record("稍后再聊", "对方近期状态：" + "、".join(p["status"] for p in presence) + "；状态更新或到期后再选择时机", session)
+                    continue
+            replies = [engine.time(r["responded_at"]) for r in engine.store.all("share_receipt")
+                       if r["session"] == session and r.get("responded_at") and r.get("followup") == "answered"]
+            if replies and now < max(replies) + timedelta(minutes=20):
+                record("接着聊", "对方刚接上上次分享，先延续当前话题；20分钟后再选择新的主动话题", session)
+                continue
             sent = engine.store.find("sharing", session) or {"id": session, "experience_ids": []}
             times = self.receipts.sent_times(session, now.tzinfo)
             count = sum(at.date() == now.date() for at in times)
@@ -554,17 +586,22 @@ class Living:
                 "从角色自己的视角分享这次经历，给对方自由接话的空间。"
                 f"值得分享的原因={event['score_reason']}；经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
             )
+            intent += (f"\n接收人物的有效近况：{json.dumps(presence, ensure_ascii=False)}。"
+                       f"最近实际分享与回应：{json.dumps(self.receipts.context(session, now), ensure_ascii=False)}。"
+                       "已经接话的主题顺着回应继续；尚待回应的主题留出空间，有新进展时再自然提起。")
             record_id = notices[0][0] if notices else event["id"]
             topic = "经历分享"
             if notices:
                 topics = {"anniversary": "纪念日", "reminder": "共同安排提醒", "confirmation": "安排确认",
                           "thread": "话题跟进", "issue": "日程调整", "greeting": greeting["kind"] if greeting else "作息问候"}
                 topic = topics[record_id.split(":", 1)[0]]
+                score = f"本次处理{topic}"
                 reason = f"{len(notices)} 条待发提醒，优先处理{topic}（{record_id}）"
             else:
                 reason = f"{topic}：{screening}。{selection_reason}"
             row = {"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
                    "reason": reason, "score": score, "mode": config.mode,
+                   "topic": notices[0][1][:400] if notices else event["summary"][:400],
                    "experience_id": event["id"] if not notices else "",
                    "share_activity": self.share_activity(event) if not notices else ""}
             if greeting:

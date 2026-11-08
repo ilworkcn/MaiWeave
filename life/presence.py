@@ -33,7 +33,7 @@ class Presence:
             "准备睡觉": r"(?:我)?(?:先|准备|要)?(?:去睡了|睡觉了|去睡觉了)(?:啊|呀|啦|哦|哈)?",
             "忙碌": r"(?:我)?(?:先|要)?(?:去忙了|忙去了|去工作了|去开会了)",
             "外出": r"(?:我)?(?:先|要)?(?:出门了|出去了)",
-            "空闲": r"(?:我)?(?:忙完了|回来了|起床了|睡醒了)",
+            "空闲": r"(?:我)?(?:刚|已经)?(?:忙完了|回来了|起床了|睡醒了|下班了)",
         }
         status = next((status for status, pattern in statements.items()
                        if re.fullmatch(pattern, text.strip().rstrip("。！!～~"))), None)
@@ -63,7 +63,17 @@ class Presence:
             later = self.engine.time(activity["at"]) > self.engine.time(record["said_at"])
             result.append({"user_id": activity["user_id"], "person_id": record["id"],
                            "statement": record["status"], "said_at": record["said_at"], "source": "reported",
+                           "expires_at": record["expires_at"],
                            "activity": "此后仍在发言" if later else "刚刚作出陈述",
                            "observed_at": activity["at"], "activity_source": "observed",
                            "same_chat": record["session_id"] == session})
         return result
+
+    def targets(self, session, now):
+        """接收资料关联的人物近况，供主动交流选择时机。"""
+        people = {p.get("person_id") for p in self.store.all("profile") if p["session_id"] == session}
+        return [{"person_id": r["id"], "status": r["status"], "said_at": r["said_at"], "expires_at": r["expires_at"],
+                 "active_here": bool(r["activity"].get(session) and
+                    self.engine.time(r["activity"][session]["at"]) > self.engine.time(r["said_at"]) and
+                    now - self.engine.time(r["activity"][session]["at"]) < timedelta(minutes=30))}
+                for r in self.store.all("person_state") if r["id"] in people and self.engine.time(r["expires_at"]) > now]

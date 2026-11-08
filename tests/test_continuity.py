@@ -336,7 +336,13 @@ async def test_full_tick_goal_activity_result_and_webui(plugin, monkeypatch):
         plugin.store.put("state", state)
     goal = plugin.engine.create_goal(GoalInput(title="读完一篇短文", target_sessions=1), "a", now)
     plugin.config.life.autonomous = True
-    plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"steps":[{"title":"读短文","criterion":"完成阅读","sessions":1,"minutes":30}]}'}
+    async def generate_choice(prompt, **kwargs):
+        if "把角色长期目标拆为可执行阶段" in prompt:
+            return {"success": True, "response": '{"steps":[{"title":"读短文","criterion":"完成阅读","sessions":1,"minutes":30}]}'}
+        step = plugin.store.get("goal", goal["id"])["steps"][0]
+        return {"success": True, "response": json.dumps({"title":"读短文","kind":"leisure","minutes":30,
+            "location":"住处","motivation":"今天先推进短文阅读", "goal_id":goal["id"],"goal_step_id":step["id"]})}
+    plugin.ctx.llm.generate.side_effect = generate_choice
     plugin.config.diary.enabled = False
     await plugin.tick()
     await asyncio.gather(*plugin.background.values())
@@ -344,6 +350,7 @@ async def test_full_tick_goal_activity_result_and_webui(plugin, monkeypatch):
     assert plan["goal_step_id"]
     now += timedelta(minutes=31)
     plugin.config.life.autonomous = False
+    plugin.ctx.llm.generate.side_effect = None
     plugin.ctx.llm.generate.return_value = result(summary="读完了短文", next_action="下次比较另一篇")
     plugin.config.diary.enabled = False
     await plugin.tick()

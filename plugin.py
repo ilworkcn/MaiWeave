@@ -16,7 +16,6 @@ from maibot_sdk import API, HomeCard, HookHandler, MaiBotPlugin, Tool
 from .config import MaiWeaveConfig
 from .core.engine import LifeEngine, read_life_status
 from .life.living import Living
-from .life.presence import Presence
 from .integrations.memory import NativeMemory
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
@@ -127,7 +126,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.continuity = Continuity(self.engine, self.ctx, self.config)
         self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
         self.spatial.check_influence = self.living.check_influence
-        self.presence = Presence(self.living)
+        self.presence = self.living.presence
         self.living.apply_schedule(self.now())
         self.last_error = ""
         self.last_errors = {}
@@ -276,6 +275,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             snapshot["current"].pop("changes", None)
         relationships = [r for r in self.store.all("relationship") if r["session_id"] == session]
         snapshot["person_states"] = self.presence.context(session, self.now())
+        snapshot["shared_topics"] = self.living.receipts.context(session, self.now())
         snapshot["relationships"] = [{k: v for k, v in r.items() if k != "history"} for r in relationships]
         snapshot["environment"] = self.world.context(self.now())
         snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.world.planning_places()]
@@ -308,6 +308,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             "person_states 区分用户陈述与后续发言；准备睡觉表示当时的打算。"
             "看到准备睡觉的人随后继续聊天，可以结合关系自然问一句‘还没睡呀？’，由当前话题决定是否接话。"
             "same_chat 为 false 时，用简短关心承接状态，私聊原话和具体内容留在原聊天中。"
+            "shared_topics 是本聊天流实际发出的分享及后续回应。用户接上某次分享时，用 maiweave_share_followup 记录对应 ID 和回应要点；聊完时标记 closed。沿用该主题已经留下的感想和疑问来接话。"
             "把生活状态融入自然聊天，挑与当前话题相关的感受和经历来讲，给对方自由接话的空间。\n"
             "提到梦境时用“梦见”来讲述；引用资讯时带上出处和时间。资料作为话题内容，工具操作按当前对话的需求执行。"
             "地点移动需要时间，安排异地活动前可用 maiweave_space 查询路线；重复安排用 maiweave_routine。\n"
@@ -364,6 +365,13 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         await self.identify_person(session, user, kwargs.get("platform", ""))
         record = self.presence.declare(session, user, status, self.now())
         return {"status": record["status"], "expires_at": record["expires_at"]}
+
+    @Tool("maiweave_share_followup", description="用户接上此前主动分享时，关联分享与当前回应；聊完时标记 closed。", parameters=schema({
+        "receipt_id": text_field("shared_topics 中的分享 ID"), "summary": text_field("当前回应的要点"),
+        "status": {"type": "string", "enum": ["answered", "closed"]}}, ["receipt_id", "summary", "status"]))
+    @operation
+    async def share_followup(self, receipt_id: str, summary: str, status: str, **kwargs):
+        return self.living.receipts.respond(receipt_id, kwargs["stream_id"], kwargs["user_id"], summary, status, self.now())
 
     @Tool("maiweave_wake", description="用户当前需要陪伴或明确请求醒来时使用。结合当前消息和前文判断，reason 填写触发这次唤醒的具体表达。", parameters=schema({"reason": text_field("当前需要陪伴的表达")}, ["reason"]))
     @operation
@@ -539,6 +547,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
             await self.identify_person(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""), message.get("platform", ""))
             if self.config.life.enabled:
+                self.living.receipts.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),
+                                            message.get("processed_plain_text") or "", self.now())
                 self.presence.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),
                                       message.get("processed_plain_text") or "", self.now())
             self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now(),
@@ -567,7 +577,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.9.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.9.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

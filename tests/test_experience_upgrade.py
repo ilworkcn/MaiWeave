@@ -132,11 +132,14 @@ async def test_next_day_continuation_uses_saved_subject_and_progress(plugin):
         plugin.store.put("activity_memory", {"id": "book", "session_id": "a", "activity": "阅读", "subject": "海边的故事",
             "next_action": "从第三章继续", "details": {"进度": "第二章"}, "updated_at": (now - timedelta(days=1)).isoformat(),
             "experience_id": "old", "kind": "leisure", "location": "住处", "completed": False})
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": json.dumps({
+        "title": "继续海边的故事", "kind": "leisure", "minutes": 30, "location": "住处",
+        "motivation": "昨天留在第三章，今天想接着看", "continuation_id": "book"})}
     await plugin.living.choose_activity(now)
     plan = next(p for p in plugin.store.all("plan") if p["kind"] == "leisure")
     assert plan["continuation_id"] == "book"
     assert "海边的故事" in plan["title"] and "第三章" in plan["motivation"]
-    plugin.ctx.llm.generate.assert_not_awaited()
+    assert "从第三章继续" in plugin.ctx.llm.generate.call_args.args[0]
     plugin.engine.advance(now + timedelta(minutes=31))
     plugin.ctx.llm.generate.return_value = {"success": True, "response": json.dumps({
         "activity": "读小说", "subject": "模型的另一种称呼", "summary": "读完了第三章", "details": {"进度": "第三章"},
