@@ -1,6 +1,6 @@
 [project]
 name = "maiweave"
-version = "0.9.5"
+version = "0.9.6"
 description = "为 MaiBot 添加自主日程、睡眠作息、阅读日记与主动交流，让聊天改变生活，让经历延续到下一次对话"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]

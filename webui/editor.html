@@ -31,7 +31,8 @@ dialog{top:calc(var(--maibot-viewport-top,0px) + 88px);bottom:auto;margin:0 auto
 <label>书籍文件（必选，容量见上方）<input id="bookFile" type="file" accept=".txt,.md,.epub"></label>
 <label>书名（选填，默认取文件名或 EPUB 书名）<input id="bookTitle" class="maibot-input"></label>
 <label>作者（选填）<input id="bookAuthor" class="maibot-input"></label></div>
-<button id="uploadBook" class="maibot-button">上传到书架</button></details>
+<button id="uploadBook" class="maibot-button">上传到书架</button><button id="cancelUpload" class="maibot-button" hidden>取消上传</button></details>
+<section id="pendingUploads" hidden><h3>未完成上传</h3><p>中断的文件可在这里清理，清理后重新选择文件上传。</p><div id="uploadRows"></div></section>
 <p id="bookStatus" role="status" aria-live="polite"></p>
 <div class="fields"><label>筛选书籍<select id="bookFilter" class="maibot-select"><option value="all">全部书籍</option><option value="reading">正在书架上</option><option value="archived">已归档</option><option value="finished">已读完</option></select></label><label>搜索书名或作者<input id="bookSearch" class="maibot-input" placeholder="输入关键词"></label></div><div class="fields"><label>选择书籍<select id="bookChoice" class="maibot-select"></select></label><label>阅读时长<select id="bookMinutes" class="maibot-select"><option value="15">15分钟</option><option value="30" selected>30分钟</option><option value="45">45分钟</option><option value="60">60分钟</option></select></label>
 <label>阅读地点<select id="bookLocation" class="maibot-select"><option value="">当前地点</option></select></label><label>阅读开始时间（选填，留空先出行再阅读）<input id="bookStart" class="maibot-input" type="datetime-local"></label></div>
@@ -365,17 +366,33 @@ async function showBooks(prefer=''){
  if(list.some(b=>b.id===selected))$('bookChoice').value=selected;else if(list.some(b=>b.id===shelf.current_book))$('bookChoice').value=shelf.current_book;
  if($('notesScope').value==='selected'&&$('bookChoice').value!==selected){notePage=0;const data=await maibot.query('books',{book_id:$('bookChoice').value,page:0});shelf.notes=data.notes;shelf.notes_total=data.notes_total}
  if($('notesScope').value==='selected'&&!$('bookChoice').value){shelf.notes=[];shelf.notes_total=0}
- renderBook();
+ renderBook();renderUploads();
 }
+let uploadCancelled=false,activeUpload='';
+function renderUploads(){
+ $('pendingUploads').hidden=!shelf.uploads?.length;$('uploadRows').replaceChildren();
+ for(const row of shelf.uploads||[]){
+  const box=document.createElement('div'),label=document.createElement('span'),button=document.createElement('button');
+  box.className='actions';label.textContent=`${row.filename} · 已接收 ${(row.received_bytes/1048576).toFixed(2)} MB`;
+  button.className='maibot-button';button.textContent='清理未完成文件';button.disabled=row.id===activeUpload;
+  button.onclick=()=>run(()=>tracked(button,'清理上传',async()=>{await maibot.action('book_upload',{action:'abort',upload_id:row.id});await showBooks();return '临时文件已清理，可以重新上传'}));
+  box.append(label,button);$('uploadRows').append(box);
+ }
+}
+$('cancelUpload').onclick=()=>{uploadCancelled=true;$('cancelUpload').disabled=true;$('bookStatus').textContent='正在取消上传并清理临时文件…'};
 async function uploadBook(){
  const file=$('bookFile').files[0];if(!file)throw Error('请选择书籍文件');if(file.size>shelf.capacity.max_file_mb*1048576)throw Error(`请选择${shelf.capacity.max_file_mb}MB以内的书籍`);
  await tracked($('uploadBook'),'上传书籍',async show=>{
-  let uploadId='';
+  let uploadId='';uploadCancelled=false;$('cancelUpload').hidden=false;$('cancelUpload').disabled=false;
   try{
-   const row=await maibot.action('book_upload',{action:'begin',filename:file.name,size:file.size,title:$('bookTitle').value,author:$('bookAuthor').value});uploadId=row.id;
-   for(let offset=0;offset<file.size;offset+=24576){const bytes=new Uint8Array(await file.slice(offset,offset+24576).arrayBuffer());await maibot.action('book_upload',{action:'append',upload_id:row.id,content:btoa(String.fromCharCode(...bytes))});show(`上传中 ${Math.min(100,Math.round((offset+bytes.length)/file.size*100))}%`)}
-   show('正在解析章节与正文');const book=await maibot.action('book_upload',{action:'finish',upload_id:row.id});uploadId='';$('bookFilter').value='all';$('bookSearch').value='';await showBooks(book.id);$('bookStatus').textContent=`已导入《${book.title}》，共${book.chapter_count}章`;return $('bookStatus').textContent;
-  }catch(error){if(uploadId)await maibot.action('book_upload',{action:'abort',upload_id:uploadId});throw error}
+   const row=await maibot.action('book_upload',{action:'begin',filename:file.name,size:file.size,title:$('bookTitle').value,author:$('bookAuthor').value});uploadId=row.id;activeUpload=row.id;
+   for(let offset=0;offset<file.size;offset+=24576){await new Promise(resolve=>setTimeout(resolve,100));if(uploadCancelled)throw Error('上传已取消');const bytes=new Uint8Array(await file.slice(offset,offset+24576).arrayBuffer());await maibot.action('book_upload',{action:'append',upload_id:row.id,content:btoa(String.fromCharCode(...bytes))});show(`上传中 ${Math.min(100,Math.round((offset+bytes.length)/file.size*100))}%`)}
+   if(uploadCancelled)throw Error('上传已取消');$('cancelUpload').disabled=true;show('正在解析章节与正文');const book=await maibot.action('book_upload',{action:'finish',upload_id:row.id});uploadId='';$('bookFilter').value='all';$('bookSearch').value='';await showBooks(book.id);$('bookStatus').textContent=`已导入《${book.title}》，共${book.chapter_count}章`;return $('bookStatus').textContent;
+  }catch(error){
+   let cleanup='';
+   if(uploadId){try{await maibot.action('book_upload',{action:'abort',upload_id:uploadId});cleanup='临时文件已清理，可重新上传。';shelf.uploads=(shelf.uploads||[]).filter(row=>row.id!==uploadId)}catch(cleanupError){cleanup=`临时文件清理未完成：${cleanupError.message||cleanupError}。重新打开书架，在“未完成上传”中清理。`}}
+   $('bookStatus').textContent=`${error.message||error}${cleanup?'；'+cleanup:''}`;throw Error($('bookStatus').textContent);
+  }finally{activeUpload='';$('cancelUpload').hidden=true;renderUploads()}
  });
 }
 $('bookChoice').onchange=()=>run(async()=>{notePage=0;$('deleteBookConfirm').hidden=true;await showBooks()});

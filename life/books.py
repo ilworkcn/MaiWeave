@@ -117,6 +117,11 @@ class Books:
         if info["free_bytes"] < added + 2 * 1024 * 1024:
             raise ValueError("磁盘剩余空间不足，请释放空间后上传")
 
+    def uploads(self):
+        """列出尚未完成导入的文件，供页面清理。"""
+        return [{**row, "received_bytes": (self.directory / (row["id"] + row["suffix"])).stat().st_size}
+                for row in self.engine.store.all("book_upload")]
+
     def abort_upload(self, upload_id):
         row = self.engine.store.find("book_upload", upload_id)
         if row:
@@ -135,7 +140,7 @@ class Books:
         if size > self.config.books.max_file_mb * 1024 * 1024:
             raise ValueError("文件超过单本容量，请拆分后上传")
         self.check_space(size)
-        row = {"id": uuid4().hex, "filename": Path(filename).name, "suffix": suffix, "title": title, "author": author}
+        row = {"id": uuid4().hex, "filename": Path(filename).name, "suffix": suffix, "title": title, "author": author, "size": size}
         (self.directory / (row["id"] + suffix)).write_bytes(b"")
         with self.engine.store.db:
             self.engine.store.put("book_upload", row)

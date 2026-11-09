@@ -112,3 +112,27 @@ async def test_full_browser_upload_chunks_fit_declared_parameters(plugin):
         await plugin.ui_book_upload('append',upload_id=row['id'],content=content)
     book=await plugin.ui_book_upload('finish',upload_id=row['id'])
     assert book['characters']==len(raw.decode().strip())
+
+
+async def test_pending_upload_can_be_listed_cleaned_and_uploaded_again(plugin):
+    row = await plugin.ui_book_upload('begin', filename='中断书籍.txt', size=6000000)
+    await plugin.ui_book_upload('append', upload_id=row['id'], content=base64.b64encode(b'a' * 24576).decode())
+    listed = (await plugin.ui_books())['uploads']
+    assert listed[0]['id'] == row['id']
+    assert listed[0]['received_bytes'] == 24576
+    await plugin.ui_book_upload('abort', upload_id=row['id'])
+    assert (await plugin.ui_books())['uploads'] == []
+    assert not list(plugin.books.directory.glob(row['id'] + '.*'))
+    book = await upload(plugin, '重新上传的正文', '中断书籍.txt')
+    assert book['characters'] == len('重新上传的正文')
+
+
+async def test_parse_failure_releases_upload_slot(plugin):
+    plugin.config.books.max_books = 1
+    row = await plugin.ui_book_upload('begin', filename='空书.txt')
+    await plugin.ui_book_upload('append', upload_id=row['id'], content=base64.b64encode(b' ' * 6000000).decode())
+    with pytest.raises(ValueError, match='没有可读取的正文'):
+        await plugin.ui_book_upload('finish', upload_id=row['id'])
+    assert (await plugin.ui_books())['uploads'] == []
+    assert not list(plugin.books.directory.iterdir())
+    assert (await upload(plugin))['status'] == '未读'

@@ -73,7 +73,7 @@ class WebUI:
     async def ui_books(self, book_id: str = "", page: int = 0) -> dict:
         current = self.store.find("runtime", "current_book")
         notes = self.books.notes(book_id, page)
-        return {"current_book": current["book_id"] if current else "", "books": self.store.all("book"),
+        return {"current_book": current["book_id"] if current else "", "books": self.store.all("book"), "uploads": self.books.uploads(),
                 "places": self.world.planning_places(), "notes": notes["items"], "notes_total": notes["total"], "page": notes["page"], "capacity": self.books.capacity(),
                 "sessions": [{**n, "status": "日程已取消" if (self.store.find("plan", n["id"]) or {"status": n.get("plan_status", "completed")})["status"] == "cancelled" else n["status"]} for n in self.store.all("book_note")[-10:]], "now": self.now().isoformat()}
 
