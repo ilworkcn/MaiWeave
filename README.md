@@ -1,8 +1,8 @@
 <div align="center">
 
-![MaiWeave：聊天之外，也有自己的生活](assets/banner.png)
+![MaiWeave：聊天之外，也有自己的生活](https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/banner.png)
 
-<img src="assets/icon.png" width="128" alt="MaiWeave 插件图标">
+<img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/icon.png" width="128" alt="MaiWeave 插件图标">
 
 # MaiWeave · 麦织｜角色生活引擎
 
@@ -13,14 +13,14 @@
 [![Release](https://img.shields.io/github/v/release/ilworkcn/MaiWeave?label=Release&color=7ba989)](https://github.com/ilworkcn/MaiWeave/releases)
 [![MaiBot](https://img.shields.io/badge/MaiBot-1.3.19–1.4.x-7ba989)](https://docs.maibot.chat/)
 [![SDK](https://img.shields.io/badge/SDK-2.21.x-79a7b8)](https://github.com/Mai-with-u/maibot-plugin-sdk)
-[![Python](https://img.shields.io/badge/Python-3.11%2B-79a7b8?logo=python&logoColor=white)](pyproject.toml)
-[![License](https://img.shields.io/badge/License-GPL--3.0-orange)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-79a7b8?logo=python&logoColor=white)](https://github.com/ilworkcn/MaiWeave/blob/main/pyproject.toml)
+[![License](https://img.shields.io/badge/License-GPL--3.0-orange)](https://github.com/ilworkcn/MaiWeave/blob/main/LICENSE)
 
 [![Stars](https://img.shields.io/github/stars/ilworkcn/MaiWeave?style=flat&label=Stars&color=e8b44c)](https://github.com/ilworkcn/MaiWeave/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/ilworkcn/MaiWeave?label=Last%20Commit&color=7ba989)](https://github.com/ilworkcn/MaiWeave/commits/main/)
 [![Issues](https://img.shields.io/github/issues/ilworkcn/MaiWeave?label=Issues&color=c58b75)](https://github.com/ilworkcn/MaiWeave/issues)
 
-[下载安装](https://github.com/ilworkcn/MaiWeave/releases/latest) · [使用手册](docs/使用手册.md) · [配置指南](docs/配置指南.md) · [状态 API](docs/只读状态API.md) · [更新日志](CHANGELOG.md)
+[下载安装](https://github.com/ilworkcn/MaiWeave/releases/latest) · [使用手册](https://github.com/ilworkcn/MaiWeave/blob/main/docs/使用手册.md) · [配置指南](https://github.com/ilworkcn/MaiWeave/blob/main/docs/配置指南.md) · [状态 API](https://github.com/ilworkcn/MaiWeave/blob/main/docs/只读状态API.md) · [更新日志](https://github.com/ilworkcn/MaiWeave/blob/main/CHANGELOG.md)
 
 </div>
 
@@ -28,7 +28,7 @@ MaiWeave 为 MaiBot 添加自主日程、睡眠作息、情绪、阅读和日记
 
 **你说的话能改变日程，日程里的经历也会回到聊天。** 约它明天读书、临时改个时间，或取消一次出门，都能直接在对话里完成。安排活动时会参考接入的天气和城市地点；阅读时会读取你上传的正文，保存进度和感想，下次接着读、接着聊。
 
-群聊和私聊可分别调整生活上下文：滑块选择精简、均衡或丰富，再设置内容分类与字符上限。默认群聊精简、私聊均衡，更多生活细节可通过工具查询。[查看上下文设置 →](docs/配置指南.md#聊天上下文)
+群聊和私聊可分别调整生活上下文：滑块选择精简、均衡或丰富，再设置内容分类与字符上限。默认群聊精简、私聊均衡，更多生活细节可通过工具查询。[查看上下文设置 →](https://github.com/ilworkcn/MaiWeave/blob/main/docs/配置指南.md#聊天上下文)
 
 每天的活动时长、最近做过的事和未完的念头都会参与下一次规划。你说刚下班或准备睡觉，麦麦会更新近况；主动分享后，也会记住你们接着聊了什么。点击首页时间线，可以查看一项安排的缘由、变化和结果。
 
@@ -65,18 +65,25 @@ MaiWeave 为 MaiBot 添加自主日程、睡眠作息、情绪、阅读和日记
 2. 开启自主安排，让麦麦在读书时自行选书；也可以选中一本，点击 **安排阅读日程**。
 3. 读完后翻看笔记，或直接在聊天里点名这本书，问问它的感想。
 
-每本书分别保存进度与笔记。续读会参考该书之前的感想和疑问，聊天中也能用上对应笔记。书架支持归档、恢复和容量设置。[查看阅读操作说明 →](docs/使用手册.md#书架与阅读)
+每本书分别保存进度与笔记。续读会参考该书之前的感想和疑问，聊天中也能用上对应笔记。书架支持归档、恢复和容量设置。[查看阅读操作说明 →](https://github.com/ilworkcn/MaiWeave/blob/main/docs/使用手册.md#书架与阅读)
 
 ### 📷 实机演示：主动分享与续聊
 
 <p align="center">
-  <a href="assets/reading-share.png"><img src="assets/reading-share.png" width="560" alt="麦麦读过书后主动分享对人物的感想"></a><br>
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/reading-share.png"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/reading-share.png" width="560" alt="麦麦读过书后主动分享对人物的感想"></a><br>
   <strong>麦麦主动来聊书</strong> · 读到达也哄妹妹的那段，麦麦发来了三条消息。
 </p>
 
 <p align="center">
-  <a href="assets/reading-followup.png"><img src="assets/reading-followup.png" width="560" alt="追问上次的疑问，麦麦结合续读内容继续讨论"></a><br>
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/reading-followup.png"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/reading-followup.png" width="560" alt="追问上次的疑问，麦麦结合续读内容继续讨论"></a><br>
   <strong>接着上次的话题聊</strong> · 读者问上次的问题有答案了吗，麦麦说：“我觉得只答了一半。”
+</p>
+
+### 🌙 实机演示：睡前来道声晚安
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/goodnight-chat.png"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/goodnight-chat.png" width="560" alt="麦麦睡前道晚安，记得对方昨晚加班，叮嘱早点休息"></a><br>
+  <strong>睡前也惦记着你</strong> · 麦麦准备睡觉了，还记得你昨晚加班辛苦，过来抱抱、道声晚安。
 </p>
 
 ## 🏡 在 WebUI 查看和管理生活
@@ -86,14 +93,10 @@ MaiWeave 为 MaiBot 添加自主日程、睡眠作息、情绪、阅读和日记
 ### 📷 实机演示：麦麦的一天
 
 <p align="center">
-  <a href="assets/life-overview.png"><img src="assets/life-overview.png" width="1000" alt="新版此刻生活实机界面：麦麦正在厨房做晚饭，展示活动进度、精力心情和全天日程时间线"></a><br>
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-overview.png"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-overview.png" width="1000" alt="新版此刻生活实机界面：麦麦正在厨房做晚饭，展示活动进度、精力心情和全天日程时间线"></a><br>
   <sub>正在做什么、为什么这样安排、今天过得怎样，打开「此刻生活」就能看到。</sub>
 </p>
 
-<p align="center">
-  <a href="assets/home-life-card.png"><img src="assets/home-life-card.png" width="480" alt="MaiWeave 首页生活卡片，展示带时间的活动快照、地点、精力与心情"></a><br>
-  <sub>首页卡片保留加载时的生活快照；进入「此刻生活」查看持续更新的状态。</sub>
-</p>
 
 <details>
 <summary>展开查看页面与功能</summary>
@@ -157,13 +160,13 @@ uv pip install --python .venv -r plugins/MaiWeave/requirements.txt
 
 ## 📚 使用与致谢
 
-- [使用手册](docs/使用手册.md)：日程、阅读、生日提醒等操作。
-- [配置指南](docs/配置指南.md)：配置项、默认值与连接设置。
-- [架构与接口](docs/架构与接口.md)：代码目录和 MaiBot 接口。
-- [只读状态 API](docs/只读状态API.md)：其他插件查询生活状态的调用示例。
+- [使用手册](https://github.com/ilworkcn/MaiWeave/blob/main/docs/使用手册.md)：日程、阅读、生日提醒等操作。
+- [配置指南](https://github.com/ilworkcn/MaiWeave/blob/main/docs/配置指南.md)：配置项、默认值与连接设置。
+- [架构与接口](https://github.com/ilworkcn/MaiWeave/blob/main/docs/架构与接口.md)：代码目录和 MaiBot 接口。
+- [只读状态 API](https://github.com/ilworkcn/MaiWeave/blob/main/docs/只读状态API.md)：其他插件查询生活状态的调用示例。
 
 人物画像和通用记忆沿用 MaiBot 的 A_Memorix。生活记录、书籍文件和解析正文保存在插件数据目录；备份时保留整个数据目录与配置。
 
 MaiWeave 的早期设计参考了 [Mai_life](https://github.com/octmicy/Mai_life)。感谢 [MaiBot 插件 SDK](https://github.com/Mai-with-u/maibot-plugin-sdk) 和 [lunar-python](https://github.com/6tail/lunar-python)。
 
-项目采用 [GPL-3.0](LICENSE) 许可证。
+项目采用 [GPL-3.0](https://github.com/ilworkcn/MaiWeave/blob/main/LICENSE) 许可证。
