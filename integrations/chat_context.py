@@ -86,7 +86,9 @@ class ChatContext:
         people_topic = any(w in text for w in ("生日", "纪念日", "称呼", "资料", "关系"))
         continuation_topic = any(w in text for w in ("继续", "上次", "昨天", "目标", "进度", "后来"))
         experience_topic = any(w in text for w in ("经历", "做了什么", "干了什么", "最近", "今天", "感想"))
-        world_topic = any(w in text for w in ("天气", "下雨", "公园", "图书馆", "地点", "新闻", "出门"))
+        world_topic = any(w in text for w in ("天气", "下雨", "公园", "图书馆", "地点", "新闻", "出门", "见闻", "上网", "查资料", "网页"))
+        discoveries = p.world.discoveries(session, text) if cfg.environment else []
+        world_topic = world_topic or any(r["relevant"] for r in discoveries)
         # 确认中的修改始终带上 ID，供当前对话继续确认流程。
         add("pending_changes", [{k: r[k] for k in ("id", "action", "conflicts")} for r in rows("review")
                                 if r["session_id"] == session and r["status"] == "待确认"], True)
@@ -122,8 +124,9 @@ class ChatContext:
             add("experiences", [e for e in engine.experiences(session, limit=12) if "书名" not in e["details"]][:count], experience_topic)
         if cfg.environment and (world_topic or mode != "精简"):
             environment = p.world.context(now)
+            environment["discoveries"] = discoveries
             add("environment", {k: v for k, v in environment.items() if v and
-                ((k == "weather" and p.config.world.weather_enabled) or (k == "news" and p.config.world.news_enabled) or (k == "readings" and p.config.world.search_enabled))}, world_topic)
+                ((k == "weather" and p.config.world.weather_enabled) or (k == "news" and p.config.world.news_enabled) or (k in {"readings", "discoveries"} and p.config.world.search_enabled))}, world_topic)
             if p.config.world.places_enabled and p.config.world.search_enabled:
                 places = sorted(p.world.planning_places(), key=lambda row: (row["name"] not in text, not bool(row.get("source_url"))))
                 add("places", [{"name": r["name"], "outdoor": r["outdoor"]} for r in places], world_topic)

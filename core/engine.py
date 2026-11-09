@@ -113,6 +113,8 @@ class LifeEngine:
         if start < now - timedelta(minutes=1):
             raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
         self._check_interval(start, end)
+        if value.research_query and (value.book_id or not value.simulation or value.participants or value.kind not in {"study", "leisure"}):
+            raise ValueError("联网了解使用角色独自进行的学习或休闲日程")
         if value.book_id:
             book = self.store.get("book", value.book_id)
             if book.get("archived"):

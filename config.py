@@ -19,7 +19,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.9.5", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.10.0", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -75,6 +75,10 @@ class WorldConfig(PluginConfigBase):
     city: str = setting("天气城市（使用天气时必填）", default="大庆", description="角色生活所在城市，天气和地点搜索共用此项。", json_schema_extra={"placeholder": "例如：大庆"})
     country_code: str = setting("国家或地区代码（选填）", default="CN", description="有同名城市时可以补充：中国填 CN，日本填 JP；选填。", json_schema_extra={"placeholder": "例如：CN"})
     places_enabled: bool = setting("按城市自动搜索生活地点", default=False, description="自主规划按活动需求搜索当地场所，如餐厅、咖啡馆或商场；已有合适地点可直接复用；新搜索需要开启 MaiBot 联网搜索总开关。")
+    explore_enabled: bool = setting("自主获取见闻", default=False, description="在日程中安排上网了解，结合兴趣、订阅资讯与未完念头选择话题。")
+    explore_topics: list[str] = setting("关注主题（选填）", default_factory=list, description="例如本地展览、烹饪、天文；留空时参考角色兴趣与生活接续。")
+    explore_daily_limit: int = setting("每日自主检索活动上限", default=3, ge=1, le=20, description="每次活动搜索一个主题，最多阅读两篇网页；手动检索单独执行。")
+    explore_interval_minutes: int = setting("自主检索最短间隔（分钟）", default=180, ge=10, description="按检索活动开始时间计算，模型在可用日程中选择时机。")
     news_enabled: bool = setting("启用订阅资讯", default=False, description="读取已配置的 RSS 或 Atom 信息源")
     feed_urls: list[str] = setting("资讯订阅地址（启用资讯后必填）", default_factory=list, description="每项填写一个真实 RSS 或 Atom 地址，例如 https://站点域名/feed.xml；未启用可留空。")
     weather_minutes: int = setting("天气更新间隔（分钟）", default=60, ge=15, description="实时天气刷新频率")
@@ -164,6 +168,8 @@ class RetentionConfig(PluginConfigBase):
     plan_count: int = setting("已结束日程条数上限", default=2000, ge=0, description="优先清理最早结束的日程；0 表示按天数管理。")
     experience_days: int = setting("普通经历保留天数", default=180, ge=0, description="7分及以上、长期保留和仍用于生活接续的经历继续保存；0 表示按数量管理。")
     experience_count: int = setting("普通经历条数上限", default=3000, ge=0, description="优先清理最早发生的普通经历；0 表示按天数管理。")
+    world_days: int = setting("网络资料保留天数", default=30, ge=1, description="资讯、检索和网页缓存的保留时间；活动感想与来源随经历继续保存。")
+    world_count: int = setting("每类网络资料条数上限", default=300, ge=20, description="资讯、检索与网页分别计数，优先清理最早获取的资料。")
     history_count: int = setting("每条经历保留修订数", default=10, ge=0, description="保留最近的修订历史；0 表示保留全部版本。")
 
 

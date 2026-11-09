@@ -72,6 +72,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("wake", "life", "睡眠唤醒", "设置能唤醒角色的词语和醒来后留给聊天的时间。", ["wake_enabled", "wake_minutes", "wake_keywords"]),
             ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
+            ("explore", "world", "自主见闻", "安排时间了解感兴趣的事，再把发现带回生活。", ["explore_enabled", "explore_topics", "explore_daily_limit", "explore_interval_minutes"]),
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
             ("search", "world", "联网搜索", "复用 MaiBot 已配置的搜索服务。", ["search_enabled", "places_enabled"]),
             ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "mode", "natural_greetings", "session_ids", "share_threshold"]),
@@ -97,7 +98,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         schema["layout"] = {"type": "tabs", "tabs": [
             {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
             {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary", "books"], "order": 1},
-            {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
+            {"id": "world", "title": "天气与见闻", "sections": ["weather", "explore", "news", "search"], "order": 2},
             {"id": "context", "title": "聊天上下文", "sections": ["context"], "order": 3},
             {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "retention", "plugin"], "order": 4},
         ]}
@@ -172,7 +173,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             except Exception as error:
                 self.last_errors[name] = str(error)
                 self.ctx.logger.exception("%s失败", name)
-        for name, job in [("外部世界", self.world.refresh),
+        for name, job in [("外部世界", self.world.refresh), ("自主见闻", self.world.process),
                           ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
                           ("主动交流", self.living.share), ("生活日记", self.diary.process), ("书籍阅读", self.books.process)]:
@@ -533,7 +534,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.9.6\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.10.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

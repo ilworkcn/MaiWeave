@@ -28,6 +28,15 @@ class Store:
                                (*("$." + key for key in omit), category)).fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def page(self, category: str, page: int = 1, size: int = 20, *, omit: tuple[str, ...] = (), time_field: str = "retrieved_at") -> dict:
+        total = self.db.execute("SELECT count(*) FROM records WHERE category=?", (category,)).fetchone()[0]
+        pages = max(1, (total + size - 1) // size)
+        page = min(pages, max(1, page))
+        expression = "json_remove(data," + ",".join("?" for _ in omit) + ")" if omit else "data"
+        rows = self.db.execute(f"SELECT {expression} FROM records WHERE category=? ORDER BY json_extract(data,?) DESC, rowid DESC LIMIT ? OFFSET ?",
+                               (*("$." + key for key in omit), category, "$." + time_field, size, (page - 1) * size)).fetchall()
+        return {"items": [json.loads(row[0]) for row in rows], "page": page, "pages": pages, "total": total}
+
     def put(self, category: str, record: dict) -> dict:
         self.db.execute("INSERT INTO records(category,id,data) VALUES(?,?,?) ON CONFLICT(category,id) DO UPDATE SET data=excluded.data", (category, record["id"], json.dumps(record, ensure_ascii=False)))
         return record

@@ -282,6 +282,8 @@ class Living:
         with engine.store.db:
             engine.store.put("runtime", {"id": "planning", "at": now.isoformat(), "signature": signature})
         session = ""
+        exploration = await self.world.exploration_status(now) if self.config.world.explore_enabled else {"ready": False}
+        research_query, research_freshness = "", "current"
         search_ready = self.config.world.places_enabled and (await self.world.search_status())["ready"]
         goal_id = ""
         goal_step_id = ""
@@ -355,6 +357,11 @@ class Living:
                 "location 填已有地点名称；想去的新场所用 place_query 填简短稳定的地点搜索词，location 可留空。"
                 "同类需求复用相同搜索词，例如咖啡馆、东北菜餐厅、安静的咖啡馆；保留菜系、环境等具体要求。"
                 "根据本次活动决定是否需要新地点，例如喝咖啡找咖啡馆、吃饭找餐厅、购物找商场，类别自由选择。"
+                f"自主见闻条件：{json.dumps(exploration, ensure_ascii=False)}。"
+                "ready为true时，可以安排10至30分钟上网了解，kind选study或leisure，research_query填写一个具体检索问题。"
+                "结合兴趣、订阅资料、最近经历或未完念头选择话题，并在motivation说明缘由。"
+                "新闻、天气、本地活动的research_freshness填current；菜谱、背景知识填knowledge。"
+                "查询近期信息时在问题中写明日期或城市；其他活动research_query留空。书架阅读与联网了解分别安排。"
                 f"书架：{json.dumps(books, ensure_ascii=False)}；阅读书架中的书时填写book_id，从已读位置继续。"
                 f"城市地点联网可用：{search_ready}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
                 "阅读可以在住处、图书馆、安静的咖啡馆或公园进行。结合有效天气、时段、精力、出行耗时和近期地点选择；"
@@ -365,6 +372,8 @@ class Living:
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
             def validate_activity(choice):
+                if choice.research_query and (not exploration["ready"] or choice.book_id or choice.kind not in {"study", "leisure"}):
+                    raise ValueError("请按自主见闻条件安排独立的学习或休闲活动，其他活动research_query留空")
                 if choice.continuation_id and not any(r["id"] == choice.continuation_id for r in continuations):
                     raise ValueError("continuation_id 请选择本次可接续念头的 ID，新活动填空字符串")
             choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice, validate_activity)
@@ -372,6 +381,7 @@ class Living:
                 raise ValueError("自主规划返回了未允许的活动类型")
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation
             minutes = min(choice.minutes, free)
+            research_query, research_freshness = choice.research_query, choice.research_freshness
             place_query = choice.place_query
             book_id = choice.book_id
             goal_id = choice.goal_id
@@ -410,13 +420,14 @@ class Living:
             minutes = min(minutes, int((bedtime - now).total_seconds() / 60) - travel_minutes - return_minutes)
             if minutes < 1 and location != home:
                 title, kind, location, motivation = "回家准备休息", "rest", home, "收好手边的事，准备睡觉"
+                research_query = ""
                 source, book_id, goal_id, goal_step_id, continuation_id = "睡前收尾", "", "", "", ""
                 travel_minutes = self.spatial.route(state["location"], home)["minutes"]
                 minutes = min(free - travel_minutes, max(1, int((bedtime - now).total_seconds() / 60) - travel_minutes))
         if minutes < 1:
             return "预留出行时间后，剩余空档不足"
         start = now + timedelta(minutes=travel_minutes)
-        if not book_id and books and self.reading_title(title):
+        if not research_query and not book_id and books and self.reading_title(title):
             current_book = engine.store.find("runtime", "current_book")
             book_id = next((b["id"] for b in books if current_book and b["id"] == current_book["book_id"]), books[0]["id"])
         if book_id:
@@ -424,7 +435,7 @@ class Living:
             title = f"阅读《{book['title']}》"
         value = PlanInput(title=title, book_id=book_id, start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
                           kind=kind, location=location, motivation=motivation, goal_id=goal_id, goal_step_id=goal_step_id,
-                          continuation_id=continuation_id)
+                          continuation_id=continuation_id, research_query=research_query, research_freshness=research_freshness)
         plan = self.spatial.schedule(value, session, now, autonomous=True)
         with engine.store.db:
             plan["decision"] = {"at": now.strftime("%m-%d %H:%M"), "source": source, "title": title,
@@ -448,7 +459,7 @@ class Living:
             return False
         if plan.get("book_id"):
             return True
-        return (self.config.continuity.outcomes_enabled and event["revision"] == 1
+        return ((self.config.continuity.outcomes_enabled or bool(plan.get("research_query"))) and event["revision"] == 1
                 and not plan["participants"] and plan["kind"] not in {"travel", "sleep", "diary"}
                 and plan["status"] == "completed")
 

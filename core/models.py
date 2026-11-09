@@ -30,6 +30,8 @@ class PlanInput(BaseModel):
     continuation_id: str = ""
     diary_day: str = ""
     book_id: str = ""
+    research_query: str = Field(default="", max_length=200)
+    research_freshness: Literal["current", "knowledge"] = "current"
     flexible: bool = False
 
 
@@ -68,6 +70,8 @@ class ActivityChoice(BaseModel):
     goal_step_id: str = ""
     place_query: str = ""
     book_id: str = ""
+    research_query: str = Field(default="", max_length=200)
+    research_freshness: Literal["current", "knowledge"] = "current"
 
 
 class LifeState(BaseModel):

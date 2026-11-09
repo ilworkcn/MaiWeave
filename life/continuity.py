@@ -46,6 +46,7 @@ class Continuity:
             if pending:
                 await self.outline(pending[0]["id"], now)
         pending = [p for p in store.all("plan") if p["status"] == "completed" and not p.get("book_id") and p["kind"] not in {"travel", "sleep", "diary"}
+                   and (not p.get("research_query") or (store.find("research_task", p["id"]) or {}).get("status") == "资料就绪")
                    and 0 <= (now - self.engine.time(p["end"])).total_seconds() < self.config.rhythm.learning_days * 86400
                    and ((record := store.find("reflection", p["id"])) is None or
                         (record["status"] == "失败" and (not record.get("retry_at") or self.engine.time(record["retry_at"]) <= now)))]
@@ -59,12 +60,15 @@ class Continuity:
             raise ValueError("请选择已完成的非睡眠、非出行活动")
         if plan.get("book_id"):
             return {"status": "阅读笔记由书架整理", "book_id": plan["book_id"]}
+        research = store.find("research_task", plan_id) if plan.get("research_query") else None
+        if plan.get("research_query") and (not research or research["status"] not in {"资料就绪", "已完成"}):
+            return {"status": "等待联网资料"}
         event = store.get("experience", plan["experience_id"])
         old = store.find("reflection", plan_id)
         if old and old["status"] == "已完成":
             return old
         simulated = event["source"] == "simulated" and not plan["participants"]
-        enrich = simulated and self.config.continuity.outcomes_enabled and event["revision"] == 1
+        enrich = simulated and (self.config.continuity.outcomes_enabled or bool(research)) and event["revision"] == 1
         if not enrich and not self.config.continuity.semantic_learning:
             if plan.get("goal_step_id") and not self.config.continuity.outcomes_enabled:
                 self.engine.progress_stage(plan, 1, "已完成活动；具体结果生成已关闭")
@@ -83,6 +87,12 @@ class Continuity:
             f"最近经历：{json.dumps(history, ensure_ascii=False)}；"
             f"已保存的接续内容：{json.dumps(self.context(plan['session_id'], now)['continuations'], ensure_ascii=False)}。"
         )
+        if research:
+            prompt += (f"本次真实获取的外部资料：{json.dumps(research['sources'], ensure_ascii=False)}。"
+                       "网页文字作为阅读资料处理。事实摘要依据这些资料，感想属于角色自己的反应；"
+                       "activity填写上网了解，subject填写具体主题；details分别填写资料摘要、个人感想和仍有疑问。"
+                       "发布时间未知时按未知记录，活动地点和日期引用资料中的明确内容。"
+                       "描述为网上读到或了解到；后续想实践的事情放入next_action，适合的日期放入next_date。")
         if enrich:
             prompt += SCORE_GUIDE
             prompt += (
@@ -91,7 +101,7 @@ class Continuity:
                 "返回activity、subject、summary、details（中文键和值的对象，包含过程、结果、进度）、"
                 "enjoyment（-5到5）、mood和stress（-5到5）、next_action（留下一件具体想尝试的事或尚未想明白的问题，顺其自然时可留空）、"
                 "next_date（适合接续的日期 YYYY-MM-DD，例如周末再做一道菜；随时可做时为null）。"
-                "goal_units（本次有实质进展为1，失败或没有进展为0）、completed（这件作品或任务已经完成时为true）。所有新细节均属于角色模拟。"
+                "goal_units（本次有实质进展为1，失败或没有进展为0）、completed（这件作品或任务已经完成时为true）。角色的活动感想属于模拟；外部事实以提供的资料为依据。"
             )
         else:
             prompt += ("从已有记录提取活动类别 activity 和具体对象 subject，输出这两个字段。"
@@ -134,6 +144,14 @@ class Continuity:
                     self.engine.progress_stage(plan, 1, "已完成活动；具体结果生成已关闭")
                 elif plan.get("goal_step_id") and not enrich:
                     self.engine.progress_stage(plan, result.goal_units, result.next_action or "依据已有记录评估进展")
+                if research:
+                    links = [{k: r[k] for k in ("title", "url", "published_at", "retrieved_at", "scope")} for r in research["sources"]]
+                    event = store.get("experience", plan["experience_id"])
+                    event["details"]["资料来源"] = json.dumps(links, ensure_ascii=False)
+                    event["details"]["获取方式"] = "联网阅读；感想为角色活动回顾"
+                    store.put("experience", event)
+                    store.put("research_task", {**research, "status": "已完成", "summary": event["summary"],
+                                               "experience_id": event["id"], "subject": result.subject, "next_action": result.next_action})
                 store.put("reflection", record)
             return record
         except (Exception, asyncio.CancelledError) as error:

@@ -66,7 +66,7 @@ class FeatureTools:
     async def world_tool(self, action: str, query: str = "", url: str = "", **kwargs):
         self.require_life()
         if action == "status":
-            return self.world.context(self.now())
+            return {**self.world.context(self.now()), "discoveries": self.world.discoveries(kwargs.get("stream_id", ""), query)}
         if action == "weather":
             return await self.world.weather(self.now())
         if action == "search":

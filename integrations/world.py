@@ -10,6 +10,7 @@ import os
 import time
 import tomllib
 from pathlib import Path
+from datetime import timedelta
 from urllib.error import HTTPError, URLError
 import re
 from html import unescape
@@ -78,6 +79,11 @@ class CityPlaces(BaseModel):
 class World:
     def __init__(self, engine, context, config):
         self.engine, self.ctx, self.config = engine, context, config
+        with engine.store.db:
+            for task in engine.store.all("research_task"):
+                if task["status"] in {"检索中", "阅读网页"}:
+                    task.update(status="失败", error="上次检索随插件停止中断", retry_at="")
+                    engine.store.put("research_task", task)
         self.host_config_path = Path.cwd() / "config" / "model_config.toml"
 
     async def search_status(self):
@@ -305,15 +311,25 @@ class World:
                 store.put("world_status", status)
         return collected
 
-    async def search(self, query: str, now):
+    async def search(self, query: str, now, freshness: str = "current"):
+        query = " ".join(query.split())
+        identity = hashlib.sha256(query.casefold().encode()).hexdigest()[:20]
+        cached = self.engine.store.find("research", identity)
+        hours = 168 if freshness == "knowledge" else 6
+        if cached and (now - self.engine.time(cached["retrieved_at"])).total_seconds() < hours * 3600:
+            return {**cached, "cached": True}
         result = await self.request_web("search", now, query=query, max_results=5)
-        record = {"id": hashlib.sha256((query + now.isoformat()).encode()).hexdigest()[:20],
+        record = {"id": identity,
                   "query": query, "retrieved_at": now.isoformat(), "results": result["results"], "source_kind": "MaiBot 联网搜索"}
         with self.engine.store.db:
             self.engine.store.put("research", record)
         return record
 
-    async def read(self, url: str, now):
+    async def read(self, url: str, now, freshness: str = "current"):
+        cached = self.engine.store.find("reading", hashlib.sha256(url.encode()).hexdigest()[:20])
+        hours = 168 if freshness == "knowledge" else 6
+        if cached and (now - self.engine.time(cached["retrieved_at"])).total_seconds() < hours * 3600:
+            return {**cached, "cached": True}
         result = await self.request_web("fetch", now, url=url)
         record = {"id": hashlib.sha256(url.encode()).hexdigest()[:20], "url": url, "title": result["title"],
                   "content": result["content"][:12000], "retrieved_at": now.isoformat(), "source_kind": "外部网页"}
@@ -321,12 +337,103 @@ class World:
             self.engine.store.put("reading", record)
         return record
 
+    async def exploration_status(self, now):
+        cfg = self.config.world
+        tasks = [r for r in self.engine.store.all("research_task") if r.get("autonomous")]
+        today = [r for r in tasks if self.engine.time(r["at"]).date() == now.date()]
+        recent = max((self.engine.time(r["at"]) for r in tasks), default=None)
+        ready = False
+        if not cfg.explore_enabled:
+            reason = "自主获取已关闭"
+        elif len(today) >= cfg.explore_daily_limit:
+            reason = "今天的自主检索次数已用完"
+        elif recent and now < recent + timedelta(minutes=cfg.explore_interval_minutes):
+            reason = "下次可检索：" + (recent + timedelta(minutes=cfg.explore_interval_minutes)).strftime("%m-%d %H:%M")
+        else:
+            service = await self.search_status()
+            ready = service["ready"]
+            reason = "可由模型安排上网了解" if ready else service["summary"]
+        return {"ready": ready, "reason": reason, "used": len(today), "limit": cfg.explore_daily_limit,
+                "topics": cfg.explore_topics or self.config.life.interests}
+
+    async def process(self, now):
+        """在活动开始后获取资料，完成后的感想由生活回顾生成。"""
+        store = self.engine.store
+        plans = [p for p in store.all("plan", omit=("changes",)) if p.get("research_query")
+                 and p["status"] in {"active", "completed"} and self.engine.time(p["end"]) >= now - timedelta(days=1)]
+        for plan in plans:
+            old = store.find("research_task", plan["id"])
+            if old and (old["status"] != "失败" or old["attempts"] >= 3 or
+                        old.get("retry_at") and self.engine.time(old["retry_at"]) > now):
+                continue
+            if not old and plan["autonomous"] and not (await self.exploration_status(now))["ready"]:
+                continue
+            await self.collect(plan, now, old)
+            break
+
+    async def collect(self, plan, now, old=None):
+        store = self.engine.store
+        task = {"id": plan["id"], "query": plan["research_query"], "session_id": plan["session_id"],
+                "autonomous": plan["autonomous"], "at": (old or {}).get("at", now.isoformat()),
+                "attempts": (old or {}).get("attempts", 0) + 1, "status": "检索中", "error": "", "sources": []}
+        with store.db:
+            store.put("research_task", task)
+        try:
+            freshness = plan.get("research_freshness", "current")
+            search = await self.search(task["query"], now, freshness)
+            task.update(status="阅读网页", cached=search.get("cached", False))
+            with store.db:
+                store.put("research_task", task)
+            results = search["results"][:2]
+            if not results:
+                raise ValueError("本次检索没有找到资料，可调整话题后重新安排")
+            pages = await asyncio.gather(*(self.read(r["url"], now, freshness) for r in results), return_exceptions=True)
+            for result, page in zip(results, pages):
+                source = {"title": result.get("title", ""), "url": result["url"],
+                          "published_at": result.get("published_at", ""), "retrieved_at": search["retrieved_at"]}
+                if isinstance(page, BaseException):
+                    source.update(content=(result.get("snippet") or result.get("content") or "")[:3000],
+                                  scope="搜索摘要", error=str(page))
+                else:
+                    source.update(title=page["title"], content=page["content"][:6000],
+                                  retrieved_at=page["retrieved_at"], scope="网页正文")
+                if source["content"].strip():
+                    task["sources"].append(source)
+            if not task["sources"]:
+                raise ValueError("网页读取失败且搜索摘要为空，请稍后重试")
+            current = store.get("plan", plan["id"])
+            task["status"] = "已取消" if current["status"] == "cancelled" else "资料就绪"
+        except (Exception, asyncio.CancelledError) as error:
+            task.update(status="失败", error=str(error) or "检索中断", retry_at=(now + timedelta(minutes=5)).isoformat())
+            raise
+        finally:
+            with store.db:
+                store.put("research_task", task)
+        return task
+
+    def discoveries(self, session, text=""):
+        rows = self.engine.store.db.execute(
+            "SELECT json_remove(data,'$.sources') FROM records WHERE category='research_task' "
+            "AND json_extract(data,'$.status')='已完成' AND json_extract(data,'$.session_id') IN ('',?) "
+            "ORDER BY json_extract(data,'$.at') DESC LIMIT 30", (session,)).fetchall()
+        result = []
+        for row in rows:
+            task = json.loads(row[0])
+            event = self.engine.store.find("experience", task.get("experience_id", ""))
+            if not event:
+                continue
+            subject = task.get("subject") or task["query"]
+            relevant = bool(text and (subject.casefold() in text.casefold() or task["query"].casefold() in text.casefold()))
+            result.append({"subject": subject, "summary": event["summary"], "next_action": task.get("next_action", ""),
+                           "sources": event["details"].get("资料来源", ""), "relevant": relevant})
+        return sorted(result, key=lambda r: not r["relevant"])[:3]
+
     def context(self, now):
         weather = self.engine.store.find("world", "weather")
         if weather:
             weather = dict(weather)
             weather["stale"] = (now - self.engine.time(weather["retrieved_at"])).total_seconds() > self.config.world.weather_minutes * 120
-        news = sorted(self.engine.store.all("news"), key=lambda n: n["retrieved_at"], reverse=True)[:5]
+        news = sorted(self.engine.store.page("news", size=20)["items"], key=lambda n: n["retrieved_at"], reverse=True)[:5]
         readings = [{"title": r["title"], "url": r["url"], "retrieved_at": r["retrieved_at"], "content": r["content"][:1500]}
-                    for r in self.engine.store.all("reading")[-2:]]
+                    for r in self.engine.store.page("reading", size=2)["items"]]
         return {"weather": weather, "news": news, "readings": readings}

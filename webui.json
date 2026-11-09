@@ -1490,7 +1490,13 @@
       "queries": {
         "view_data": {
           "api": "ui_world",
-          "version": "1"
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
         },
         "operation_status": {
           "api": "ui_operation_status",
@@ -1545,6 +1551,61 @@
             "url": {
               "type": "string",
               "required": false
+            },
+            "freshness": {
+              "type": "string"
+            }
+          }
+        },
+        "view_explore": {
+          "api": "ui_schedule_research",
+          "version": "1",
+          "parameters": {
+            "query": {
+              "type": "string",
+              "required": true
+            },
+            "freshness": {
+              "type": "string"
+            }
+          }
+        },
+        "view_delete_news": {
+          "api": "ui_delete_world",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string"
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_delete_research": {
+          "api": "ui_delete_world",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string"
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "view_delete_reading": {
+          "api": "ui_delete_world",
+          "version": "1",
+          "parameters": {
+            "category": {
+              "type": "string"
+            },
+            "record_id": {
+              "type": "string",
+              "required": true
             }
           }
         }

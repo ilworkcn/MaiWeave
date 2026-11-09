@@ -61,10 +61,16 @@ class WebUI:
 
     @API("ui_record_detail", description="分页读取修订历史与日记素材")
     async def ui_record_detail(self, category: str, record_id: str, field: str, page: int = 1) -> dict:
-        fields = {"experience": {"history"}, "relationship": {"history"}, "plan": {"changes"}, "diary": {"material"}}
+        fields = {"experience": {"history"}, "relationship": {"history"}, "plan": {"changes"}, "diary": {"material"}, "reading": {"content"}, "research": {"results"}, "research_task": {"sources"}}
         if field not in fields.get(category, set()):
-            raise ValueError("请选择经历修订、关系历史、日程修改或日记素材")
-        text = json.dumps(self.store.get(category, record_id)[field], ensure_ascii=False, indent=2)
+            raise ValueError("请选择记录中的详情字段")
+        value = self.store.get(category, record_id)[field]
+        if category == "research_task" and field == "sources":
+            text = "\n\n".join(f"{i}. {source['title']}\n来源：{source['url']}\n发布时间：{source.get('published_at') or '未提供'}\n"
+                                 f"获取时间：{display_time(source['retrieved_at'])} · {source['scope']}\n\n{source['content']}"
+                                 for i, source in enumerate(value, 1))
+        else:
+            text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=2)
         pages = max(1, math.ceil(len(text) / 12000))
         page = min(pages, max(1, page))
         return {"text": text[(page - 1) * 12000:page * 12000], "page": page, "pages": pages}
@@ -473,7 +479,23 @@ class WebUI:
         raise ValueError("未知重复规则操作")
 
     @API("ui_world", description="天气、预报和外部资料")
-    async def ui_world(self) -> dict:
+    async def ui_world(self, page: int = 1) -> dict:
+        exploration = await self.world.exploration_status(self.now())
+        tables = {key: self.store.page(category, page, omit=omit, time_field=field) for key, category, omit, field in (
+            ("news", "news", (), "retrieved_at"), ("research", "research", ("results",), "retrieved_at"),
+            ("readings", "reading", ("content",), "retrieved_at"), ("explorations", "research_task", ("sources",), "at"))}
+        for key, category in (("research", "research"), ("readings", "reading"), ("explorations", "research_task")):
+            for row in tables[key]["items"]:
+                row["detail_kind"] = category
+        for row in tables["explorations"]["items"]:
+            plan = self.store.find("plan", row["id"])
+            if plan and plan["status"] == "cancelled":
+                row["status"] = "日程已取消"
+            reflection = self.store.find("reflection", row["id"])
+            if reflection and reflection["status"] == "生成中":
+                row["status"] = "模型正在整理感想"
+            elif reflection and reflection["status"] == "失败":
+                row.update(status="感想整理失败，将自动重试", error=reflection["error"])
         search = await self.world.search_status()
         environment = self.world.context(self.now())
         weather = environment["weather"]
@@ -490,10 +512,10 @@ class WebUI:
                 "observed_at": display_time(weather["observed_at"]) if weather else "—",
                 "source": "Open-Meteo", "forecast": weather["forecast"] if weather else [],
                 "weather_error": status["error"] if status and status["error"] else "无",
-                "statuses": self.store.all("world_status"), "news": self.store.all("news")[-20:][::-1],
-                "research": [{"query": r["query"], "retrieved_at": display_time(r["retrieved_at"]),
-                              "results_text": json.dumps(r["results"], ensure_ascii=False)} for r in self.store.all("research")[-5:][::-1]],
-                "readings": self.store.all("reading")[-5:][::-1], "jobs": self.store.all("job")[-10:]}
+                "exploration_status": f"{exploration['reason']} · 今日 {exploration['used']}/{exploration['limit']} 次",
+                "statuses": self.store.all("world_status"), **{key: value["items"] for key, value in tables.items()},
+                "pagination": {"page": max(t["page"] for t in tables.values()), "pages": max(t["pages"] for t in tables.values()),
+                               "total": sum(t["total"] for t in tables.values())}, "jobs": self.store.page("job", size=10, time_field="created_at")["items"]}
 
     @API("ui_refresh_world", description="后台更新天气与资讯")
     async def ui_refresh_world(self) -> dict:
@@ -501,13 +523,41 @@ class WebUI:
         return self.start_job("更新天气与资讯", self.world.refresh(self.now(), force=True))
 
     @API("ui_research", description="后台检索或阅读网页")
-    async def ui_research(self, query: str = "", url: str = "") -> dict:
+    async def ui_research(self, query: str = "", url: str = "", freshness: str = "current") -> dict:
         self.require_life()
         if url:
-            return self.start_job("阅读网页", self.world.read(url, self.now()))
+            return self.start_job("阅读网页", self.world.read(url, self.now(), freshness))
         if query:
-            return self.start_job("联网检索", self.world.search(query, self.now()))
+            return self.start_job("联网检索", self.world.search(query, self.now(), freshness))
         raise ValueError("请填写检索词或网页地址")
+
+    @API("ui_schedule_research", description="在下一个空档安排上网了解")
+    async def ui_schedule_research(self, query: str, freshness: str = "current") -> dict:
+        self.require_life()
+        if not query.strip():
+            raise ValueError("请填写想了解的问题")
+        status = await self.world.search_status()
+        if not status["ready"]:
+            raise ValueError(status["summary"])
+        now = self.now()
+        start, location = now, self.engine.state()["location"]
+        for plan in sorted(self.engine.plans(""), key=lambda p: p["start"]):
+            if plan["status"] in {"scheduled", "active", "blocked"} and self.engine.time(plan["end"]) > start:
+                if self.engine.time(plan["start"]) >= start + timedelta(minutes=20):
+                    break
+                start, location = self.engine.time(plan["end"]), plan["location"]
+        plan = self.spatial.schedule(PlanInput(title="上网了解：" + query.strip()[:120], kind="study", start=start.isoformat(),
+                    end=(start + timedelta(minutes=20)).isoformat(), location=location, research_query=query.strip(),
+                    research_freshness=freshness, motivation="从天气与见闻页面安排了解这个问题"), "", now)
+        return {"message": "已安排上网了解，开始时间：" + display_time(plan["start"]), "id": plan["id"]}
+
+    @API("ui_delete_world", description="删除所选外部资料缓存")
+    async def ui_delete_world(self, category: str, record_id: str) -> dict:
+        if category not in {"news", "research", "reading"}:
+            raise ValueError("请选择资讯、检索或网页资料")
+        with self.store.db:
+            self.store.delete(category, record_id)
+        return {"message": "所选资料已删除"}
 
     @API("ui_space", description="地点、路线及移动进度")
     async def ui_space(self) -> dict:

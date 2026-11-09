@@ -83,12 +83,18 @@ class Retention:
                     protected.add(row["id"])
             delete[category] = select(rows, cfg.log_days, cfg.log_count, field, protected)
             summary.append(dict(category=category, label=label, total=len(rows), days=cfg.log_days, limit=cfg.log_count, protected=len(protected), remove=len(delete[category])))
-        for category in ("reflection", "schedule_issue", "schedule_notice"):
+        for category in ("news", "research", "reading"):
+            rows = store.all(category, omit=("content", "results"))
+            delete[category] = select(rows, cfg.world_days, cfg.world_count, "retrieved_at", set())
+            label = {"news": "订阅资讯", "research": "检索缓存", "reading": "网页缓存"}[category]
+            summary.append(dict(category=category, label=label, total=len(rows), days=cfg.world_days,
+                                limit=cfg.world_count, protected=0, remove=len(delete[category])))
+        for category in ("research_task", "reflection", "schedule_issue", "schedule_notice"):
             delete[category] = {r["id"] for r in store.all(category) if r["id"] in delete["plan"]}
         delete["adjustment"] = {r["id"] for r in store.all("adjustment") if r["plan_id"] in delete["plan"]}
         for category in ("occurrence", "routine_issue"):
             delete[category] = {r["id"] for r in store.all(category) if r["id"].rsplit(":", 1)[-1] < now.date().isoformat()}
-        auxiliary = ("reflection", "schedule_issue", "schedule_notice", "adjustment", "occurrence", "routine_issue")
+        auxiliary = ("research_task", "reflection", "schedule_issue", "schedule_notice", "adjustment", "occurrence", "routine_issue")
         summary.append(dict(category="related", label="旧日程附属记录", total=sum(len(store.all(c)) for c in auxiliary), days=0, limit=0, protected=0, remove=sum(len(delete[c]) for c in auxiliary)))
         histories = {e["id"]: e["history"][-cfg.history_count:] for e in events if e["id"] not in delete["experience"] and cfg.history_count and len(e.get("history", [])) > cfg.history_count}
         summary.append(dict(category="history", label="经历旧修订", total=sum(len(e.get("history", [])) for e in events), days=0, limit=cfg.history_count, protected=0, remove=sum(len(store.get("experience", key)["history"]) - len(value) for key, value in histories.items())))
