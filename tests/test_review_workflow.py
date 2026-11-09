@@ -115,3 +115,17 @@ async def test_auto_profile_reviews_native_identity_and_infers_relationship(plug
     person = plugin.store.all("profile")[0]
     assert person["name"] == "小明" and person["intimacy"] == 3
 
+
+
+async def test_reload_finishes_interrupted_review_progress(plugin):
+    from maiweave.interfaces.review import Reviews
+    pending = plugin.reviews.create("profile", {"name": "测试人物", "session_id": "a"})
+    confirmed = plugin.reviews.create("profile", {"name": "待确认人物", "session_id": "a"})
+    with plugin.store.db:
+        plugin.store.put("review", {**confirmed, "status": "待确认"})
+    Reviews(plugin)
+    result = plugin.store.get("review", pending["id"])
+    assert result["status"] == "失败"
+    assert "重新提交" in result["error"]
+    assert plugin.store.get("review", confirmed["id"])["status"] == "待确认"
+    assert plugin.store.all("profile") == []

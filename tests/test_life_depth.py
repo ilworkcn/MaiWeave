@@ -58,6 +58,7 @@ async def test_expired_and_updated_presence_controls_private_not_group(plugin):
 async def test_share_response_uses_current_user_and_stream(plugin, naive):
     now=plugin.now()
     receipts=plugin.living.receipts
+    plugin.config.proactive.enabled=True
     with plugin.store.db:
         plugin.store.put('share_receipt',{'id':'sent','session':'private','sent_at':(now.replace(tzinfo=None) if naive else now).isoformat(),'created':now.isoformat(),
             'outcome':'实际已发送','topic':'土豆饼的脆边','experience_id':'event'})

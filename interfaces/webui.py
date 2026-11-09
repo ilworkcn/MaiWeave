@@ -179,7 +179,9 @@ class WebUI:
 
     @API("ui_usage", description="模型调用用量与趋势")
     async def ui_usage(self, days: str = "7", feature: str = "") -> dict:
-        return usage_summary(self.store, self.now(), int(days), "" if feature == "all" else feature)
+        result = usage_summary(self.store, self.now(), int(days), "" if feature == "all" else feature)
+        result["chat_context"] = list(self.chat_context.recent)
+        return result
 
     @API("ui_editor_records", description="按类别查找可编辑记录")
     async def ui_editor_records(self, category: str, query: str = "", page: int = 1, record_id: str = "") -> dict:

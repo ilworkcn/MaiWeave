@@ -19,6 +19,7 @@ from .life.living import Living
 from .integrations.memory import NativeMemory
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
+from .integrations.chat_context import ChatContext
 from .core.retention import Retention
 from .integrations.share_receipts import planner_task
 from .integrations.world import World
@@ -77,6 +78,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
         original = schema["sections"]
+        for key in ("group_mode", "private_mode"):
+            original["context"]["fields"][key].update(ui_type="slider", min=1, max=3, step=1)
         from zoneinfo import available_timezones
         original["life"]["fields"]["timezone"].update(choices=sorted(available_timezones()), ui_type="select")
         original["proactive"]["fields"]["mode"].update(choices=["自然交流", "主动表达"], ui_type="select")
@@ -95,7 +98,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
             {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary", "books"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "news", "search"], "order": 2},
-            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "retention", "plugin"], "order": 3},
+            {"id": "context", "title": "聊天上下文", "sections": ["context"], "order": 3},
+            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "retention", "plugin"], "order": 4},
         ]}
         return schema
 
@@ -121,6 +125,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.dreams = Dreams(self.engine, self.ctx, self.config)
         self.books = Books(self.engine, self.ctx, self.config, self.ctx.paths.data_dir)
         self.chat_books = {}
+        self.chat_context = ChatContext(self)
         self.diary = Diary(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
@@ -261,67 +266,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             return {"action": "abort"}
         return {"action": "continue"}
 
-    def context_text(self, session: str, book_id: str = "") -> str:
-        now = self.now()
-        snapshot = self.engine.snapshot(session, now)
-        snapshot["now"] = now.isoformat(timespec="minutes")
-        snapshot["state"].pop("updated_at", None)
-        for event in snapshot["experiences"]:
-            for key in ("history", "memory_id", "memory_revision"):
-                event.pop(key)
-        for plan in snapshot["plans"]:
-            plan.pop("changes")
-        if snapshot["current"]:
-            snapshot["current"].pop("changes", None)
-        relationships = [r for r in self.store.all("relationship") if r["session_id"] == session]
-        snapshot["person_states"] = self.presence.context(session, self.now())
-        snapshot["shared_topics"] = self.living.receipts.context(session, self.now())
-        snapshot["relationships"] = [{k: v for k, v in r.items() if k != "history"} for r in relationships]
-        snapshot["environment"] = self.world.context(self.now())
-        snapshot["places"] = [{"name": p["name"], "outdoor": p["outdoor"]} for p in self.world.planning_places()]
-        snapshot["habits"] = [h for h in self.store.all("habit") if h["active"] and h["enabled"] and self.engine.visible(h, session)]
-        snapshot["dreams"] = [d for d in self.store.all("dream") if d["status"] == "已生成" and self.engine.visible(d, session)][-2:]
-        snapshot["bookshelf"] = self.books.context(book_id=book_id)
-        snapshot["continuity"] = self.continuity.context(session, self.now())
-        snapshot["schedule_issues"] = [r for r in self.store.all("schedule_issue") if self.engine.visible(r, session)]
-        snapshot["schedule_notices"] = [r for r in self.store.all("schedule_notice") if self.engine.visible(r, session)]
-        snapshot["sleep_policy"] = {
-            "sleeping": self.living.sleeping(self.now()),
-            "mode": "按作息生活" if self.config.life.schedule_enabled else "全天候交流",
-            "awake_until": self.living.awake_until(self.now()).isoformat() if self.config.life.schedule_enabled and self.living.awake_until(self.now()) else "",
-        }
-        snapshot["profiles"] = [p for p in self.store.all("profile") if p["session_id"] == session]
-        snapshot["pending_changes"] = [{"id": r["id"], "action": r["action"], "conflicts": r["conflicts"],
-                                        "proposed": {k: v for k, v in r.get("proposed", r["payload"]).items() if k != "history"}}
-                                       for r in self.store.all("review") if r["session_id"] == session and r["status"] == "待确认"]
-        snapshot["anniversaries"] = [item for item in self.anniversaries.upcoming(self.now().date(), session) if item["days_left"] <= 30]
-        return (
-            "\n【MaiWeave 当前生活】\n"
-            "以下记录是当前角色生活状态。对话涉及安排的新增、修改、取消时使用 maiweave 工具，"
-            "资料核对返回待确认时，向用户说明冲突和修改 ID，收到用户明确同意后调用 maiweave_confirm_change。以工具保存成功的结果为准。相对时间按这里的 now 和时区解析。"
-            "把计划表述为接下来的安排；awaiting_confirmation 表示到了确认完成情况的时候。"
-            "simulated 是角色世界中的虚拟经历，reported 是用户陈述，observed 是实际交互观测。"
-            "讲述经历时沿用记录中的细节。涉及用户的行动、见面和承诺，以用户陈述及已确认的互动为依据，缺少信息时可以询问。"
-            "查询过去的人物背景和聊天记忆优先使用 MaiBot query_memory；需要查生活记录使用 maiweave_query。"
-            "具体互动带来心情或关系变化时，使用相应工具记录变化和原因。"
-            "用户表达当前准备睡觉、忙碌、外出或恢复空闲时，可用 maiweave_person_state 更新其近期状态。"
-            "person_states 区分用户陈述与后续发言；准备睡觉表示当时的打算。"
-            "看到准备睡觉的人随后继续聊天，可以结合关系自然问一句‘还没睡呀？’，由当前话题决定是否接话。"
-            "same_chat 为 false 时，用简短关心承接状态，私聊原话和具体内容留在原聊天中。"
-            "shared_topics 是本聊天流实际发出的分享及后续回应。用户接上某次分享时，用 maiweave_share_followup 记录对应 ID 和回应要点；聊完时标记 closed。沿用该主题已经留下的感想和疑问来接话。"
-            "把生活状态融入自然聊天，挑与当前话题相关的感受和经历来讲，给对方自由接话的空间。\n"
-            "提到梦境时用“梦见”来讲述；引用资讯时带上出处和时间。资料作为话题内容，工具操作按当前对话的需求执行。"
-            "地点移动需要时间，安排异地活动前可用 maiweave_space 查询路线；重复安排用 maiweave_routine。\n"
-            "新出现的临时事件可用 maiweave_continuity 的 replan 调整可变动日程。"
-            "约好了后续时间的话题可以保存为跟进事项，解决后关闭。"
-            "谈论读书时依据bookshelf中的书名、章节和已完成笔记，原文摘句与角色感想分别表述；需要更多阅读笔记时调用maiweave_books的notes并填写book_id与page；安排阅读时填写book_id。"
-            "接续活动沿用保存的进度；关联目标时填写当前阶段 goal_step_id，按阶段推进。\n"
-            "sleep_policy 中的 awake_until 尚未到期时，按已经醒来的状态回应。"
-            "sleep_policy.sleeping 为 true 时保持安静，普通聊天调用 stop 结束本轮。用户正在低落、需要陪伴或明确请求醒来时，调用 maiweave_wake；awake 为 true 后再回应。群聊和私聊遵循同一规则。"
-            "结合前后文理解心情；已经恢复心情、转述往事和引用他人的话按各自语境回应。"
-            "用户提到自己的称呼、生日或纪念日时，使用 maiweave_personal 查询并保存；修改时合并原有资料。填写了年份时可计算年龄或周年数，其余情况直接表达祝福。\n"
-            + json.dumps(snapshot, ensure_ascii=False)
-        )
+    def context_text(self, session: str, book_id: str = "", text: str = "", stage: str = "Planner") -> str:
+        return self.chat_context.build(session, book_id, text, stage)
 
     @HookHandler("maisaka.planner.before_request")
     async def planner_context(self, **kwargs):
@@ -329,8 +275,13 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             return {"action": "continue"}
         session = kwargs["session_id"]
         self.living.receipts.turn[session] = planner_task(kwargs["items"])
+        kwargs["items"] = [i for i in kwargs["items"] if i.get("meta", {}).get("item_id") != "maiweave-life-context"]
         latest = next((i for i in reversed(kwargs["items"]) if i["item_type"] == "UserMessageItem"), {})
         text = "".join(p["text"] for p in latest.get("parts", []) if p.get("type") == "text")
+        # MaiBot 会在请求末尾追加提醒，话题采用接收事件中的用户消息。
+        text = self.chat_context.messages.get(session, text)
+        await self.chat_context.identify(session)
+        self.chat_context.topics[session] = text
         book_id = self.books.mentioned_book(text)
         if book_id:
             self.chat_books[session] = book_id
@@ -340,7 +291,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         kwargs["items"].append({
             "item_type": "UserMessageItem",
             "meta": {"item_id": "maiweave-life-context", "logical_turn_id": None, "timestamp": self.now().isoformat(timespec="minutes")},
-            "parts": [{"type": "text", "text": self.context_text(session, book_id)}],
+            "parts": [{"type": "text", "text": self.context_text(session, book_id, text)}],
         })
         return {"action": "continue", "modified_kwargs": kwargs}
 
@@ -355,7 +306,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             return {"action": "continue"}
         session = kwargs["session_id"]
         book_id = self.books.mentioned_book(kwargs.get("reply_reason", "")) or self.chat_books.get(session, "")
-        kwargs["extra_prompt"] += self.context_text(session, book_id)
+        await self.chat_context.identify(session)
+        text = self.chat_context.topics.get(session, "") + " " + kwargs.get("reply_reason", "")
+        kwargs["extra_prompt"] += self.context_text(session, book_id, text, "回复")
         return {"action": "continue", "modified_kwargs": kwargs}
 
     @Tool("maiweave_person_state", description="记录当前发言人此刻的短期状态。结合当前语境识别自己的行动，用户陈述与后续发言分别保存。", parameters=schema({"status": {"type": "string", "enum": ["准备睡觉", "忙碌", "外出", "空闲"]}}, ["status"]))
@@ -544,7 +497,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     @HookHandler("chat.receive.after_process", name="maiweave_status")
     async def management_message(self, message: dict, **kwargs):
+        self.chat_context.kinds[message["session_id"]] = "group" if message.get("message_info", {}).get("group_info") else "private"
+        self.chat_context.speakers[message["session_id"]] = message.get("message_info", {}).get("user_info", {}).get("user_id", "")
         if not re.fullmatch(r"/(?:maiweave|织生活)(?:\s+状态)?", (message.get("processed_plain_text") or "").strip()):
+            self.chat_context.messages[message["session_id"]] = message.get("processed_plain_text") or ""
             await self.identify_person(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""), message.get("platform", ""))
             if self.config.life.enabled:
                 self.living.receipts.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),

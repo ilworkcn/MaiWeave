@@ -1,6 +1,7 @@
 """插件配置及 WebUI 中文标签。"""
 
 from typing import Literal
+from pydantic import field_validator
 
 from maibot_sdk import Field, PluginConfigBase
 from zoneinfo import available_timezones
@@ -18,7 +19,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.9.0", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.9.5", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -128,6 +129,30 @@ class BooksConfig(PluginConfigBase):
     context_chars: int = setting("对话书架信息上限（字符）", default=4000, ge=1000, le=16000, description="限制书目和近期笔记带入对话的总长度；详细笔记可按书查询。")
 
 
+class ContextConfig(PluginConfigBase):
+    """按聊天场景选择生活信息，详细记录通过工具读取。"""
+
+    __ui_label__ = "聊天上下文"
+    @field_validator("group_mode", "private_mode", mode="before")
+    @classmethod
+    def migrate_mode(cls, value):
+        """将已有文字档位对应到滑块的三个位置。"""
+        return {"精简": 1, "均衡": 2, "丰富": 3}.get(value, value)
+
+    group_mode: int = setting("群聊信息量", default=1, ge=1, le=3, description="1 精简：当前状态与相关话题；2 均衡：补充近期生活；3 丰富：带入更多细节。实际长度受字符上限约束。", json_schema_extra={"ui_type": "slider", "step": 1})
+    private_mode: int = setting("私聊信息量", default=2, ge=1, le=3, description="1 精简：当前状态与相关话题；2 均衡：补充近期生活；3 丰富：带入更多细节。实际长度受字符上限约束。", json_schema_extra={"ui_type": "slider", "step": 1})
+    group_chars: int = setting("群聊注入上限（字符）", default=2400, ge=1200, le=20000, description="每次群聊的 Planner 判断或回复，最多自动带入多少字符的 MaiWeave 规则与生活信息（含标点、字段名）。只控制本插件自动注入部分；MaiBot 人设、聊天历史和工具查询结果另计。字符数与 Token 数不同。调低更省上下文，调高能带入更多细节；已有记录照常保存，需要时可通过工具查询。")
+    private_chars: int = setting("私聊注入上限（字符）", default=4800, ge=1200, le=20000, description="每次私聊的 Planner 判断或回复，最多自动带入多少字符的 MaiWeave 规则与生活信息（含标点、字段名）。只控制本插件自动注入部分；MaiBot 人设、聊天历史和工具查询结果另计。字符数与 Token 数不同。调低更省上下文，调高能带入更多细节；已有记录照常保存，需要时可通过工具查询。")
+    schedule: bool = setting("带入日程", default=True, description="带入后续安排和日程变动；当前活动与睡眠状态始终保留。")
+    people: bool = setting("带入人物与纪念日", default=True, description="带入当前聊天人物的近况、关系、生活备注和近期纪念日。")
+    reading: bool = setting("带入阅读笔记", default=True, description="点名书籍时优先带入对应笔记，更多内容可通过书架工具查询。")
+    continuity: bool = setting("带入生活接续", default=True, description="带入未完话题、活动进度和目标，生活功能继续按各自开关运行。")
+    experiences: bool = setting("带入近期经历", default=True, description="按模式补充最近的生活经历，精简模式在聊到经历时带入。")
+    sharing: bool = setting("带入主动分享接话", default=True, description="带入本聊天流实际发送的分享和回应，供模型接续话题。")
+    environment: bool = setting("带入天气与地点", default=True, description="按话题和模式补充已开启的天气、资讯和城市地点。")
+    dreams: bool = setting("带入梦境与习惯", default=True, description="带入已开启的梦境与习惯信息，精简模式在相关话题中使用。")
+
+
 class RetentionConfig(PluginConfigBase):
     """每天整理已结束的记录，保留正在使用的生活关联。"""
 
@@ -153,4 +178,5 @@ class MaiWeaveConfig(PluginConfigBase):
     diary: DiaryConfig = Field(default_factory=DiaryConfig)
     continuity: ContinuityConfig = Field(default_factory=ContinuityConfig)
     books: BooksConfig = Field(default_factory=BooksConfig)
+    context: ContextConfig = Field(default_factory=ContextConfig)
     retention: RetentionConfig = Field(default_factory=RetentionConfig)

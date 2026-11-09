@@ -17,6 +17,12 @@ class Assessment(BaseModel):
 class Reviews:
     def __init__(self, plugin):
         self.plugin = plugin
+        # 热重载会停止核对任务，结束旧进度并提示用户重新提交。
+        with plugin.store.db:
+            for record in plugin.store.all("review"):
+                if record["status"] == "检查中":
+                    record.update(status="失败", error="插件已重新加载，本次核对已中断，请重新提交。")
+                    plugin.store.put("review", record)
 
     def create(self, action, payload, session=""):
         if action not in {"profile", "anniversary", "delete_profile", "delete_anniversary", "edit_person", "sync"}:

@@ -145,7 +145,7 @@ async def test_old_config_adds_retention_and_keeps_preferences(plugin):
     upgraded=rebuild_plugin_config_data(plugin.get_default_config(),old)
     assert upgraded['retention']['experience_count']==3000
     assert upgraded['proactive']['daily_limit']==7
-    assert upgraded['plugin']['config_version']=='0.9.0'
+    assert upgraded['plugin']['config_version']=='0.9.5'
 
 async def test_old_receipts_without_timezone(plugin):
     now=plugin.now()
