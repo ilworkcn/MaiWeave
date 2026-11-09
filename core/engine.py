@@ -67,6 +67,19 @@ class LifeEngine:
                     event.update(importance={1: 2, 2: 6, 3: 9}[old], score_reason=f"旧版重要度 {old}/3 分换算")
                     store.put("experience", event)
                 store.put("runtime", {"id": "experience_score_10"})
+        if not store.find("runtime", "completion_scope_v1"):
+            with store.db:
+                for plan in store.all("plan", omit=("changes",)):
+                    event = store.find("experience", plan.get("experience_id", ""))
+                    if event and event.get("plan_id") == plan["id"] and event["session_id"] != plan["session_id"]:
+                        # 完成经历与关联计划共用范围，恢复旧记录的活动回顾。
+                        event["session_id"] = plan["session_id"]
+                        store.put("experience", event)
+                        reflection = store.find("reflection", plan["id"])
+                        if reflection and reflection["status"] == "失败" and reflection.get("error") == "该记录不属于当前聊天流":
+                            reflection["retry_at"] = now.isoformat()
+                            store.put("reflection", reflection)
+                store.put("runtime", {"id": "completion_scope_v1"})
         if store.find("state", "life") is None:
             with store.db:
                 store.put("state", {"id": "life", **LifeState(updated_at=now.isoformat()).model_dump()})
@@ -189,7 +202,7 @@ class LifeEngine:
             raise ValueError("经历时间早于关联计划，请核对计划 ID 和发生时间")
         if plan and plan["participants"] and value.source == "simulated":
             raise ValueError("请根据用户陈述或已确认的交互记录共同安排的完成情况")
-        record = {**value.model_dump(), "id": uid(), "session_id": session,
+        record = {**value.model_dump(), "id": uid(), "session_id": plan["session_id"] if plan else session,
                   "occurred_at": occurred.isoformat(), "recorded_at": now.isoformat(),
                   "revision": 1, "history": [], "memory_id": "", "memory_revision": 0}
         if not record["score_reason"]:
