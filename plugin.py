@@ -28,6 +28,7 @@ from .life.rhythm import Rhythm
 from .life.dreams import Dreams
 from .life.books import Books
 from .life.diary import Diary
+from .integrations.qzone import DiaryPublisher
 from .interfaces.feature_tools import FeatureTools
 from .interfaces.webui import WebUI
 from .life.continuity import Continuity
@@ -79,6 +80,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
         ]
         original = schema["sections"]
+        for name, choices in (("publish_mode", ["关闭", "手动发布", "日记完成后自动发布"]), ("publish_visibility", ["所有人", "好友", "仅自己"])):
+            original["diary"]["fields"][name].update(choices=choices, ui_type="select")
         for key in ("group_mode", "private_mode"):
             original["context"]["fields"][key].update(ui_type="slider", min=1, max=3, step=1)
         from zoneinfo import available_timezones
@@ -128,6 +131,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.chat_books = {}
         self.chat_context = ChatContext(self)
         self.diary = Diary(self.engine, self.ctx, self.config)
+        self.diary_publisher = DiaryPublisher(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
         self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
@@ -176,7 +180,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         for name, job in [("外部世界", self.world.refresh), ("自主见闻", self.world.process),
                           ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
-                          ("主动交流", self.living.share), ("生活日记", self.diary.process), ("书籍阅读", self.books.process)]:
+                          ("主动交流", self.living.share), ("生活日记", self.diary.process), ("日记发空间", self.diary_publisher.process), ("书籍阅读", self.books.process)]:
             if name not in self.background or self.background[name].done():
                 if name == "主动交流":
                     if not self.config.proactive.enabled or (self.next_share_check and now < self.next_share_check):

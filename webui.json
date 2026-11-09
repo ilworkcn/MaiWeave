@@ -1456,6 +1456,16 @@
               "minimum": 1
             }
           }
+        },
+        "diary_publication": {
+          "api": "ui_diary_publication",
+          "version": "1",
+          "parameters": {
+            "day": {
+              "type": "string",
+              "required": true
+            }
+          }
         }
       },
       "actions": {
@@ -1475,6 +1485,22 @@
             "plan_id": {
               "type": "string",
               "required": true
+            }
+          }
+        },
+        "diary_publish_action": {
+          "api": "ui_diary_publish_action",
+          "version": "1",
+          "parameters": {
+            "action": {
+              "type": "string",
+              "required": true
+            },
+            "day": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
             }
           }
         }

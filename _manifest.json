@@ -43,7 +43,8 @@
     "chat.get_all_streams",
     "person.get_id",
     "llm.get_available_models",
-    "maisaka.reply.generate"
+    "maisaka.reply.generate",
+    "api.call"
   ],
   "i18n": {
     "default_locale": "zh-CN",

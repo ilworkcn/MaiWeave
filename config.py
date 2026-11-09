@@ -118,9 +118,11 @@ class ContinuityConfig(PluginConfigBase):
 
 
 class DiaryConfig(PluginConfigBase):
-    """模型安排写作窗口，日记保存在生活工作区。"""
+    """模型会安排写日记的时间，写好的日记可在「日记与梦境」中查看，也可发布到 QQ 空间。"""
 
     __ui_label__ = "生活日记"
+    publish_mode: Literal["关闭", "手动发布", "日记完成后自动发布"] = setting("日记发空间", default="关闭", description="通过已连接的 SnowLuma 发布纯文字生活随笔。自动模式在写日记日程结束后发布当天日记，每天一篇。")
+    publish_visibility: Literal["所有人", "好友", "仅自己"] = setting("空间可见范围", default="好友", description="生成文案后可在日记详情预览、编辑和发布。")
     enabled: bool = setting("自动写日记", default=True, description="由生活规划模型安排写日记的时间，进入活动窗口后回顾当天生活")
 
 

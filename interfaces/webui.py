@@ -167,7 +167,25 @@ class WebUI:
         if day:
             rows = [row for row in rows if row["day"] == day]
         return page_tables({"entries": [{**list_row(row), "detail_kind": "diary", "coverage": "全天记录" if row["complete"] else "截至写作时刻",
-                              "material_text": ""} for row in rows]}, page, ['entries'])
+                              "material_text": "", "publication_status": (self.store.find("diary_publication", row["id"]) or {}).get("status", "尚未生成文案")} for row in rows]}, page, ['entries'])
+
+    @API("ui_diary_publication", description="读取日记空间文案和发布状态")
+    async def ui_diary_publication(self, day: str) -> dict:
+        return self.diary_publisher.view(day)
+
+    @API("ui_diary_publish_action", description="生成、编辑和发布日记空间文案")
+    async def ui_diary_publish_action(self, action: str, day: str = "", content: str = "") -> dict:
+        if action in {"confirm_published", "confirm_unpublished"}:
+            return self.diary_publisher.reconcile(day, action == "confirm_published", self.now())
+        if action == "check":
+            return self.start_job("检查空间连接", self.diary_publisher.check_connection())
+        if action == "generate":
+            return self.start_job("生成空间文案", self.diary_publisher.prepare(day, self.now()))
+        if action == "save":
+            return self.diary_publisher.save(day, content, self.now())
+        if action == "publish":
+            return self.start_job("发布日记到空间", self.diary_publisher.publish(day, self.now()))
+        raise ValueError("请选择检查连接、生成文案、保存或发布")
 
     @API("ui_write_diary", description="生成或重新整理指定日期的生活日记")
     async def ui_write_diary(self, day: str = "") -> dict:
