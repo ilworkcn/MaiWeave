@@ -19,7 +19,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.10.0", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.10.1", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -164,15 +164,17 @@ class RetentionConfig(PluginConfigBase):
 
     __ui_label__ = "数据保留"
     enabled: bool = setting("每日自动清理", default=True, description="每天清理一次；经历与记忆页面可预览数量和立即清理。")
-    log_days: int = setting("运行记录保留天数", default=7, ge=0, description="主动交流回执、已结束任务及资料核对记录；0 表示按数量管理。")
+    log_days: int = setting("运行记录保留天数", default=7, ge=0, description="主动交流回执、已结束任务、资料核对、情绪变化及已结束跟进记录；0 表示按数量管理。")
     log_count: int = setting("每类运行记录上限", default=1000, ge=0, description="每类分别计数；0 表示按天数管理，两项均为 0 时长期保留。")
+    usage_days: int = setting("模型调用明细保留天数", default=30, ge=0, description="Token 统计按保留的明细汇总；0 表示按数量管理。")
+    usage_count: int = setting("模型调用明细条数上限", default=10000, ge=0, description="保留最近的调用明细；0 表示按天数管理，两项均为 0 时长期保留。")
     plan_days: int = setting("已结束日程保留天数", default=90, ge=0, description="保留习惯观察期和仍有任务关联的日程；0 表示按数量管理。")
     plan_count: int = setting("已结束日程条数上限", default=2000, ge=0, description="优先清理最早结束的日程；0 表示按天数管理。")
     experience_days: int = setting("普通经历保留天数", default=180, ge=0, description="7分及以上、长期保留和仍用于生活接续的经历继续保存；0 表示按数量管理。")
     experience_count: int = setting("普通经历条数上限", default=3000, ge=0, description="优先清理最早发生的普通经历；0 表示按天数管理。")
-    world_days: int = setting("网络资料保留天数", default=30, ge=1, description="资讯、检索和网页缓存的保留时间；活动感想与来源随经历继续保存。")
-    world_count: int = setting("每类网络资料条数上限", default=300, ge=20, description="资讯、检索与网页分别计数，优先清理最早获取的资料。")
-    history_count: int = setting("每条经历保留修订数", default=10, ge=0, description="保留最近的修订历史；0 表示保留全部版本。")
+    world_days: int = setting("网络资料保留天数", default=30, ge=1, description="资讯、检索、网页与地点搜索缓存的保留时间；活动感想与来源随经历继续保存。")
+    world_count: int = setting("每类网络资料条数上限", default=300, ge=20, description="资讯、检索、网页与地点搜索分别计数，优先清理最早获取的资料。")
+    history_count: int = setting("每条记录保留历史条数", default=10, ge=0, description="经历修订、关系变化和目标分解分别保留最近的历史；0 表示保留全部版本。")
 
 
 class MaiWeaveConfig(PluginConfigBase):

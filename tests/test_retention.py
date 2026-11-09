@@ -145,7 +145,7 @@ async def test_old_config_adds_retention_and_keeps_preferences(plugin):
     upgraded=rebuild_plugin_config_data(plugin.get_default_config(),old)
     assert upgraded['retention']['experience_count']==3000
     assert upgraded['proactive']['daily_limit']==7
-    assert upgraded['plugin']['config_version']=='0.10.0'
+    assert upgraded['plugin']['config_version']=='0.10.1'
 
 async def test_old_receipts_without_timezone(plugin):
     now=plugin.now()
@@ -155,3 +155,83 @@ async def test_old_receipts_without_timezone(plugin):
     plugin.retention.clean(now)
     assert plugin.store.find('share_receipt','legacy') is None
     assert plugin.store.find('share_receipt','today')
+
+
+async def test_incremental_records_cleanup_and_long_term_content(plugin):
+    p = plugin
+    now = p.now()
+    old = (now - timedelta(days=200)).isoformat()
+    current = now.isoformat()
+    with p.store.db:
+        for category, field in (("model_usage", "at"), ("emotion", "at"), ("place_search", "searched_at")):
+            p.store.put(category, {"id": "old", field: old})
+            p.store.put(category, {"id": "new", field: current})
+        for status in ("active", "expired", "resolved"):
+            p.store.put("effect", {"id": status, "status": status, "expires_at": old})
+        p.store.put("thread", {"id": "done", "status": "resolved", "resolved_at": old})
+        p.store.put("thread", {"id": "open", "status": "open", "created_at": old})
+        p.store.put("person_state", {"id": "old", "expires_at": old})
+        p.store.put("person_state", {"id": "new", "expires_at": (now+timedelta(hours=1)).isoformat()})
+        p.store.put("review", {"id": "failed", "status": "失败", "created_at": old})
+        p.store.put("review", {"id": "pending", "status": "待确认", "created_at": old})
+        p.store.put("relationship", {"id": "person", "closeness": 80, "history": list(range(25))})
+        p.store.put("place", {"id": "park", "name": "公园"})
+        for category, status in (("diary", "已生成"), ("diary_publication", "已发布"), ("book_note", "已完成"), ("dream", "已生成")):
+            p.store.put(category, {"id": "saved", "status": status})
+    preview = p.retention.preview(now)
+    result = p.retention.clean(now)
+    assert preview["total"] == result["removed"]
+    for category in ("model_usage", "emotion", "place_search", "person_state"):
+        assert p.store.find(category, "old") is None
+        assert p.store.find(category, "new")
+    assert p.store.find("effect", "active")
+    assert not p.store.find("effect", "expired")
+    assert not p.store.find("effect", "resolved")
+    assert not p.store.find("thread", "done") and p.store.find("thread", "open")
+    assert not p.store.find("review", "failed") and p.store.find("review", "pending")
+    relation = p.store.get("relationship", "person")
+    assert relation["history"] == list(range(15, 25)) and relation["closeness"] == 80
+    assert p.store.find("place", "park")
+    for category in ("diary", "diary_publication", "book_note", "dream"):
+        assert p.store.find(category, "saved")
+        assert next(row for row in preview["rows"] if row["category"] == category)["policy"] == "长期保留"
+    assert p.retention.preview(now)["total"] == 0
+
+
+async def test_usage_count_limit_summary_and_zero_limits(plugin):
+    from maiweave.integrations.usage import summary
+    p = plugin
+    now = p.now()
+    p.config.retention.usage_count = 2
+    with p.store.db:
+        for i in range(4):
+            p.store.put("model_usage", {"id": str(i), "at": (now-timedelta(minutes=4-i)).isoformat(),
+                "feature": "空间文案", "status": "成功", "prompt_tokens": 10, "completion_tokens": 5,
+                "total_tokens": 15, "prompt_cache_hit_tokens": 0, "seconds": 1})
+    p.retention.clean(now)
+    assert {r["id"] for r in p.store.all("model_usage")} == {"2", "3"}
+    stats = summary(p.store, now, 30)
+    assert stats["totals"]["calls"] == 2 and stats["totals"]["total"] == 30
+    p.config.retention.usage_days = p.config.retention.usage_count = 0
+    p.retention.clean(now+timedelta(days=200))
+    assert len(p.store.all("model_usage")) == 2
+
+
+async def test_goal_history_and_expired_routine_exceptions(plugin):
+    p = plugin
+    now = p.now()
+    today = now.date().isoformat()
+    old = (now-timedelta(days=1)).date().isoformat()
+    future = (now+timedelta(days=1)).date().isoformat()
+    with p.store.db:
+        p.store.put("goal", {"id": "goal", "status": "active", "steps": ["当前步骤"], "outline_history": list(range(15))})
+        p.store.put("routine", {"id": "routine", "exceptions": [old, today, future]})
+    preview = p.retention.preview(now)
+    result = p.retention.clean(now)
+    assert result["removed"] == preview["total"] == 6
+    assert p.store.get("goal", "goal")["outline_history"] == list(range(5, 15))
+    assert p.store.get("goal", "goal")["steps"] == ["当前步骤"]
+    assert p.store.get("routine", "routine")["exceptions"] == [today, future]
+    p.config.retention.history_count = 0
+    p.retention.clean(now)
+    assert len(p.store.get("goal", "goal")["outline_history"]) == 10

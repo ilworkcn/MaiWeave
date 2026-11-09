@@ -64,6 +64,18 @@ class NativeMemory:
             if not self.session:
                 raise ValueError("MaiBot 登录响应未返回会话 Cookie")
 
+    def close(self):
+        """释放本插件创建的 MaiBot 登录会话。"""
+        with self.session_lock:
+            if not self.session:
+                return
+            address = urlsplit(self.config.base_url)
+            request = Request(f"{address.scheme}://{address.netloc}/api/webui/auth/logout",
+                              data=b"{}", headers={"Content-Type": "application/json", "Cookie": self.session}, method="POST")
+            with urlopen(request, timeout=20) as response:
+                json.load(response)
+            self.session = ""
+
     def _once(self, method: str, path: str, payload: dict | None = None) -> dict:
         if not self.config.enabled:
             raise ValueError("请开启原生记忆连接")

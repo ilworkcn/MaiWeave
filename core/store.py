@@ -28,8 +28,11 @@ class Store:
                                (*("$." + key for key in omit), category)).fetchall()
         return [json.loads(row[0]) for row in rows]
 
+    def count(self, category: str) -> int:
+        return self.db.execute("SELECT count(*) FROM records WHERE category=?", (category,)).fetchone()[0]
+
     def page(self, category: str, page: int = 1, size: int = 20, *, omit: tuple[str, ...] = (), time_field: str = "retrieved_at") -> dict:
-        total = self.db.execute("SELECT count(*) FROM records WHERE category=?", (category,)).fetchone()[0]
+        total = self.count(category)
         pages = max(1, (total + size - 1) // size)
         page = min(pages, max(1, page))
         expression = "json_remove(data," + ",".join("?" for _ in omit) + ")" if omit else "data"

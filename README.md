@@ -177,6 +177,8 @@ uv pip install --python .venv -r plugins/MaiWeave/requirements.txt
 - [架构与接口](https://github.com/ilworkcn/MaiWeave/blob/main/docs/架构与接口.md)：代码目录和 MaiBot 接口。
 - [只读状态 API](https://github.com/ilworkcn/MaiWeave/blob/main/docs/只读状态API.md)：其他插件查询生活状态的调用示例。
 
+运行明细每天按保留天数和条数整理，可在「经历与记忆」预览清理；日记、空间发布记录和阅读笔记长期保存。
+
 人物画像和通用记忆沿用 MaiBot 的 A_Memorix。生活记录、书籍文件和解析正文保存在插件数据目录；备份时保留整个数据目录与配置。
 
 MaiWeave 的早期设计参考了 [Mai_life](https://github.com/octmicy/Mai_life)。感谢 [MaiBot 插件 SDK](https://github.com/Mai-with-u/maibot-plugin-sdk) 和 [lunar-python](https://github.com/6tail/lunar-python)。

@@ -36,7 +36,7 @@ class Retention:
         for row in store.all("activity_memory"):
             protected_events.add(row.get("experience_id", ""))
         for row in store.all("review"):
-            if row["status"] not in {"已保存", "已取消"}:
+            if row["status"] not in {"已保存", "已取消", "失败"}:
                 protected_events.add(row.get("payload", {}).get("experience_id", ""))
         for row in store.all("share_receipt"):
             if row["outcome"] in {"MaiBot 已受理", "生成中"}:
@@ -79,10 +79,29 @@ class Retention:
             rows = store.all(category)
             protected = set()
             for row in rows:
-                if category == "job" and row["status"] == "进行中" or category == "review" and row["status"] not in {"已保存", "已取消"} or category == "share_receipt" and (row["outcome"] in {"MaiBot 已受理", "生成中"} or self.time(row.get("sent_at") or row[field]) >= now - timedelta(minutes=max(1440, self.config.proactive.cooldown_minutes))):
+                if category == "job" and row["status"] == "进行中" or category == "review" and row["status"] not in {"已保存", "已取消", "失败"} or category == "share_receipt" and (row["outcome"] in {"MaiBot 已受理", "生成中"} or self.time(row.get("sent_at") or row[field]) >= now - timedelta(minutes=max(1440, self.config.proactive.cooldown_minutes))):
                     protected.add(row["id"])
             delete[category] = select(rows, cfg.log_days, cfg.log_count, field, protected)
             summary.append(dict(category=category, label=label, total=len(rows), days=cfg.log_days, limit=cfg.log_count, protected=len(protected), remove=len(delete[category])))
+        for category, label, field, days, count in (
+            ("model_usage", "模型调用明细", "at", cfg.usage_days, cfg.usage_count),
+            ("emotion", "情绪变化", "at", cfg.log_days, cfg.log_count),
+            ("effect", "情绪影响", "expires_at", cfg.log_days, cfg.log_count),
+            ("thread", "已结束跟进", "resolved_at", cfg.log_days, cfg.log_count),
+            ("place_search", "地点搜索缓存", "searched_at", cfg.world_days, cfg.world_count),
+        ):
+            rows = store.all(category)
+            if category == "thread":
+                rows = [r for r in rows if r["status"] == "resolved"]
+            protected = {r["id"] for r in rows if category == "effect" and r["status"] == "active"}
+            delete[category] = select(rows, days, count, field, protected)
+            summary.append(dict(category=category, label=label, total=len(rows), days=days,
+                                limit=count, protected=len(protected), remove=len(delete[category])))
+        states = store.all("person_state")
+        delete["person_state"] = {r["id"] for r in states if self.time(r["expires_at"]) <= now}
+        summary.append(dict(category="person_state", label="人物近况", total=len(states), days=0,
+                            limit=0, protected=len(states)-len(delete["person_state"]),
+                            remove=len(delete["person_state"]), policy="到期清理"))
         for category in ("news", "research", "reading"):
             rows = store.all(category, omit=("content", "results"))
             delete[category] = select(rows, cfg.world_days, cfg.world_count, "retrieved_at", set())
@@ -95,9 +114,21 @@ class Retention:
         for category in ("occurrence", "routine_issue"):
             delete[category] = {r["id"] for r in store.all(category) if r["id"].rsplit(":", 1)[-1] < now.date().isoformat()}
         auxiliary = ("research_task", "reflection", "schedule_issue", "schedule_notice", "adjustment", "occurrence", "routine_issue")
-        summary.append(dict(category="related", label="旧日程附属记录", total=sum(len(store.all(c)) for c in auxiliary), days=0, limit=0, protected=0, remove=sum(len(delete[c]) for c in auxiliary)))
+        summary.append(dict(category="related", label="旧日程附属记录", policy="随日程清理", total=sum(len(store.all(c)) for c in auxiliary), days=0, limit=0, protected=0, remove=sum(len(delete[c]) for c in auxiliary)))
         histories = {e["id"]: e["history"][-cfg.history_count:] for e in events if e["id"] not in delete["experience"] and cfg.history_count and len(e.get("history", [])) > cfg.history_count}
         summary.append(dict(category="history", label="经历旧修订", total=sum(len(e.get("history", [])) for e in events), days=0, limit=cfg.history_count, protected=0, remove=sum(len(store.get("experience", key)["history"]) - len(value) for key, value in histories.items())))
+        for category, field, label in (("relationship", "history", "关系变化历史"), ("goal", "outline_history", "目标分解历史")):
+            rows = store.all(category)
+            summary.append(dict(category=category+"_history", label=label, total=sum(len(r.get(field, [])) for r in rows),
+                                days=0, limit=cfg.history_count, protected=0,
+                                remove=sum(max(0, len(r.get(field, []))-cfg.history_count) for r in rows) if cfg.history_count else 0))
+        exceptions = [day for r in store.all("routine") for day in r.get("exceptions", [])]
+        summary.append(dict(category="routine_exceptions", label="重复日程跳过日期", total=len(exceptions), days=0, limit=0,
+                            protected=0, remove=sum(day < now.date().isoformat() for day in exceptions), policy="过期清理"))
+        for category, label in (("diary", "生活日记"), ("diary_publication", "空间发布记录"),
+                                ("book_note", "阅读笔记"), ("dream", "梦境")):
+            summary.append(dict(category=category, label=label, total=store.count(category), days=0,
+                                limit=0, protected=0, remove=0, policy="长期保留"))
         return delete, histories, summary
 
     def preview(self, now):
@@ -118,6 +149,15 @@ class Retention:
                     store.delete(category, record_id)
             for record_id, history in histories.items():
                 store.put("experience", {**store.get("experience", record_id), "history": history})
+            if self.config.retention.history_count:
+                for category, field in (("relationship", "history"), ("goal", "outline_history")):
+                    for row in store.all(category):
+                        if len(row.get(field, [])) > self.config.retention.history_count:
+                            store.put(category, {**row, field: row[field][-self.config.retention.history_count:]})
+            for row in store.all("routine"):
+                kept = [day for day in row.get("exceptions", []) if day >= now.date().isoformat()]
+                if kept != row.get("exceptions", []):
+                    store.put("routine", {**row, "exceptions": kept})
             for category, field in (("sharing", "experience_ids"), ("preference", "evidence_ids")):
                 for row in store.all(category):
                     kept = [key for key in row.get(field, []) if key not in delete["experience"]]

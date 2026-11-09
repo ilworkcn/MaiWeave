@@ -81,3 +81,28 @@ async def test_world_reads_shared_services_and_local_assignment(plugin, tmp_path
     assert result['configured'] and result['service'] == 'shared-search'
     catalog.write_text('[web.services.other]\nadapter="tavily"\napi_key="test"\n', encoding='utf-8')
     assert not (await plugin.world.search_status())['configured']
+
+
+async def test_memory_close_releases_only_its_session(host_server):
+    url, calls, state = host_server
+    memory = NativeMemory(MemoryConfig(enabled=True, base_url=url + '/api/host/bots/test/proxy', session_cookie='测试登录密码'))
+    await memory.people()
+    cookie = memory.session
+    memory.close()
+    assert calls[-1][:3] == ('POST', '/api/webui/auth/logout', cookie)
+    assert memory.session == ''
+    total = len(calls)
+    memory.close()
+    assert len(calls) == total
+    await memory.people()
+    assert state['session'] == 2
+    memory.close()
+
+
+async def test_plugin_unload_releases_memory_session(plugin, monkeypatch):
+    from unittest.mock import Mock
+    close = Mock()
+    monkeypatch.setattr(plugin.memory, 'close', close)
+    await plugin.on_unload()
+    close.assert_called_once()
+    await plugin.on_load()

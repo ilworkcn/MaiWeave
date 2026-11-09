@@ -154,7 +154,12 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         for task in self.jobs:
             task.cancel()
         await asyncio.gather(*self.jobs, return_exceptions=True)
-        self.store.close()
+        try:
+            await asyncio.to_thread(self.memory.close)
+        except (OSError, ValueError) as error:
+            self.ctx.logger.warning("释放原生记忆登录会话失败：%s", error)
+        finally:
+            self.store.close()
 
     async def on_config_update(self, scope: str, config_data: dict, version: str):
         if scope == "self":
@@ -538,7 +543,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.10.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.10.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

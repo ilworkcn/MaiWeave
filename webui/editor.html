@@ -19,7 +19,7 @@ dialog{top:calc(var(--maibot-viewport-top,0px) + 88px);bottom:auto;margin:0 auto
 <body class="maibot-page">
 <header><span class="page-mark" aria-hidden="true">✦</span><h1 id="heading">生活页面</h1><p class="maibot-muted" id="intro">选中记录，修改表单，再保存。已有内容会自动填入。</p></header>
 <details id="retentionPanel" class="panel" hidden><summary>数据保留与清理</summary>
-<p>保留设置：插件配置 → 交流与记忆 → 数据保留。日记与阅读笔记长期保存；7分及以上的重要经历、手动保留和仍在使用的记录继续保留。</p>
+<p>保留设置：插件配置 → 交流与记忆 → 数据保留。日记、空间发布记录、阅读笔记和梦境长期保存；Token 统计按保留的调用明细汇总。7分及以上的重要经历、手动保留和仍在使用的记录继续保留。</p>
 <p id="retentionStatus" role="status"></p><div id="retentionCounts"></div>
 <div class="actions"><button id="previewCleanup" class="maibot-button">预览清理数量</button><button id="cleanup" class="maibot-button" disabled>按预览清理</button></div>
 <p>选中一条经历后，可调整保留方式。</p><div class="actions"><button id="keepExperience" class="maibot-button">长期保留所选经历</button><button id="releaseExperience" class="maibot-button">所选经历按规则保留</button></div></details>
@@ -455,7 +455,7 @@ async function showRetention(){
  const data=await maibot.query('retention');
  $('retentionStatus').textContent=(data.enabled?'每日清理已开启':'每日清理已关闭')+'；'+(data.last.at?'上次清理：'+data.last.at.replace('T',' ').slice(0,19)+'，清理 '+data.last.removed+' 项':'尚未清理');
  const table=document.createElement('table');table.className='maibot-table';const header=table.insertRow();for(const text of ['记录','当前数量','保留天数','数量上限','关联保留','预计清理']){const th=document.createElement('th');th.textContent=text;header.append(th)}
- for(const row of data.rows){const tr=table.insertRow();for(const value of [row.label,row.total,row.days||'长期',row.limit||'全部',row.protected,row.remove])tr.insertCell().textContent=value}
+ for(const row of data.rows){const tr=table.insertRow();for(const value of [row.label,row.total,row.policy||(row.days||(row.limit?'按数量':'长期')),row.limit||'全部',row.protected,row.remove])tr.insertCell().textContent=value}
  $('retentionCounts').replaceChildren(table);$('cleanup').disabled=data.total===0;return data;
 }
 $('previewCleanup').onclick=()=>run(showRetention);
