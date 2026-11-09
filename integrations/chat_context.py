@@ -2,14 +2,15 @@
 
 import json
 from collections import deque
+from copy import deepcopy
 
 
 GUIDE = (
     "\n【MaiWeave 当前生活】\n"
     "按 now 与 timezone 理解时间。计划是未来安排；simulated 是角色模拟，reported 是用户陈述，observed 是交互观测。"
-    "使用 maiweave 工具保存日程及生活变化，以保存结果接续对话；更多生活记录用 maiweave_query，人物历史用 MaiBot query_memory。"
+    "用 maiweave 工具保存生活变化并按结果接话；生活记录查 maiweave_query，人物历史查 MaiBot query_memory。"
     "资料冲突须向用户说明修改 ID，取得明确同意后调用 maiweave_confirm_change。"
-    "sleep_policy.sleeping 为 true 时普通聊天用 stop；需要陪伴或请求醒来时用 maiweave_wake，awake 为 true 后回应。群私聊规则一致。"
+    "sleep_policy.sleeping 为 true 时普通聊天用 stop；需要陪伴或请求醒来时用 maiweave_wake，awake 为 true 后回应；awake=false 时本轮用 stop。群私聊规则一致。"
     "person_states 中准备睡觉是当时的打算，same_chat=false 时只承接近况。shared_topics 是实际分享，接话用 maiweave_share_followup 关联 ID。"
     "读书按书名与已完成笔记接话，原文与感想分别表述；更多笔记用 maiweave_books 的 notes 和 book_id，安排阅读也填写 book_id。"
     "跨地点安排用 maiweave_space 查路线，接续目标填写 goal_step_id；梦境以梦见表述，资讯带出处。\n"
@@ -39,6 +40,32 @@ def brief(value, chars, count):
     return value
 
 
+def select_fields(row, names):
+    return {key: row[key] for key in names if key in row and row[key] not in ("", None, [], {})}
+
+
+def deduplicate(snapshot):
+    """只对已选入上下文的经历去重，独立接续保留背景。"""
+    result = deepcopy(snapshot)
+    experiences = {row["id"]: row for row in result.get("experiences", [])}
+    continuity = result.get("continuity", {})
+    for row in continuity.get("continuations", []):
+        experience = experiences.get(row.get("experience_id"))
+        if experience:
+            details = experience.get("details", {})
+            if details.get("结果") == row.get("background") or experience.get("summary") == row.get("background"):
+                row.pop("background", None)
+            if details.get("进度") == row.get("progress"):
+                row.pop("progress", None)
+    for effect in continuity.get("effects", []):
+        for experience in experiences.values():
+            if effect.get("reason") and effect["reason"] in (experience.get("summary"), experience.get("details", {}).get("结果")):
+                effect.pop("reason", None)
+                effect["experience_id"] = experience["id"]
+                break
+    return result
+
+
 class ChatContext:
     def __init__(self, plugin):
         self.plugin = plugin
@@ -65,13 +92,13 @@ class ChatContext:
         current = engine.current(now)
         if current and not engine.visible(current, session):
             current = {"summary": "正在处理其他安排", "end": current["end"]}
-        current = {k: v for k, v in (current or {}).items() if k in {"id", "title", "summary", "kind", "status", "end", "location", "book_id"}}
+        current = select_fields(current or {}, ("id", "title", "summary", "kind", "status", "end", "location", "book_id", "goal_step_id", "continuation_id", "simulation"))
         awake = p.living.awake_until(now) if p.config.life.schedule_enabled else None
         snapshot = {"now": now.isoformat(timespec="minutes"), "timezone": engine.timezone,
                     "state": {k: state[k] for k in ("location", "energy", "mood")}, "current": current,
                     "sleep_policy": {"sleeping": p.living.sleeping(now), "mode": "按作息生活" if p.config.life.schedule_enabled else "全天候交流",
                                      "awake_until": awake.isoformat() if awake else ""}}
-        snapshot = brief(snapshot, 100, 3)
+        snapshot = brief(snapshot, 80, 3)
         base_chars = len(GUIDE) + len(dump(snapshot))
         candidates = []
         def add(key, value, relevant=False):
@@ -104,7 +131,7 @@ class ChatContext:
                 add("bookshelf", shelf, reading_topic)
         if cfg.schedule and (schedule_topic or mode != "精简"):
             add("plans", [{k: r[k] for k in ("id", "title", "kind", "start", "end", "status", "location", "book_id", "goal_step_id")}
-                          for r in engine.plans(session) if r["status"] in {"scheduled", "active", "paused", "awaiting_confirmation", "blocked"}], schedule_topic)
+                          for r in engine.plans(session) if r["id"] != current.get("id") and r["status"] in {"scheduled", "active", "paused", "awaiting_confirmation", "blocked"}], schedule_topic)
             add("schedule_issues", rows("schedule_issue")[-count:], schedule_topic)
             add("schedule_notices", rows("schedule_notice")[-count:], schedule_topic)
         if cfg.people and (people_topic or mode != "精简"):
@@ -117,11 +144,27 @@ class ChatContext:
                 continuity.pop("preferences", None)
             if not p.config.continuity.outcomes_enabled:
                 continuity.pop("continuations", None)
+            memories = []
+            for row in continuity.get("continuations", []):
+                named = any(row.get(key) and row[key] in text for key in ("subject", "activity"))
+                if row.get("completed") and not (continuation_topic or named):
+                    continue
+                item = select_fields(row, ("id", "activity", "subject", "next_action", "next_date", "experience_id", "completed", "location"))
+                item["progress"] = row.get("details", {}).get("进度", "")
+                item["background"] = row.get("details", {}).get("结果") or row.get("details", {}).get("过程", "")
+                event = store.find("experience", row.get("experience_id", ""))
+                if event and engine.visible(event, session):
+                    item["source"] = event["source"]
+                memories.append(item)
+            continuity["continuations"] = memories
+            continuity["effects"] = [select_fields(row, ("id", "reason", "mood", "stress", "started_at", "expires_at"))
+                                     for row in continuity.get("effects", [])]
             add("continuity", {k: v[-count:] for k, v in continuity.items() if v}, continuation_topic)
             if p.config.continuity.goal_planning:
                 add("goals", [g for g in rows("goal") if g["status"] == "active"], continuation_topic)
         if cfg.experiences and (experience_topic or mode != "精简"):
-            add("experiences", [e for e in engine.experiences(session, limit=12) if "书名" not in e["details"]][:count], experience_topic)
+            add("experiences", [select_fields(e, ("id", "summary", "occurred_at", "source", "evidence", "details"))
+                                for e in engine.experiences(session, limit=12) if "书名" not in e["details"]][:count], experience_topic)
         if cfg.environment and (world_topic or mode != "精简"):
             environment = p.world.context(now)
             environment["discoveries"] = discoveries
@@ -143,14 +186,15 @@ class ChatContext:
             if key == "pending_changes":
                 options.append([{k: row[k] for k in ("id", "action")} for row in value[:1]])
             for selected in options:
-                candidate = {**snapshot, key: selected}
+                candidate = deduplicate({**snapshot, key: selected})
                 if (len(GUIDE) + len(dump(candidate)) <= budget
                         and (priority <= 1 or len(dump(candidate)) - before <= budget // 2)):
                     snapshot = candidate
-                    sections.append({"category": LABELS[key], "chars": len(dump(snapshot)) - before})
                     break
             else:
                 omitted.append(LABELS[key])
+        sections = [{"category": LABELS[key], "chars": len(dump({key: value})) - 1}
+                    for key, value in snapshot.items() if key in LABELS]
         result = GUIDE + dump(snapshot)
         self.recent.appendleft({"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
             "chat": "群聊" if group else "私聊", "stage": stage, "mode": mode, "chars": len(result), "budget": budget,
