@@ -156,7 +156,7 @@ async def describe_maiweave_next_plan(self):
 | `sleeping` | 是否处于睡眠日程，布尔值 |
 | `awake_until` | 有效的唤醒陪伴截止时间，到期后返回 `null` |
 | `current` | 当前活动；空闲时为 `null` |
-| `next_plan` | 下一项安排；暂时空闲时为 `null` |
+| `next_plan` | 下一项安排；没有未来安排时为 `null` |
 | `location` | 当前位置，字符串；待登记时为空字符串 |
 | `energy` | 精力，数值 |
 | `mood` | 心情，数值；正值偏愉快，负值偏低落，零为中性 |
