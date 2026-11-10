@@ -1079,6 +1079,10 @@
             "thread_id": {
               "type": "string",
               "required": false
+            },
+            "expires_at": {
+              "type": "string",
+              "required": false
             }
           }
         },
@@ -1174,6 +1178,10 @@
             "session_id": {
               "type": "string",
               "required": true
+            },
+            "expires_at": {
+              "type": "string",
+              "required": false
             }
           }
         },
@@ -1200,6 +1208,10 @@
             "thread_id": {
               "type": "string",
               "required": true
+            },
+            "expires_at": {
+              "type": "string",
+              "required": false
             }
           }
         },

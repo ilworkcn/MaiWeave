@@ -77,7 +77,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
             ("search", "world", "联网搜索", "复用 MaiBot 已配置的搜索服务。", ["search_enabled", "places_enabled"]),
             ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "mode", "natural_greetings", "session_ids", "share_threshold"]),
-            ("limits", "proactive", "交流时段与额度", "提醒、完成确认和话题跟进共用这些限制；数值已有默认值。", ["start_hour", "end_hour", "daily_limit", "cooldown_minutes"]),
+            ("limits", "proactive", "何时聊", "发送间隔从实际发送计算，同一话题未发出时按重新判断间隔选择时机。", ["start_hour", "end_hour", "cooldown_minutes", "retry_minutes"]),
+            ("quota", "proactive", "聊多少", "每日额度是最多发送次数，分享内容来自生活经历和待跟进事项。", ["daily_limit"]),
         ]
         original = schema["sections"]
         for name, choices in (("publish_mode", ["关闭", "手动发布", "日记完成后自动发布"]), ("publish_visibility", ["所有人", "好友", "仅自己"])):
@@ -103,7 +104,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary", "books"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "explore", "news", "search"], "order": 2},
             {"id": "context", "title": "聊天上下文", "sections": ["context"], "order": 3},
-            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "memory", "retention", "plugin"], "order": 4},
+            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "quota", "memory", "retention", "plugin"], "order": 4},
         ]}
         return schema
 
@@ -175,7 +176,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def tick(self):
         now = self.now()
         self.living.apply_schedule(now)
-        for name, job in [("数据清理", self.retention.daily), ("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn), ("生活调整", self.living.adjust)]:
+        for name, job in [("跟进到期", self.continuity.expire_threads), ("数据清理", self.retention.daily), ("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn), ("生活调整", self.living.adjust)]:
             try:
                 job(now)
                 self.last_errors.pop(name, None)
@@ -324,12 +325,12 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         kwargs["extra_prompt"] += self.context_text(session, book_id, text, "回复")
         return {"action": "continue", "modified_kwargs": kwargs}
 
-    @Tool("maiweave_person_state", description="记录当前发言人此刻的短期状态。结合当前语境识别自己的行动，用户陈述与后续发言分别保存。", parameters=schema({"status": {"type": "string", "enum": ["准备睡觉", "忙碌", "外出", "空闲"]}}, ["status"]))
+    @Tool("maiweave_person_state", description="记录当前发言人此刻的短期状态。用户说明起床、忙完或返回时间时，用 until 保存结束时间；值得到时关心的事情同时用 maiweave_continuity 的 save_thread 保存。用户改时间时更新近况和原跟进事项，已醒来或忙完时记录空闲并结束对应事项。", parameters=schema({"status": {"type": "string", "enum": ["准备睡觉", "忙碌", "外出", "空闲"]}, "until": text_field("近况结束时间，带时区的 ISO 日期时间；省略时使用该状态的默认时长")}, ["status"]))
     @operation
-    async def person_state(self, status: str, **kwargs):
+    async def person_state(self, status: str, until: str = "", **kwargs):
         session, user = kwargs["stream_id"], kwargs["user_id"]
         await self.identify_person(session, user, kwargs.get("platform", ""))
-        record = self.presence.declare(session, user, status, self.now())
+        record = self.presence.declare(session, user, status, self.now(), until)
         return {"status": record["status"], "expires_at": record["expires_at"]}
 
     @Tool("maiweave_share_followup", description="用户接上此前主动分享时，关联分享与当前回应；聊完时标记 closed。", parameters=schema({

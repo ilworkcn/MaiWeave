@@ -224,7 +224,8 @@ async def test_proactive_selects_highest_eligible_score(plugin):
     row = (await plugin.ui_overview())["share_decisions"][0]
     assert "完成作品》7/10 分" in row["score"]
     assert chosen["score_reason"] in plugin.ctx.maisaka.proactive.trigger.await_args.args[1]
-    assert plugin.store.get("sharing", "chat-a")["experience_ids"] == [chosen["id"]]
+    assert plugin.store.all("share_receipt")[0]["experience_id"] == chosen["id"]
+    assert not plugin.store.all("sharing")
 
 
 async def test_disabled_plugin_does_not_write(plugin):

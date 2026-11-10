@@ -93,7 +93,7 @@ async def test_history_trimming_and_reference_compaction(plugin):
     assert preview['total']>=6
     p.retention.clean(now)
     assert len(p.store.get('experience',keep['id'])['history'])==10
-    assert p.store.get('sharing','s')['experience_ids']==[keep['id']]
+    assert p.store.find('sharing','s') is None
     assert p.store.get('preference','p')['samples']==2
     assert not p.living.pending_share_result({**row,'source':'simulated','plan_id':'cleaned'})
 
@@ -169,7 +169,7 @@ async def test_incremental_records_cleanup_and_long_term_content(plugin):
         for status in ("active", "expired", "resolved"):
             p.store.put("effect", {"id": status, "status": status, "expires_at": old})
         p.store.put("thread", {"id": "done", "status": "resolved", "resolved_at": old})
-        p.store.put("thread", {"id": "open", "status": "open", "created_at": old})
+        p.store.put("thread", {"id": "open", "status": "open", "created_at": old, "due_at": current})
         p.store.put("person_state", {"id": "old", "expires_at": old})
         p.store.put("person_state", {"id": "new", "expires_at": (now+timedelta(hours=1)).isoformat()})
         p.store.put("review", {"id": "failed", "status": "失败", "created_at": old})

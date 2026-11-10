@@ -49,11 +49,12 @@ class ProactiveConfig(PluginConfigBase):
     __ui_label__ = "主动交流"
     enabled: bool = setting("启用主动交流", default=False, description="根据重要经历请求 MaiBot 主动开口")
     mode: Literal["自然交流", "主动表达"] = setting("主动交流模式", default="自然交流", description="自然交流：由 Planner 决定是否开口，可能保持沉默。主动表达：选好分享内容后，直接生成并发送。", json_schema_extra={"choices": ["自然交流", "主动表达"]})
-    natural_greetings: bool = setting("自然早晚安", default=False, description="随起床和睡前安排，由 Planner 决定是否问候。共用发送额度和间隔，群聊仅在近期互动后道晚安。")
+    natural_greetings: bool = setting("作息问候", default=False, description="随角色起床和睡前安排问候，使用所选主动交流模式。共用发送额度和间隔，群聊在近期互动后道晚安。")
     session_ids: list[str] = setting("额外接收聊天流（选填）", default_factory=list, description="个人资料中选择的聊天流自动用于主动交流和纪念日提醒。这里填写额外的群聊或其他聊天流；可发送 /maiweave 获取 ID。")
     share_threshold: int = setting("经历分享最低分", default=5, ge=1, le=10, description="分数越高，主动分享的经历越少。生日祝福、约定提醒按各自时间触发。", json_schema_extra={"choices": list(range(1, 11))})
-    daily_limit: int = setting("每日主动发送上限", default=4, ge=0, description="每个聊天流每日实际发送次数，分段回复计一次")
+    daily_limit: int = setting("每日主动发送上限", default=4, ge=0, description="每个聊天流每天最多发送几次，分段回复计一次；实际次数取决于当天经历和待跟进事项。")
     cooldown_minutes: int = setting("主动交流间隔（分钟）", default=60, ge=1, description="两次实际发送的最短间隔")
+    retry_minutes: int = setting("未发送后重新判断间隔（分钟）", default=60, ge=1, description="选择稍后交流或生成、发送失败后，同一话题等待多久再判断；到达话题截止时间后结束尝试。")
     start_hour: int = setting("允许开始时间（整点）", default=9, ge=0, le=23, description="经历分享与提醒的时间窗口起点；早晚安跟随作息。")
     end_hour: int = setting("允许结束时间（整点）", default=22, ge=0, le=23, description="经历分享与提醒的时间窗口终点；早晚安跟随作息。")
 

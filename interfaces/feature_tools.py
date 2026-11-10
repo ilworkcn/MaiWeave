@@ -33,13 +33,13 @@ class FeatureTools:
             return self.books.select(book_id)
         return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""), location=location)
 
-    @Tool("maiweave_continuity", description="管理生活接续。status 查看偏好和持续事项；reflect 为已完成活动生成或重试具体结果；outline/revise_goal 分解或调整目标阶段；replan 根据临时事件重排可变动安排；save_thread 保存有明确上下文的后续关心事项，resolve_thread 关闭已解决事项。", parameters=parameters({
+    @Tool("maiweave_continuity", description="管理生活接续。status 查看偏好和持续事项；reflect 为已完成活动生成或重试具体结果；outline/revise_goal 分解或调整目标阶段；replan 根据临时事件重排可变动安排；save_thread 保存用户提到的起床、面试等值得到时关心的事情，填写 due_at 和具体 context；先用 status 查询已有事项，改时间时传原 record_id，取消或提前说结果时用 resolve_thread 结束原事项。用户作息同时用 maiweave_person_state 保存近况结束时间。", parameters=parameters({
         "action": {"type": "string", "enum": ["status", "reflect", "outline", "revise_goal", "replan", "save_thread", "resolve_thread"]},
         "record_id": {"type": "string"}, "title": {"type": "string"}, "context": {"type": "string"},
-        "due_at": {"type": "string"}, "reason": {"type": "string"}, "unavailable_until": {"type": "string"},
+        "due_at": {"type": "string", "description": "带时区的跟进时间；用户只说下午时可采用当天15点，并在 context 说明这是估计的关心时间"}, "expires_at": {"type": "string", "description": "跟进截止时间，省略时为跟进时间后24小时"}, "reason": {"type": "string"}, "unavailable_until": {"type": "string"},
     }, ["action"]))
     async def continuity_tool(self, action: str, record_id: str = "", title: str = "", context: str = "", due_at: str = "",
-                              reason: str = "", unavailable_until: str = "", **kwargs):
+                              reason: str = "", unavailable_until: str = "", expires_at: str = "", **kwargs):
         self.require_life()
         session, now = kwargs["stream_id"], self.now()
         if action == "status":
@@ -59,7 +59,7 @@ class FeatureTools:
             self.living.check_influence(session, kwargs.get("user_id", ""), affected)
             return self.living.adjust(now, reason, unavailable_until)
         if action == "save_thread":
-            return self.continuity.save_thread(title, context, session, due_at, now, record_id)
+            return self.continuity.save_thread(title, context, session, due_at, now, record_id, expires_at=expires_at)
         if action == "resolve_thread":
             return self.continuity.resolve_thread(record_id, session, now)
         raise ValueError("未知生活接续操作")

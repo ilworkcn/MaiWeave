@@ -55,6 +55,9 @@ async def test_reminders_use_existing_limits_and_do_not_repeat(plugin):
     await plugin.living.share(now)
     call = plugin.ctx.maisaka.proactive.trigger.await_args
     assert call.args[0] == "chat-a" and "小明的生日" in call.args[1]
+    with plugin.store.db:
+        row = plugin.store.all("share_receipt")[0]
+        plugin.store.put("share_receipt", {**row, "outcome": "实际已发送", "sent_at": now.isoformat()})
     plugin.config.proactive.cooldown_minutes = 1
     await plugin.living.share(now.replace(hour=14))
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 1

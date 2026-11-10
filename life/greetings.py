@@ -64,7 +64,7 @@ class Greetings:
             target = profile.get("person_id") or f"{stream['platform']}:{profile['user_id']}"
         key = f"{target}:{now.date().isoformat()}:{window['kind']}"
         receipts = self.store.all("share_receipt")
-        if any(row.get("greeting_key") == key for row in receipts):
+        if any(row.get("greeting_key") == key and (row.get("sent_at") or row["outcome"] in {"MaiBot 已受理", "生成中"}) for row in receipts):
             return None
         words = "早安|早上好" if window["kind"] == "早安" else "晚安"
         if any(self.engine.time(m["timestamp"]).date() == now.date()
@@ -82,4 +82,7 @@ class Greetings:
                   "想说时用一两句自然的话，可以接昨天的话题或当天的小感受；选择沉默时调用 stop。"
                   f"最近聊天：{json.dumps(context, ensure_ascii=False)}。"
                   f"最近同类问候实际发送时间：{[row['sent_at'] for row in previous]}。")
+        if self.living.config.proactive.mode == "主动表达":
+            intent = (f"{window['reason']}，向对方自然说{window['kind']}，用一两句话接上最近话题。"
+                      f"最近聊天：{json.dumps(context, ensure_ascii=False)}。")
         return {"key": key, "kind": window["kind"], "until": window["until"].isoformat(), "intent": intent}

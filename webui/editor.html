@@ -63,7 +63,7 @@ const schemas={
  place:{label:'生活地点',save:'place',id:'place_id',fields:[['name','地点名称','text',''],['outdoor','室外地点','checkbox',false],['description','地点描述','textarea','']]},
  route:{label:'地点路线',save:'route',fields:[['origin','起点','places',''],['destination','终点','places',''],['minutes','耗时（分钟）','number',15],['mode','出行方式',{步行:'步行',骑行:'骑行',公交:'公交',地铁:'地铁',驾车:'驾车'},'步行']]},
  experience:{label:'生活经历',save:'experience',id:'experience_id',editOnly:true,fields:[['summary','经历摘要','textarea',''],['evidence','本次补充或更正的依据','textarea',''],['detail_key','细节项目（选填）','text',''],['detail_value','细节内容','textarea','']]},
- thread:{label:'跟进话题',save:'thread',id:'thread_id',fields:[['title','话题','text',''],['context','具体内容','textarea',''],['due_at','跟进时间','datetime-local',''],['session_id','所属聊天流','chats','']]}
+ thread:{label:'跟进话题',save:'thread',id:'thread_id',fields:[['title','话题','text',''],['context','具体内容','textarea',''],['due_at','跟进时间（必填）','datetime-local',''],['expires_at','截止时间（选填，默认24小时后）','datetime-local',''],['session_id','所属聊天流','chats','']]}
 };
 let chatChoices=[];let data={records:[],profiles:[],places:[]},selected=null,category='profile';
 function message(text){$('status').textContent=text}

@@ -3,6 +3,7 @@
 import json
 import re
 import hashlib
+from uuid import uuid4
 from collections import deque
 from datetime import datetime, timedelta
 
@@ -500,8 +501,67 @@ class Living:
             return event, f"优先选择近24小时向本聊天流较少分享且有接话的活动：{activity}，重复权重{counts.get(activity, 0)}；尚待回应的话题留出更多间隔"
         return None, ""
 
+    def share_ready(self, record_id, session, now):
+        rows = [r for r in self.engine.store.all("share_receipt") if r["session"] == session and r.get("record_id") == record_id]
+        if any(r.get("sent_at") or r["outcome"] in {"MaiBot 已受理", "生成中"} for r in rows):
+            return False
+        return not rows or now >= max(self.engine.time(r.get("finished_at") or r["created"]) for r in rows) + timedelta(minutes=self.config.proactive.retry_minutes)
+
+    def settle_shares(self):
+        """实际发送后登记分享索引，跟进记录保留最近一次发送时间。"""
+        store = self.engine.store
+        with store.db:
+            for row in store.all("share_receipt"):
+                if not row.get("sent_at") or not row.get("record_id") or row.get("settled"):
+                    continue
+                sent = store.find("sharing", row["session"]) or {"id": row["session"], "experience_ids": []}
+                field = "notice_ids" if row.get("notice") else "experience_ids"
+                if row["record_id"] not in sent.setdefault(field, []):
+                    sent[field].append(row["record_id"])
+                    store.put("sharing", sent)
+                thread = store.find("thread", row.get("thread_id", ""))
+                if thread and self.thread_key(thread) == row["record_id"] and not thread["requested_at"]:
+                    thread["requested_at"] = row["sent_at"]
+                    store.put("thread", thread)
+                row["settled"] = True
+                store.put("share_receipt", row)
+
+    @staticmethod
+    def thread_key(item):
+        return f"thread:{item['id']}:{item.get('updated_at', item['due_at'])}"
+
+    def share_summary(self, now):
+        """按接收聊天流展示额度、待办和最近判断。"""
+        cfg, store = self.config.proactive, self.engine.store
+        result = []
+        for session in dict.fromkeys([*cfg.session_ids, *(p["session_id"] for p in store.all("profile"))]):
+            times = self.receipts.sent_times(session, now.tzinfo)
+            history = sorted([r for r in [*self.share_decisions, *store.all("share_receipt")] if r["session"] in {session, "全部"}], key=lambda r: r["created"], reverse=True)
+            latest = next((r for r in history if r["session"] in {session, "全部"}), {})
+            pending = []
+            for item in store.all("thread"):
+                end = self.engine.time(item.get("expires_at") or item["due_at"]) + (timedelta() if item.get("expires_at") else timedelta(days=1))
+                if item["session_id"] != session or item["status"] != "open" or item["requested_at"] or end <= now:
+                    continue
+                at = self.engine.time(item["due_at"])
+                receipts = [r for r in store.all("share_receipt") if r["session"] == session and r.get("record_id") == self.thread_key(item)]
+                waiting = any(r["outcome"] in {"MaiBot 已受理", "生成中"} for r in receipts)
+                attempts = [self.engine.time(r.get("finished_at") or r["created"]) for r in receipts]
+                if attempts:
+                    at = max(at, max(attempts) + timedelta(minutes=cfg.retry_minutes))
+                if times:
+                    at = max(at, max(times) + timedelta(minutes=cfg.cooldown_minutes))
+                pending.append({"title": item["title"], "next_at": at.isoformat(), "expires_at": end.isoformat(), "status": "等待发送回执" if waiting else "等待判断"})
+            result.append({"session": session, "sent": sum(t.date() == now.date() for t in times), "limit": cfg.daily_limit,
+                           "pending": sorted(pending, key=lambda r: r["next_at"]),
+                           "last": latest.get("delivery") or latest.get("reason") or "等待首次判断"})
+        return result
+
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine
+        self.continuity.expire_threads(now)
+        await self.receipts.refresh(now)
+        self.settle_shares()
         if not config.enabled:
             return
 
@@ -518,7 +578,6 @@ class Living:
         if self.sleeping(now) or (current and current["kind"] in {"sleep", "work", "study"}):
             record("跳过", f"正在{current['title']}" if current else "角色正在睡眠")
             return
-        await self.receipts.refresh(now)
         sessions = dict.fromkeys([*config.session_ids, *(p["session_id"] for p in engine.store.all("profile"))])
         if not sessions:
             record("跳过", "请在个人资料或额外接收列表中选择聊天流")
@@ -555,7 +614,8 @@ class Living:
             in_window = [e for e in engine.store.all("experience") if engine.visible(e, session)
                          and timedelta() <= now - engine.time(e["occurred_at"]) < timedelta(hours=6)]
             unseen = [e for e in in_window if e["id"] not in sent["experience_ids"]]
-            available = [e for e in unseen if not self.pending_share_result(e)]
+            finished = [e for e in unseen if not self.pending_share_result(e)]
+            available = [e for e in finished if self.share_ready(e["id"], session, now)]
             best = max(available, key=lambda e: (e["importance"], engine.time(e["occurred_at"])), default=None)
             threshold = config.share_threshold
             event, selection_reason = self.select_share(available, session, now)
@@ -563,7 +623,7 @@ class Living:
             score = (f"《{best['summary'][:48]}》{best['importance']}/10 分，门槛 {threshold} 分。{best['score_reason']}"
                      if best else "本轮没有可评分的经历")
             screening = (f"近六小时内 {len(in_window)} 条经历，{len(in_window) - len(unseen)} 条已向本聊天流请求分享，"
-                         f"{len(unseen) - len(available)} 条等待笔记或活动回顾")
+                         f"{len(unseen) - len(finished)} 条等待笔记或活动回顾，{len(finished) - len(available)} 条等待再次判断")
             notices = []
             for item in Anniversaries(engine.store).upcoming(now.date(), session):
                 if item["enabled"] and item["days_left"] == 0:
@@ -580,14 +640,14 @@ class Living:
                     notices.append((f"confirmation:{plan['id']}", f"之前约好的{plan['title']}已经过了计划时间，完成情况尚未确认。可以问问对方实际进展，再根据回复更新记录。", None))
             for item in engine.store.all("thread"):
                 if item["session_id"] == session and item["status"] == "open" and not item["requested_at"] and engine.time(item["due_at"]) <= now:
-                    notices.append((f"thread:{item['id']}", f"接续此前的话题：{item['title']}。已有上下文：{item['context']}。结合最近聊天跟进仍待解决的部分；已经解决时结束该话题。", item))
+                    notices.append((self.thread_key(item), f"接续此前的话题：{item['title']}。已有上下文：{item['context']}。结合最近聊天跟进仍待解决的部分；已经解决时结束该话题。", item))
             for item in engine.store.all("schedule_issue"):
                 if item["session_id"] == session:
                     notices.append((f"issue:{item['id']}:{item['reason']}", f"安排需要调整：{item['title']}。原因：{item['reason']}。说明当前待调整的状态。", None))
-            notices = [n for n in notices if n[0] not in sent.get("notice_ids", [])]
+            notices = [n for n in notices if n[0] not in sent.get("notice_ids", []) and self.share_ready(n[0], session, now)]
             if not ordinary_hours:
                 notices, event = [], None
-            if greeting and not notices and (not event or event["importance"] < 7):
+            if greeting and self.share_ready("greeting:" + greeting["key"], session, now) and not notices and (not event or event["importance"] < 7):
                 notices.append(("greeting:" + greeting["key"], greeting["intent"], None))
             else:
                 greeting = None
@@ -616,14 +676,15 @@ class Living:
             else:
                 reason = f"{topic}：{screening}。{selection_reason}"
             row = {"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
+                   "record_id": record_id, "notice": bool(notices), "thread_id": notices[0][2]["id"] if notices and notices[0][2] else "",
                    "reason": reason, "score": score, "mode": config.mode,
                    "topic": notices[0][1][:400] if notices else event["summary"][:400],
                    "experience_id": event["id"] if not notices else "",
                    "share_activity": self.share_activity(event) if not notices else ""}
             if greeting:
-                row.update(mode="自然交流", greeting_key=greeting["key"], greeting_kind=greeting["kind"],
+                row.update(greeting_key=greeting["key"], greeting_kind=greeting["kind"],
                            greeting_until=greeting["until"], score="作息问候，按近期互动与关系判断")
-            if config.mode == "主动表达" and not greeting:
+            if config.mode == "主动表达":
                 await self.receipts.express(session, intent, row, now)
             else:
                 try:
@@ -634,16 +695,8 @@ class Living:
                         raise RuntimeError(result.get("error") or "主动交流请求失败")
                 except Exception as error:
                     record("请求失败", f"{reason}。MaiBot 返回：{error}", session, score)
+                    with engine.store.db:
+                        engine.store.put("share_receipt", {**row, "id": "failed:" + uuid4().hex, "created": now.isoformat(), "finished_at": datetime.now(now.tzinfo).isoformat(), "outcome": "请求失败", "delivery": str(error), "calls": {}})
                     raise
                 self.receipts.accept(result["task_id"], row, now)
-            if notices:
-                sent.setdefault("notice_ids", []).append(notices[0][0])
-                if notices[0][2]:
-                    item = notices[0][2]
-                    item["requested_at"] = now.isoformat()
-                    with engine.store.db:
-                        engine.store.put("thread", item)
-            else:
-                sent["experience_ids"].append(event["id"])
-            with engine.store.db:
-                engine.store.put("sharing", sent)
+            self.settle_shares()

@@ -2,6 +2,7 @@
 
 import json
 import re
+import asyncio
 from uuid import uuid4
 from datetime import datetime, timedelta
 
@@ -40,6 +41,11 @@ class ShareReceipts:
         self.ctx = ctx
         self.turn = {}
         self.incoming = {}
+        with store.db:
+            for row in store.all("share_receipt"):
+                if row["outcome"] == "生成中":
+                    row.update(outcome="已中断", delivery="上次生成随插件停止而中断", finished_at=datetime.now().astimezone().isoformat())
+                    store.put("share_receipt", row)
 
     def accept(self, task, row, now):
         with self.store.db:
@@ -75,10 +81,14 @@ class ShareReceipts:
             sent_at = datetime.now(now.tzinfo)
             row.update(outcome="实际已发送", delivery=f"{sent_at:%H:%M:%S} 已确认投递",
                        sent_at=sent_at.isoformat(), message_id=result["message_id"])
+        except asyncio.CancelledError:
+            row.update(outcome="已中断", delivery="生成或发送随插件停止而中断")
+            raise
         except Exception as error:
             row.update(outcome=stage, delivery=str(error))
             raise
         finally:
+            row["finished_at"] = datetime.now(now.tzinfo).isoformat()
             with self.store.db:
                 self.store.put("share_receipt", row)
 
@@ -88,7 +98,8 @@ class ShareReceipts:
         if not row or row["session"] != session or row["outcome"] != "MaiBot 已受理":
             return
         if not any(item.get("item_type") == "FunctionCallItem" for item in items) and not row["calls"]:
-            row.update(outcome="Planner 未调用工具", delivery=output_summary(items) + "。本轮尚无发送回执")
+            row.update(outcome="Planner 未调用工具", delivery=output_summary(items) + "。本轮尚无发送回执",
+                       finished_at=datetime.now().astimezone().isoformat())
         for item in items:
             call = item.get("tool_call", {})
             if item.get("item_type") == "FunctionCallItem" and call.get("func_name") in {"stop", "reply", "send_emoji"}:
@@ -134,6 +145,8 @@ class ShareReceipts:
                     row.update(outcome="发送失败", delivery=failure)
                 elif now - datetime.fromisoformat(row["created"]) > timedelta(hours=1):
                     row.update(outcome="未确认结果", delivery="尚无已发送或 stop 的回执")
+            if row["outcome"] != "MaiBot 已受理":
+                row["finished_at"] = now.isoformat()
             latest = self.store.get("share_receipt", row["id"])
             if latest["outcome"] == "MaiBot 已受理" and latest["calls"] == row["calls"] and latest != row:
                 with self.store.db:

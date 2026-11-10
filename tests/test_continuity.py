@@ -237,8 +237,8 @@ async def test_reminder_and_followup_request_are_once_only(plugin):
     await plugin.living.share(now + timedelta(minutes=2))
     await plugin.living.share(now + timedelta(minutes=4))
     assert plugin.ctx.maisaka.proactive.trigger.await_count == 2
-    assert plugin.store.get("thread", thread["id"])["requested_at"]
-    assert any(plan["id"] in key for key in plugin.store.get("sharing", "a")["notice_ids"])
+    assert plugin.store.get("thread", thread["id"])["requested_at"] == ""
+    assert not plugin.store.all("sharing")
 
 
 async def test_continuity_webui_and_context_show_saved_state(plugin):

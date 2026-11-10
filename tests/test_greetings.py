@@ -30,7 +30,7 @@ async def prepare(plugin, kind="晚安", group=False):
 @pytest.mark.parametrize("kind", ["早安", "晚安"])
 async def test_natural_greetings_use_planner_and_persist_once(plugin, kind):
     now = await prepare(plugin, kind)
-    plugin.config.proactive.mode = "主动表达"
+    plugin.config.proactive.mode = "自然交流"
     await plugin.living.share(now)
     plugin.ctx.maisaka.proactive.trigger.assert_awaited_once()
     receipt, = plugin.store.all("share_receipt")
@@ -124,9 +124,10 @@ async def test_greeting_request_failure_can_retry(plugin):
     now=await prepare(plugin)
     plugin.ctx.maisaka.proactive.trigger.return_value={"success":False,"error":"请求失败"}
     with pytest.raises(RuntimeError): await plugin.living.share(now)
-    assert plugin.store.all("share_receipt")==[]
+    assert plugin.store.all("share_receipt")[0]["outcome"] == "请求失败"
+    plugin.config.proactive.retry_minutes = 1
     plugin.ctx.maisaka.proactive.trigger.return_value={"success":True,"task_id":"retry"}
-    await plugin.living.share(now)
+    await plugin.living.share(now + timedelta(minutes=1))
     assert plugin.store.get("share_receipt","retry")["greeting_kind"]=="晚安"
 
 
@@ -156,7 +157,7 @@ async def test_conversation_greeting_and_person_deduplication(plugin):
     plugin.ctx.db.get.return_value[0]["processed_plain_text"]="今天聊得开心"
     with plugin.store.db:
         plugin.store.put("share_receipt",{"id":"other-stream","session":"another","created":now.isoformat(),
-            "outcome":"Planner 选择沉默","greeting_key":f"qq:u:{now.date().isoformat()}:晚安"})
+            "outcome":"实际已发送","sent_at":now.isoformat(),"greeting_key":f"qq:u:{now.date().isoformat()}:晚安"})
     assert await plugin.living.greetings.candidate("a",now,window) is None
 
 

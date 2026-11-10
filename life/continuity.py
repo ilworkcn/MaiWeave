@@ -209,17 +209,30 @@ class Continuity:
                 return goal, step
         return None
 
-    def save_thread(self, title, context, session, due_at, now, thread_id="", source_ref=""):
+    def save_thread(self, title, context, session, due_at, now, thread_id="", source_ref="", expires_at=""):
         if not title.strip() or not context.strip():
             raise ValueError("跟进事项需要标题和具体上下文")
         due = self.engine.time(due_at)
+        expires = self.engine.time(expires_at) if expires_at else due + timedelta(days=1)
+        if expires <= due or expires <= now:
+            raise ValueError("跟进截止时间应晚于跟进时间和当前时间")
         old = self.engine.owned("thread", thread_id, session) if thread_id else None
         record = {"id": thread_id or uid(), "session_id": session, "title": title, "context": context,
                   "due_at": due.isoformat(), "created_at": old["created_at"] if old else now.isoformat(),
-                  "status": "open", "source_ref": source_ref, "requested_at": ""}
+                  "status": "open", "source_ref": source_ref or (old or {}).get("source_ref", ""), "requested_at": "",
+                  "expires_at": expires.isoformat(), "updated_at": now.isoformat()}
         with self.engine.store.db:
             self.engine.store.put("thread", record)
         return record
+
+    def expire_threads(self, now):
+        """到期话题结束主动跟进，按运行记录保留规则清理。"""
+        with self.engine.store.db:
+            for record in self.engine.store.all("thread"):
+                end = self.engine.time(record.get("expires_at") or record["due_at"]) + (timedelta() if record.get("expires_at") else timedelta(days=1))
+                if record["status"] == "open" and end <= now:
+                    record.update(status="expired", resolved_at=end.isoformat())
+                    self.engine.store.put("thread", record)
 
     def resolve_thread(self, thread_id, session, now):
         record = self.engine.owned("thread", thread_id, session)

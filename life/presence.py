@@ -10,16 +10,19 @@ class Presence:
         self.engine = living.engine
         self.store = self.engine.store
 
-    def declare(self, session, user, status, now):
+    def declare(self, session, user, status, now, until=""):
         person = self.living.person_key(session, user)
         hours = {"准备睡觉": 12, "忙碌": 4, "外出": 6, "空闲": 2}
         if status not in hours:
             raise ValueError("请选择准备睡觉、忙碌、外出或空闲")
         if not person:
             raise ValueError("请先关联当前发言人的 MaiBot 人物身份")
+        expires = self.engine.time(until) if until else now + timedelta(hours=hours[status])
+        if expires <= now:
+            raise ValueError("近况结束时间应晚于当前时间")
         record = {"id": person, "status": status, "source": "reported", "session_id": session,
                   "user_id": user, "said_at": now.isoformat(),
-                  "expires_at": (now + timedelta(hours=hours[status])).isoformat(),
+                  "expires_at": expires.isoformat(),
                   "activity": {session: {"user_id": user, "at": now.isoformat()}}}
         with self.store.db:
             self.store.put("person_state", record)

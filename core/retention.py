@@ -79,7 +79,7 @@ class Retention:
             rows = store.all(category)
             protected = set()
             for row in rows:
-                if category == "job" and row["status"] == "进行中" or category == "review" and row["status"] not in {"已保存", "已取消", "失败"} or category == "share_receipt" and (row["outcome"] in {"MaiBot 已受理", "生成中"} or self.time(row.get("sent_at") or row[field]) >= now - timedelta(minutes=max(1440, self.config.proactive.cooldown_minutes))):
+                if category == "job" and row["status"] == "进行中" or category == "review" and row["status"] not in {"已保存", "已取消", "失败"} or category == "share_receipt" and (row["outcome"] in {"MaiBot 已受理", "生成中"} or self.time(row.get("sent_at") or row[field]) >= now - timedelta(minutes=max(1440, self.config.proactive.cooldown_minutes, self.config.proactive.retry_minutes))):
                     protected.add(row["id"])
             delete[category] = select(rows, cfg.log_days, cfg.log_count, field, protected)
             summary.append(dict(category=category, label=label, total=len(rows), days=cfg.log_days, limit=cfg.log_count, protected=len(protected), remove=len(delete[category])))
@@ -92,7 +92,7 @@ class Retention:
         ):
             rows = store.all(category)
             if category == "thread":
-                rows = [r for r in rows if r["status"] == "resolved"]
+                rows = [r for r in rows if r["status"] in {"resolved", "expired"}]
             protected = {r["id"] for r in rows if category == "effect" and r["status"] == "active"}
             delete[category] = select(rows, days, count, field, protected)
             summary.append(dict(category=category, label=label, total=len(rows), days=days,
@@ -102,6 +102,29 @@ class Retention:
         summary.append(dict(category="person_state", label="人物近况", total=len(states), days=0,
                             limit=0, protected=len(states)-len(delete["person_state"]),
                             remove=len(delete["person_state"]), policy="到期清理"))
+        # 分享索引只保存仍可能成为候选的内容。
+        valid_notices = set()
+        for row in store.all("thread"):
+            if row["status"] == "open":
+                valid_notices.update(("thread:" + row["id"], f"thread:{row['id']}:{row.get('updated_at', row['due_at'])}"))
+        for row in plans:
+            if row["status"] in {"scheduled", "active"}:
+                valid_notices.add(f"reminder:{row['id']}:{row['start']}")
+            if row["status"] == "awaiting_confirmation":
+                valid_notices.add(f"confirmation:{row['id']}")
+        valid_notices.update(f"issue:{r['id']}:{r['reason']}" for r in store.all("schedule_issue") if r["id"] not in delete["plan"])
+        sharing_updates = {}
+        for row in store.all("sharing"):
+            notices = [key for key in row.get("notice_ids", []) if key in valid_notices or
+                       key.startswith("anniversary:") and key.rsplit(":", 1)[-1] >= now.date().isoformat() or
+                       key.startswith("greeting:") and key.rsplit(":", 2)[-2] >= now.date().isoformat()]
+            events_in_window = {e["id"] for e in events if self.time(e["occurred_at"]) >= now - timedelta(hours=6)}
+            experiences = [key for key in row.get("experience_ids", []) if key in events_in_window]
+            if notices != row.get("notice_ids", []) or experiences != row.get("experience_ids", []):
+                sharing_updates[row["id"]] = {**row, "notice_ids": notices, "experience_ids": experiences}
+        self.sharing_updates = sharing_updates
+        summary.append(dict(category="sharing_index", label="旧分享索引", total=sum(len(r.get("notice_ids", [])) + len(r.get("experience_ids", [])) for r in store.all("sharing")), days=0, limit=0, protected=0,
+                            remove=sum(len(store.get("sharing", key).get("notice_ids", [])) + len(store.get("sharing", key).get("experience_ids", [])) - len(row["notice_ids"]) - len(row["experience_ids"]) for key, row in sharing_updates.items()), policy="话题到期清理"))
         for category in ("news", "research", "reading"):
             rows = store.all(category, omit=("content", "results"))
             delete[category] = select(rows, cfg.world_days, cfg.world_count, "retrieved_at", set())
@@ -139,6 +162,11 @@ class Retention:
         delete, histories, summary = self.collect(now)
         store = self.store
         with store.db:
+            for row in self.sharing_updates.values():
+                if row["notice_ids"] or row["experience_ids"]:
+                    store.put("sharing", row)
+                else:
+                    store.delete("sharing", row["id"])
             for plan_id in delete["plan"]:
                 note = store.find("book_note", plan_id)
                 if note:

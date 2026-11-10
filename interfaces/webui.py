@@ -309,6 +309,7 @@ class WebUI:
     @API("ui_overview", description="生活状态和趋势")
     async def ui_overview(self) -> dict:
         await self.living.receipts.refresh(self.now())
+        self.living.settle_shares()
         now, state = self.now(), self.engine.state()
         current = self.engine.current(now)
         plans = self.store.all("plan", omit=('changes',))
@@ -342,6 +343,7 @@ class WebUI:
                 "planning_history": decisions,
                 "share_status": f"已启用 · {self.config.proactive.mode}" if self.config.proactive.enabled else "已关闭",
                 "share_decisions": self.living.receipts.history(self.living.share_decisions),
+                "share_summary": self.living.share_summary(now),
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
                 "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",
                 "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "当前没有陪伴时段",
@@ -684,8 +686,9 @@ class WebUI:
             "preferences": [{**p, "evidence": "、".join(p["evidence_ids"])} for p in self.store.all("preference")],
             "continuations": [{**p, "next_date": p.get("next_date") or "有兴致时", "progress_status": "已完成" if p.get("completed", False) else "进行中", "details_text": json.dumps(p["details"], ensure_ascii=False)} for p in self.store.all("activity_memory")],
             "effects": [{**e, "status_label": {"active": "持续影响中", "expired": "已消退", "resolved": "已解决"}[e["status"]]} for e in self.store.all("effect")],
-            "threads": [{**t, "status_label": "待跟进" if t["status"] == "open" else "已解决",
-                         "request_label": "已向 MaiBot 请求跟进" if t["requested_at"] else "尚未请求"} for t in self.store.all("thread")],
+            "threads": [{**t, "status_label": {"open": "待跟进", "resolved": "已解决", "expired": "已到期"}[t["status"]],
+                         "request_label": "已发起跟进" if t["requested_at"] else "等待合适时机" if t["status"] == "open" else "已结束跟进",
+                         "expires_at": t.get("expires_at") or (self.engine.time(t["due_at"]) + timedelta(days=1)).isoformat()} for t in self.store.all("thread")],
             "goals": [{**g, "outline_status": g.get("outline_status", "待分解"), "outline_error": g.get("outline_error", ""), "status_label": STATUS[g["status"]]} for g in goals],
             "steps": [{**s, "goal_title": g["title"], "status_label": "进行中" if s["id"] in active_steps else {"pending": "未开始", "active": "进行中", "completed": "已完成"}[s["status"]]} for g in goals for s in g.get("steps", [])],
             "jobs": self.store.all("job")[-10:],
@@ -709,11 +712,11 @@ class WebUI:
         return {"adjustments": self.living.adjust(self.now(), reason, unavailable_until)}
 
     @API("ui_save_thread", description="保存需要接续的话题")
-    async def ui_save_thread(self, title: str, context: str, due_at: str, session_id: str, thread_id: str = "") -> dict:
+    async def ui_save_thread(self, title: str, context: str, due_at: str, session_id: str, thread_id: str = "", expires_at: str = "") -> dict:
         self.require_life()
         if thread_id:
             session_id = self.store.get("thread", thread_id)["session_id"]
-        return self.continuity.save_thread(title, context, session_id, due_at, self.now(), thread_id)
+        return self.continuity.save_thread(title, context, session_id, due_at, self.now(), thread_id, expires_at=expires_at)
 
     @API("ui_resolve_thread", description="关闭已经解决的跟进事项")
     async def ui_resolve_thread(self, thread_id: str) -> dict:
