@@ -23,6 +23,9 @@ with sync_playwright() as p:
         for row in data['share_summary']:
             page.locator('#shareSummary').get_by_role('heading', name=row['session_name'], exact=True).first.wait_for()
             assert not page.locator('#shareSummary').get_by_text(row['session'], exact=True).is_visible()
+        assert page.locator('#shareMode').inner_text() == '当前主动交流模式：' + data['share_settings']['mode']
+        if data['share_settings']['mode'] == '自然交流':
+            assert '可能选择静默，本轮不发送消息' in page.locator('#shareContext').inner_text()
         assert '预计下次检查' in page.locator('#shareSettings').inner_text()
         assert '最近判断' in page.locator('#shareSummary').inner_text()
         assert not errors, errors

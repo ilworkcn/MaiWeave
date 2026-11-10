@@ -94,6 +94,6 @@ async def test_native_upgrade_adds_nap_setting_and_preserves_values(plugin):
     assert upgraded["life"]["wake_minutes"] == 35
     assert upgraded["life"]["sleep_hour"] == 22
     assert upgraded["life"]["wake_hour"] == 6
-    assert upgraded["plugin"]["config_version"] == "0.11.0"
+    assert upgraded["plugin"]["config_version"] == "0.11.1"
     upgraded["life"]["nap_quiet"] = False
     assert rebuild_plugin_config_data(defaults, upgraded)["life"]["nap_quiet"] is False

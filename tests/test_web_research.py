@@ -178,7 +178,7 @@ async def test_upgrade_preserves_settings_and_adds_world_defaults(plugin):
         old['retention'].pop(key)
     from maibot_sdk.config import rebuild_plugin_config_data
     upgraded=rebuild_plugin_config_data(plugin.get_default_config(),old)
-    assert upgraded['plugin']['config_version']=='0.11.0'
+    assert upgraded['plugin']['config_version']=='0.11.1'
     assert upgraded['world']['search_enabled'] and upgraded['life']['interests']==['画画']
     assert upgraded['world']['explore_daily_limit']==3
     assert upgraded['world']['explore_interval_minutes']==180
