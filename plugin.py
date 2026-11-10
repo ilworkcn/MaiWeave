@@ -69,7 +69,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         groups = [
             ("life", "life", "生活开关", "控制生活推进与自主活动。", ["enabled", "autonomous"]),
             ("profile", "life", "角色设定", "时区已有默认值，背景和兴趣按需补充。", ["timezone", "interests", "background"]),
-            ("sleep", "life", "日常作息", "关闭作息可全天候交流；开启后按 24 小时制安排睡眠。", ["schedule_enabled", "sleep_hour", "wake_hour"]),
+            ("sleep", "life", "日常作息", "关闭作息可全天候交流；开启后按 24 小时制安排睡眠。", ["schedule_enabled", "nap_quiet", "sleep_hour", "wake_hour"]),
             ("wake", "life", "睡眠唤醒", "设置能唤醒角色的词语和醒来后留给聊天的时间。", ["wake_enabled", "wake_minutes", "wake_keywords"]),
             ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
@@ -271,7 +271,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     @HookHandler("send_service.before_send")
     async def sleep_before_send(self, message: dict, storage_message: bool = True, **kwargs):
-        if storage_message and self.living.sleeping(self.now()):
+        if storage_message and self.living.quiet_sleep(self.now()):
             self.ctx.logger.info("MaiWeave 正在睡眠，本次聊天发言已暂停：%s", message["session_id"])
             return {"action": "abort"}
         return {"action": "continue"}
@@ -310,7 +310,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.living.receipts.observe(session_id, output_items)
         if not any(item.get("item_type") == "FunctionCallItem" for item in output_items):
             self.ctx.logger.info("MaiWeave Planner 响应 [%s]：%s；睡眠静默=%s",
-                                 session_id, output_summary(output_items), self.living.sleeping(self.now()))
+                                 session_id, output_summary(output_items), self.living.quiet_sleep(self.now()))
         return {"action": "continue"}
 
     @HookHandler("maisaka.replyer.before_request")
@@ -546,7 +546,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.10.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.10.3\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

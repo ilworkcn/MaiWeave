@@ -8,12 +8,12 @@ from copy import deepcopy
 GUIDE = (
     "\n【MaiWeave 当前生活】\n"
     "时间参照 now、timezone；计划是安排，simulated 为模拟，reported 为陈述，observed 为观测。"
-    "用 maiweave 工具保存生活变化并按结果接话；生活记录查 maiweave_query，人物历史查 MaiBot query_memory。"
+    "用 maiweave 工具保存变化；记录查 maiweave_query，人物历史查 query_memory。"
     "资料冲突说明修改 ID，明确同意后用 maiweave_confirm_change。"
-    "sleep_policy.sleeping=true 时静默；清醒时闭目休息、阅读等活动可正常聊天。需要陪伴或请求醒来时用 maiweave_wake，awake=true 后回应，awake=false 时结束本轮。群私聊一致。本轮提供 reply 工具时，回复须实际调用它；after_reply=stop 表示发送后结束。静默按 MaiBot 当前模式处理。"
-    "person_states 中准备睡觉是当时的打算，same_chat=false 时只承接近况。shared_topics 是实际分享，接话用 maiweave_share_followup 关联 ID。"
-    "读书按书名与已完成笔记接话，原文与感想分别表述；更多笔记用 maiweave_books 的 notes 和 book_id，安排阅读也填写 book_id。"
-    "跨地点安排用 maiweave_space 查路线，接续目标填写 goal_step_id；梦境以梦见表述，资讯带出处。\n"
+    "sleep_policy.quiet=true 时静默，否则可聊；清醒时闭目休息、阅读等活动可正常聊天。请求陪伴或醒来用 maiweave_wake，awake=true 后回应，静默时 awake=false 时结束本轮。醒来后接上当前话题。群私聊一致。本轮提供 reply 工具时，回复须实际调用它；after_reply=stop 表示发送后结束。静默按 MaiBot 当前模式处理。"
+    "person_states 是当时近况，same_chat=false 时承接近况。shared_topics 是实际分享，接话用 maiweave_share_followup 关联 ID。"
+    "读书沿用书名和笔记，原文与感想分别表述；查笔记用 maiweave_books 的 notes、book_id，安排阅读填 book_id。"
+    "跨地点用 maiweave_space 查路线，目标填 goal_step_id；梦境说梦见，资讯带出处。\n"
 )
 
 LABELS = {"pending_changes": "资料确认", "person_states": "人物近况", "shared_topics": "分享接话",
@@ -96,9 +96,27 @@ class ChatContext:
         awake = p.living.awake_until(now) if p.config.life.schedule_enabled else None
         snapshot = {"now": now.isoformat(timespec="minutes"), "timezone": engine.timezone,
                     "state": {k: state[k] for k in ("location", "energy", "mood")}, "current": current,
-                    "sleep_policy": {"sleeping": p.living.sleeping(now), "mode": "按作息生活" if p.config.life.schedule_enabled else "全天候交流",
+                    "sleep_policy": {"sleeping": p.living.sleeping(now), "quiet": p.living.quiet_sleep(now), "mode": "按作息生活" if p.config.life.schedule_enabled else "全天候交流",
                                      "awake_until": awake.isoformat() if awake else ""}}
         snapshot = brief(snapshot, 80, 3)
+        pending = [{k: r[k] for k in ("id", "action", "conflicts")} for r in store.all("review")
+                   if r["session_id"] == session and r["status"] == "待确认"]
+        confirmation = {"pending_changes": [{k: r[k] for k in ("id", "action")} for r in pending[:1]]} if pending else {}
+        if len(GUIDE) + len(dump({**snapshot, **confirmation})) > budget:
+            # 小预算优先保留操作关联，地点共用状态中的名称，展示文字取短摘要。
+            current = snapshot["current"]
+            if current.get("location") == snapshot["state"]["location"]:
+                current.pop("location", None)
+            current.pop("status", None)
+            if current.get("end"):
+                current["end"] = engine.time(current["end"]).isoformat(timespec="minutes")
+            if awake:
+                snapshot["sleep_policy"]["awake_until"] = awake.isoformat(timespec="minutes")
+            for fields, names in ((current, ("title", "summary", "location")), (snapshot["state"], ("location",))):
+                for name in names:
+                    excess = len(GUIDE) + len(dump({**snapshot, **confirmation})) - budget
+                    if name in fields and excess > 0:
+                        fields[name] = brief(fields[name], max(8, len(fields[name]) - excess - 1), 1)
         base_chars = len(GUIDE) + len(dump(snapshot))
         candidates = []
         def add(key, value, relevant=False):
@@ -117,8 +135,7 @@ class ChatContext:
         discoveries = p.world.discoveries(session, text) if cfg.environment else []
         world_topic = world_topic or any(r["relevant"] for r in discoveries)
         # 确认中的修改始终带上 ID，供当前对话继续确认流程。
-        add("pending_changes", [{k: r[k] for k in ("id", "action", "conflicts")} for r in rows("review")
-                                if r["session_id"] == session and r["status"] == "待确认"], True)
+        add("pending_changes", pending, True)
         if cfg.people:
             add("person_states", people(p.presence.context(session, now)), True)
         if cfg.sharing and p.config.proactive.enabled:

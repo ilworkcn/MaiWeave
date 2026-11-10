@@ -60,6 +60,11 @@ class Living:
         wake = self.engine.store.find("runtime", "awakening")
         return bool(wake and wake.get("sleep_end") and self.engine.time(wake["sleep_end"]) > now)
 
+    def quiet_sleep(self, now):
+        """按实际睡眠状态和作息设置决定本轮聊天静默。"""
+        config = self.config.life
+        return self.sleeping(now) and (config.nap_quiet or in_hours(now.hour, config.sleep_hour, config.wake_hour))
+
     def resume_sleep(self, now):
         wake = self.engine.store.find("runtime", "awakening")
         if not wake or not wake.get("sleep_end") or self.awake_until(now) or self.engine.current(now):

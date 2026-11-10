@@ -19,7 +19,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.10.1", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.10.3", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -31,6 +31,7 @@ class LifeConfig(PluginConfigBase):
     timezone: str = setting("生活时区（必填）", default="Asia/Shanghai", description="已填中国标准时间，可直接使用；其他地区例如 Asia/Tokyo。")
     model_task: str = setting("生活规划模型任务（必填）", default="utils", description="从 MaiBot 已配置的模型任务中选择，默认 utils；任务选项在插件加载时更新。")
     schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后切换为全天候模式，已有约定继续执行。")
+    nap_quiet: bool = setting("午睡期间保持安静", default=True, description="日间睡眠时保持安静，醒来后接上当前话题。日间按入睡与起床时间之外判断；关闭后可在日间睡眠时回复，唤醒沿用现有设置。")
     wake_enabled: bool = setting("允许聊天唤醒", default=True, description="亲密人物可通过关键词或当前陪伴请求唤醒角色，群聊和私聊共用人物关系。")
     wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项填写一个词。聊天中出现这些词时唤醒角色；可增删默认词，清空词表可关闭匹配。")
     wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="同一个人在群聊或私聊继续聊天都会延长清醒时间；道晚安或时间到期后继续剩余睡眠。")
