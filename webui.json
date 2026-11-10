@@ -1312,6 +1312,20 @@
               "minimum": 1
             }
           }
+        },
+        "chapters": {
+          "api": "ui_book_chapters",
+          "version": "1",
+          "parameters": {
+            "book_id": {
+              "type": "string",
+              "required": true
+            },
+            "page": {
+              "type": "integer",
+              "required": false
+            }
+          }
         }
       },
       "actions": {
@@ -1384,6 +1398,10 @@
             },
             "author": {
               "type": "string",
+              "required": false
+            },
+            "chapter": {
+              "type": "integer",
               "required": false
             }
           }

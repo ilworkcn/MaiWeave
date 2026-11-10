@@ -10,12 +10,13 @@ def parameters(properties, required):
 
 
 class FeatureTools:
-    @Tool("maiweave_books", description="list按page分页查看书目，notes按book_id与page查询已读笔记；page从0开始。select选择当前读物，schedule安排阅读日程，location可指定已有地点，start留空时先出行再阅读。", parameters=parameters({
-        "action": {"type": "string", "enum": ["list", "notes", "select", "schedule"]}, "book_id": {"type": "string"},
+    @Tool("maiweave_books", description="list按page分页查看书目，notes按book_id与page查询已读笔记；page从0开始。select选择下次读物；switch立即换读并沿用剩余时间，chapters分页查看章节，seek从chapter指定的章节读起，skip跳过当前章；chapter从0开始。用户要求换书或跳章时调用对应操作。schedule安排阅读日程，location可指定已有地点，start留空时先出行再阅读。", parameters=parameters({
+        "action": {"type": "string", "enum": ["list", "notes", "select", "schedule", "switch", "chapters", "seek", "skip"]}, "book_id": {"type": "string"},
         "location": {"type": "string", "description": "阅读地点名称，留空使用当前地点"},
+        "chapter": {"type": "integer", "minimum": 0},
         "start": {"type": "string"}, "minutes": {"type": "integer", "enum": [15,30,45,60]}, "page": {"type": "integer"},
     }, ["action"]))
-    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, page: int = 0, location: str = "", **kwargs):
+    async def books_tool(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, page: int = 0, location: str = "", chapter: int = 0, **kwargs):
         self.require_life()
         if action == "list":
             books = [b for b in self.store.all("book") if not b.get("archived")]
@@ -24,6 +25,10 @@ class FeatureTools:
             rows = [n for n in self.store.all("book_note") if n["status"] == "已完成" and (not book_id or n["book_id"] == book_id)]
             rows.sort(key=lambda n: n["finished_at"], reverse=True)
             return {"total": len(rows), "page": max(0, page), "items": [{k: n[k][:500] for k in ("book_id", "book_title", "chapter_title", "summary", "thoughts", "quote", "question")} for n in rows[max(0,page)*2:(max(0,page)+1)*2]]}
+        if action == "chapters":
+            return self.books.chapters(book_id, page)
+        if action in {"switch", "seek", "skip"}:
+            return self.books.navigate(action, book_id, chapter, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""))
         if action == "select":
             return self.books.select(book_id)
         return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), kwargs["stream_id"], kwargs.get("user_id", ""), location=location)

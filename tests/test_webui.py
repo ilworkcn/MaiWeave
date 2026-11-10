@@ -2,6 +2,7 @@
 
 import inspect
 import json
+import pytest
 from datetime import timedelta
 from pathlib import Path
 
@@ -218,13 +219,14 @@ async def test_planning_reason_survives_status_checks(plugin):
     assert failure["planning_history"] == [decision]
 
 
-def test_nested_details_and_pagination_buttons():
+@pytest.mark.parametrize("script", ["webui_details.mjs", "webui_reading.mjs"])
+def test_nested_details_and_pagination_buttons(script):
     import shutil
     import subprocess
     import pytest
     node = shutil.which("node")
     if node is None:
         pytest.skip("页面脚本测试需要 Node.js")
-    result = subprocess.run([node, str(Path(__file__).with_name("webui_details.mjs"))],
+    result = subprocess.run([node, str(Path(__file__).with_name(script))],
                             capture_output=True, text=True, encoding="utf-8")
     assert result.returncode == 0, result.stdout + result.stderr

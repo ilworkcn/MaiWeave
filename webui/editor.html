@@ -24,7 +24,7 @@ dialog{top:calc(var(--maibot-viewport-top,0px) + 88px);bottom:auto;margin:0 auto
 <div class="actions"><button id="previewCleanup" class="maibot-button">预览清理数量</button><button id="cleanup" class="maibot-button" disabled>按预览清理</button></div>
 <p>选中一条经历后，可调整保留方式。</p><div class="actions"><button id="keepExperience" class="maibot-button">长期保留所选经历</button><button id="releaseExperience" class="maibot-button">所选经历按规则保留</button></div></details>
 <section id="connectionPanel" class="panel" hidden><strong>原生记忆连接</strong><p id="connectionState" role="status"></p><p id="connectionDetail" class="maibot-muted"></p><button id="checkMemory" class="maibot-button">重新检查连接</button></section>
-<details id="cityPanel" class="panel" hidden><summary>城市生活地点 · 搜索与收录</summary><p id="cityState" role="status"></p><p id="cityService" class="maibot-muted"></p><p class="maibot-muted">自主活动按需求搜索当地场所，收录后可在日程中选择。新地点与楼下街道之间预设 15 分钟模拟步行，可在「地点路线」中修改。</p><label>活动或地点需求（选填）<input id="cityActivity" class="maibot-input" placeholder="例如：找一家安静的咖啡馆读书"></label><label class="inline-checkbox"><input id="forceCityPlaces" type="checkbox">强制联网刷新（跳过缓存）</label><button id="findCityPlaces" class="maibot-button">搜索并收录城市地点</button></details>
+<details id="cityPanel" class="panel" hidden><summary>城市生活地点 · 搜索与收录</summary><p id="cityState" role="status"></p><p id="cityService" class="maibot-muted"></p><p class="maibot-muted">自主活动按需求搜索当地场所，收录后可在日程中选择。新地点与楼下街道之间预设 15 分钟模拟步行，可在「地点路线」中修改。</p><label>活动或地点需求（选填）<input id="cityActivity" class="maibot-input" placeholder="例如：找一家安静的咖啡馆读书"></label><label class="inline-checkbox"><input id="forceCityPlaces" type="checkbox">强制联网刷新（跳过缓存）</label><div class="actions"><button id="findCityPlaces" class="maibot-button">搜索并收录城市地点</button><button id="manualPlace" class="maibot-button">手动添加地点与路线</button></div></details>
 <section id="bookPanel" class="panel" hidden>
 <h2>我的书架</h2><p id="bookCapacity"></p><p class="maibot-muted">容量设置：插件配置 → 日程与成长 → 书架与阅读。归档书籍保留文件和进度，已有阅读日程继续执行。</p><p class="maibot-muted">上传书籍后，每次阅读从上次位置继续。阅读笔记会进入生活经历、对话与日记。</p>
 <details><summary>上传书籍 · TXT / Markdown / EPUB</summary><div class="fields">
@@ -36,7 +36,8 @@ dialog{top:calc(var(--maibot-viewport-top,0px) + 88px);bottom:auto;margin:0 auto
 <p id="bookStatus" role="status" aria-live="polite"></p>
 <div class="fields"><label>筛选书籍<select id="bookFilter" class="maibot-select"><option value="all">全部书籍</option><option value="reading">正在书架上</option><option value="archived">已归档</option><option value="finished">已读完</option></select></label><label>搜索书名或作者<input id="bookSearch" class="maibot-input" placeholder="输入关键词"></label></div><div class="fields"><label>选择书籍<select id="bookChoice" class="maibot-select"></select></label><label>阅读时长<select id="bookMinutes" class="maibot-select"><option value="15">15分钟</option><option value="30" selected>30分钟</option><option value="45">45分钟</option><option value="60">60分钟</option></select></label>
 <label>阅读地点<select id="bookLocation" class="maibot-select"><option value="">当前地点</option></select></label><label>阅读开始时间（选填，留空先出行再阅读）<input id="bookStart" class="maibot-input" type="datetime-local"></label></div>
-<div class="actions"><button id="selectBook" class="maibot-button">设为当前读物</button><button id="scheduleBook" class="maibot-button">安排阅读日程</button><button id="refreshBooks" class="maibot-button">刷新书架</button><button id="retryBook" class="maibot-button" hidden>重试阅读</button></div>
+<details><summary>章节与阅读起点</summary><div class="fields"><label>选择章节<select id="chapterChoice" class="maibot-select"></select></label></div><p id="chapterPreview" class="muted"></p><div class="actions"><button id="prevChapter" class="maibot-button">上一页</button><span id="chapterPage"></span><button id="nextChapter" class="maibot-button">下一页</button><button id="seekBook" class="maibot-button">从这里读</button><button id="skipBook" class="maibot-button">跳过当前章</button></div><p class="muted">立即换读与跳章沿用当前阅读的剩余时间。设为下次读物会在后续规划时使用。</p></details>
+<div class="actions"><button id="selectBook" class="maibot-button">设为下次读物</button><button id="switchBook" class="maibot-button">立即换读</button><button id="scheduleBook" class="maibot-button">安排阅读日程</button><button id="refreshBooks" class="maibot-button">刷新书架</button><button id="retryBook" class="maibot-button" hidden>重试阅读</button></div>
 <p id="bookInfo"></p>
 <details><summary>管理所选书籍</summary><div class="fields"><label>书名（必填）<input id="editBookTitle" maxlength="200" class="maibot-input"></label><label>作者（选填）<input id="editBookAuthor" maxlength="120" class="maibot-input"></label></div>
 <div class="actions"><button id="editBook" class="maibot-button">保存书籍信息</button><button id="archiveBook" class="maibot-button">归档</button><button id="deleteBook" class="maibot-button">删除书籍文件</button></div>
@@ -175,14 +176,14 @@ async function reviewed(action,payload){
 
 async function tracked(button,label,work){
  const panel=$('saveProgress'),started=Date.now(),original=button.textContent;
- button.after(panel);panel.hidden=false;panel.querySelector('strong').textContent=label;
+ (button.closest('.actions')||button).after(panel);panel.hidden=false;panel.querySelector('strong').textContent=label;
  $('closeSaveProgress').hidden=true;$('saveActivity').hidden=false;button.disabled=true;button.textContent='处理中…';
  const show=text=>{$('saveStage').textContent=text;message(text)};
  show('正在提交…');$('saveElapsed').textContent='已等待 0 秒';panel.scrollIntoView({block:'nearest'});
  const timer=setInterval(()=>{$('saveElapsed').textContent=`已等待 ${Math.floor((Date.now()-started)/1000)} 秒`},1000);
  try{const result=await work(show);show(result||'操作完成');}
  catch(error){show('操作失败：'+error.message);throw error}
- finally{clearInterval(timer);$('saveActivity').hidden=true;$('closeSaveProgress').hidden=false;$('saveElapsed').textContent=`本次用时 ${Math.floor((Date.now()-started)/1000)} 秒`;button.disabled=false;button.textContent=original;const current=button.isConnected?button:[...document.querySelectorAll('button')].find(item=>item.textContent===original);if(current)current.after(panel);panel.scrollIntoView({block:'nearest'})}
+ finally{clearInterval(timer);$('saveActivity').hidden=true;$('closeSaveProgress').hidden=false;$('saveElapsed').textContent=`本次用时 ${Math.floor((Date.now()-started)/1000)} 秒`;button.disabled=false;button.textContent=original;const current=button.isConnected?button:[...document.querySelectorAll('button')].find(item=>item.textContent===original);if(current)(current.closest('.actions')||current).after(panel);panel.scrollIntoView({block:'nearest'})}
 }
 async function waitOperation(result,show){
  const args=result?.task_id?{task_id:result.task_id}:result?.kind==='diary'?{plan_id:result.id}:null;
@@ -355,7 +356,7 @@ async function checkMemory(){
 async function showCityPlaces(){
  const result=await maibot.query('place_discovery');
  $('cityService').textContent=result.search_status;
- $('cityState').textContent=`${result.city} / ${result.country_code} · ${result.status} · ${result.count} 处地点`+(result.activity?` · 本次需求：${result.activity}`:'')+(result.error?` · ${result.error}`:'');
+ $('cityState').textContent=`${result.city} / ${result.country_code} · ${result.status} · ${result.count} 处地点`+(result.activity?` · 本次需求：${result.activity}`:'')+(result.detail?` · ${result.detail}`:'')+(result.error?` · ${result.error}`:'');
  $('findCityPlaces').disabled=!result.enabled||result.status==='搜索中';
  return result;
 }
@@ -374,16 +375,19 @@ async function findCityPlaces(){
 $('openDates').onclick=()=>run(async()=>{const id=selected.id;category='anniversary';$('category').value=category;$('query').value='';editorPage=1;await refresh();$('field_profile_id').value=id;message('已选择人物，填写生日或纪念日后保存')});
 $('checkMemory').onclick=()=>run(checkMemory);
 $('findCityPlaces').onclick=()=>run(findCityPlaces);
+$('manualPlace').onclick=()=>maibot.navigate('space');
 
 let shelf={books:[],notes:[],sessions:[]},notePage=0;
 function renderBook(){
  const b=shelf.books.find(x=>x.id===$('bookChoice').value);
- for(const id of ['selectBook','scheduleBook','editBook','archiveBook','deleteBook'])$(id).disabled=!b;
+ for(const id of ['selectBook','switchBook','seekBook','skipBook','scheduleBook','editBook','archiveBook','deleteBook'])$(id).disabled=!b;
  $('retryBook').hidden=true;
  if(b){
   $('scheduleBook').disabled=b.status==='已读完'||b.archived;$('selectBook').disabled=!!b.archived;
+  $('switchBook').disabled=b.status==='已读完'||b.archived;$('seekBook').disabled=!!b.archived;
+  $('skipBook').disabled=!!b.archived||b.chapter+1>=b.chapter_count;
   const latest=shelf.sessions.filter(n=>n.book_id===b.id).at(-1);
-  $('bookInfo').textContent=`《${b.title}》${b.author?' · '+b.author:''}${shelf.current_book===b.id?' · 当前读物':''} · ${b.archived?'已归档 · ':''}${b.status} · ${Math.round(b.read_characters/b.characters*100)}% · 已读 ${b.read_characters}/${b.characters} 字 · 共 ${b.chapter_count} 章`+(latest?` · 本次阅读：${latest.status}${latest.error?' · '+latest.error:''}`:'');
+  $('bookInfo').textContent=`《${b.title}》${b.author?' · '+b.author:''}${shelf.current_book===b.id?' · 当前读物':''} · ${b.archived?'已归档 · ':''}${b.status} · 阅读位置 ${Math.min(b.chapter+1,b.chapter_count)}/${b.chapter_count} 章 · 累计已读 ${b.read_characters} 字 / 全书 ${b.characters} 字`+(latest?` · 本次阅读：${latest.status}${latest.error?' · '+latest.error:''}`:'');
   $('retryBook').hidden=latest?.status!=='阅读失败';$('retryBook').dataset.plan=latest?.id||'';
   $('archiveBook').textContent=b.archived?'恢复到书架':'归档';
   if($('editBookTitle').dataset.book!==b.id){$('editBookTitle').value=b.title;$('editBookAuthor').value=b.author;$('editBookTitle').dataset.book=b.id}
@@ -407,8 +411,30 @@ async function showBooks(prefer=''){
  if(list.some(b=>b.id===selected))$('bookChoice').value=selected;else if(list.some(b=>b.id===shelf.current_book))$('bookChoice').value=shelf.current_book;
  if($('notesScope').value==='selected'&&$('bookChoice').value!==selected){notePage=0;const data=await maibot.query('books',{book_id:$('bookChoice').value,page:0});shelf.notes=data.notes;shelf.notes_total=data.notes_total}
  if($('notesScope').value==='selected'&&!$('bookChoice').value){shelf.notes=[];shelf.notes_total=0}
- renderBook();renderUploads();
+ renderBook();renderUploads();await showChapters();
 }
+let chapterPage=0,chapterBook='',chapterRows=[];
+async function showChapters(){
+ const book=$('bookChoice').value;
+ const changed=book!==chapterBook,selected=changed?'':$('chapterChoice').value;
+ if(changed){const row=shelf.books.find(b=>b.id===book);chapterPage=row?Math.floor(Math.min(row.chapter,row.chapter_count-1)/20):0;chapterBook=book}
+ if(!book){chapterRows=[];$('chapterChoice').replaceChildren();$('chapterPreview').textContent='';return}
+ const data=await maibot.query('chapters',{book_id:book,page:chapterPage});chapterPage=data.page;chapterRows=data.items;
+ $('chapterChoice').replaceChildren(...data.items.map(c=>new Option(`${c.index+1}. ${c.title}${c.directory?' · 目录':''}`,c.index)));
+ if(selected!==''&&data.items.some(c=>String(c.index)===selected))$('chapterChoice').value=selected;
+ else if(data.items.some(c=>c.index===data.chapter))$('chapterChoice').value=data.chapter;
+ $('chapterPage').textContent=`第 ${data.page+1} 页 · 共 ${data.total} 章`;
+ $('prevChapter').disabled=data.page===0;$('nextChapter').disabled=(data.page+1)*20>=data.total;
+ showChapterPreview();
+}
+function showChapterPreview(){$('chapterPreview').textContent=chapterRows.find(c=>c.index===Number($('chapterChoice').value))?.preview||''}
+$('chapterChoice').onchange=showChapterPreview;
+$('prevChapter').onclick=()=>run(async()=>{chapterPage--;await showChapters()});
+$('nextChapter').onclick=()=>run(async()=>{chapterPage++;await showChapters()});
+for(const [id,action] of [['switchBook','switch'],['seekBook','seek'],['skipBook','skip']])$(id).onclick=()=>run(()=>tracked($(id),'调整阅读',async()=>{
+ const result=await maibot.action('book_action',{action,book_id:$('bookChoice').value,chapter:Number($('chapterChoice').value)});
+ chapterBook='';await showBooks();$('bookStatus').textContent=result.status;return result.status;
+}));
 let uploadCancelled=false,activeUpload='';
 function renderUploads(){
  $('pendingUploads').hidden=!shelf.uploads?.length;$('uploadRows').replaceChildren();

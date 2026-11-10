@@ -83,6 +83,10 @@ class WebUI:
                 "places": self.world.planning_places(), "notes": notes["items"], "notes_total": notes["total"], "page": notes["page"], "capacity": self.books.capacity(),
                 "sessions": [{**n, "status": "日程已取消" if (self.store.find("plan", n["id"]) or {"status": n.get("plan_status", "completed")})["status"] == "cancelled" else n["status"]} for n in self.store.all("book_note")[-10:]], "now": self.now().isoformat()}
 
+    @API("ui_book_chapters", description="分页查看书籍章节与正文预览")
+    async def ui_book_chapters(self, book_id: str, page: int = 0) -> dict:
+        return self.books.chapters(book_id, page)
+
     @API("ui_book_upload", description="上传书籍资料")
     async def ui_book_upload(self, action: str, upload_id: str = "", filename: str = "", title: str = "", author: str = "", content: str = "", size: int = 0) -> dict:
         if action == "begin":
@@ -96,12 +100,14 @@ class WebUI:
         raise ValueError("请选择开始上传、上传片段或完成导入")
 
     @API("ui_book_action", description="选书、安排阅读与重试阅读")
-    async def ui_book_action(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, plan_id: str = "", title: str = "", author: str = "", location: str = "") -> dict:
+    async def ui_book_action(self, action: str, book_id: str = "", start: str = "", minutes: int = 30, plan_id: str = "", title: str = "", author: str = "", location: str = "", chapter: int = 0) -> dict:
         if action in {"edit", "archive", "restore", "delete"}:
             return self.books.manage(action, book_id, title, author)
         self.require_life()
         if action == "select":
             return self.books.select(book_id)
+        if action in {"switch", "seek", "skip"}:
+            return self.books.navigate(action, book_id, chapter, self.spatial, self.now())
         if action == "schedule":
             return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), location=location)
         if action == "retry":

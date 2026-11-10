@@ -93,6 +93,22 @@ def parse_book(path, title, author, max_bytes=20 * 1024 * 1024):
     return title.strip() or path.stem, author.strip(), chapters
 
 
+def directory_sections(chapters):
+    """识别明确标为目录的段落，以及后文重复出现的纯章节标题。"""
+    result, body_titles = set(), set()
+    for i in range(len(chapters) - 1, -1, -1):
+        section = chapters[i]
+        lines = [s.lstrip("# ").strip() for s in section["text"].splitlines() if s.strip()]
+        title = section["title"].lstrip("# ").strip()
+        if lines and lines[0] in {"目录", "目次", "Contents", "Table of Contents"}:
+            result.add(i)
+        elif lines == [title] and title in body_titles:
+            result.add(i)
+        elif lines != [title]:
+            body_titles.add(title)
+    return result
+
+
 class Books:
     def __init__(self, engine, ctx, config, directory):
         self.engine, self.ctx, self.config = engine, ctx, config
@@ -230,6 +246,60 @@ class Books:
             self.engine.store.put("runtime", {"id": "current_book", "book_id": book_id})
         return book
 
+    def chapters(self, book_id, page=0):
+        book = self.engine.store.get("book", book_id)
+        chapters = json.loads((self.directory / (book_id + ".json")).read_text("utf-8"))
+        directory = directory_sections(chapters)
+        page = min(max(0, page), (len(chapters) - 1) // 20)
+        return {"book_id": book_id, "chapter": book["chapter"], "total": len(chapters), "page": page,
+                "items": [{"index": i, "title": c["title"], "preview": c["text"][:300], "directory": i in directory}
+                          for i, c in enumerate(chapters) if page * 20 <= i < (page + 1) * 20]}
+
+    def navigate(self, action, book_id, chapter, spatial, now, session="", user_id=None):
+        """换读使用当前阅读窗口；跳章保留笔记，并记录新的正文起点。"""
+        engine, store = self.engine, self.engine.store
+        engine.advance(now)
+        book = store.get("book", book_id)
+        if book.get("archived"):
+            raise ValueError("请先恢复已归档书籍")
+        current = engine.current(now)
+        plan = current if current and current.get("book_id") and (action == "switch" or current["book_id"] == book_id) else None
+        if action == "switch" and not plan:
+            raise ValueError("当前没有进行中的阅读，请使用安排阅读日程")
+        affected = [p for p in store.all("plan") if p.get("book_id") == book_id and p["status"] in {"active", "scheduled", "paused", "blocked"}]
+        if plan and plan not in affected:
+            affected.append(plan)
+        if user_id is not None:
+            spatial.check_influence(session, user_id, affected)
+        if plan:
+            engine.owned("plan", plan["id"], session)
+        target = book["chapter"] + 1 if action == "skip" else chapter
+        if action in {"seek", "skip"}:
+            if not 0 <= target < book["chapter_count"]:
+                raise ValueError("请选择书中已有章节；当前已是最后一章时可结束阅读日程")
+        elif book["status"] == "已读完":
+            raise ValueError("这本书已读完，可先选择章节重新阅读")
+        replacement = None
+        if plan:
+            replacement = PlanInput(title=f"阅读《{book['title']}》", book_id=book_id, kind=plan["kind"],
+                                    start=now.isoformat(), end=plan["end"], location=plan["location"],
+                                    motivation="按阅读调整继续：" + ("立即换读" if action == "switch" else "调整章节"), flexible=plan["flexible"])
+            if plan["book_id"] == book_id:
+                replacement = replacement.model_copy(update={k: plan[k] for k in ("goal_id", "goal_step_id", "continuation_id")})
+            engine._check_interval(now, engine.time(plan["end"]), plan["id"])
+        if action in {"seek", "skip"}:
+            book.update(chapter=target, offset=0, status="在读", last_navigation={"at": now.isoformat(), "action": action, "chapter": target})
+            with store.db:
+                store.put("book", book)
+        if plan:
+            engine.transition(plan["id"], "cancel", session, now)
+            new_plan = engine.create_plan(replacement, plan["session_id"], now, autonomous=plan["autonomous"])
+            spatial.reconcile(now)
+            engine.advance(now)
+        self.select(book_id)
+        return {"status": "已立即换读，沿用剩余阅读时间" if action == "switch" else "阅读起点已更新，已完成笔记保留",
+                "book": book, "plan": store.get("plan", new_plan["id"]) if plan else None}
+
     def mentioned_book(self, text):
         if not text:
             return ""
@@ -297,12 +367,21 @@ class Books:
             return
         chapters = json.loads(await asyncio.to_thread((self.directory / (book["id"] + ".json")).read_text, encoding="utf-8"))
         chapter, offset = book["chapter"], book["offset"]
+        directory = directory_sections(chapters)
+        skipped = []
+        while chapter in directory:
+            skipped.append(chapter)
+            chapter, offset = chapter + 1, 0
+        if chapter == len(chapters):
+            with store.db:
+                store.put("book_note", {"id": plan["id"], "book_id": book["id"], "status": "本书已读完", "error": "剩余内容为目录，请选择其他读物"})
+            return
         limit = min(self.config.books.reading_chars, max(500, int((self.engine.time(plan["end"]) - self.engine.time(plan["start"])).total_seconds() / 60) * 120))
         text = chapters[chapter]["text"][offset:offset + limit]
         end = offset + len(text)
         next_chapter, next_offset = (chapter + 1, 0) if end == len(chapters[chapter]["text"]) else (chapter, end)
         note = {"id": plan["id"], "book_id": book["id"], "book_title": book["title"], "chapter_title": chapters[chapter]["title"],
-                "chapter": chapter, "offset": offset, "end": end, "next_chapter": next_chapter, "next_offset": next_offset,
+                "chapter": book["chapter"], "offset": book["offset"], "text_chapter": chapter, "text_offset": offset, "skipped_chapters": skipped, "read_characters": len(text), "end": end, "next_chapter": next_chapter, "next_offset": next_offset,
                 "status": "阅读中", "error": "", "started_at": now.isoformat(), "location": plan["location"]}
         with store.db:
             store.put("book_note", note)
@@ -336,7 +415,7 @@ class Books:
         if note["status"] != "等待活动结束":
             return
         book = store.get("book", note["book_id"])
-        book.update(chapter=note["next_chapter"], offset=note["next_offset"], read_characters=book["read_characters"] + note["end"] - note["offset"])
+        book.update(chapter=note["next_chapter"], offset=note["next_offset"], read_characters=book["read_characters"] + note.get("read_characters", note["end"] - note["offset"]))
         book["status"] = "已读完" if book["chapter"] == book["chapter_count"] else "在读"
         note.update(status="已完成", finished_at=now.isoformat())
         with store.db:
@@ -346,7 +425,7 @@ class Books:
             if "importance" in note:
                 self.engine.score_result(event, note["importance"], note["score_reason"])
             event.update(summary=f"阅读《{book['title']}》：{note['summary']}", source="observed",
-                         evidence=f"模型已阅读上传文件 {book['filename']}，第{note['chapter'] + 1}章字符{note['offset']}至{note['end']}",
+                         evidence=f"模型已阅读上传文件 {book['filename']}，第{note.get('text_chapter', note['chapter']) + 1}章字符{note.get('text_offset', note['offset'])}至{note['end']}",
                          details={"书名": book["title"], "章节": note["chapter_title"], "内容": note["summary"], "原文摘句": note["quote"],
                                   "角色读后感": note["thoughts"], "读后问题": note["question"], "阅读地点": note.get("location", plan["location"])})
             store.put("experience", event)

@@ -160,7 +160,7 @@ async def test_empty_place_cache_expires_and_errors_can_retry(plugin):
     assert await plugin.world.discover_places(plugin.spatial, now, activity="展览馆") == []
     assert await plugin.world.discover_places(plugin.spatial, now + timedelta(hours=5), activity="展览馆") == []
     assert plugin.ctx.web.search.await_count == 1
-    assert plugin.ctx.llm.generate.await_count == 1
+    assert plugin.ctx.llm.generate.await_count == 0
     await plugin.world.discover_places(plugin.spatial, now + timedelta(hours=6), activity="展览馆")
     assert plugin.ctx.web.search.await_count == 2
     plugin.ctx.web.search.side_effect = TimeoutError('搜索超时')
@@ -183,3 +183,16 @@ async def test_webui_place_search_uses_cache_and_explicit_refresh(plugin):
     await plugin.ui_discover_places("咖啡馆", force=True)
     await asyncio.gather(*plugin.jobs)
     assert plugin.world.discover_places.call_args.kwargs == {"force": True, "activity": "咖啡馆"}
+
+
+async def test_empty_sources_and_empty_selection_have_distinct_details(plugin):
+    plugin.config.world.search_enabled = plugin.config.world.places_enabled = True
+    plugin.ctx.web = SimpleNamespace(search=AsyncMock(return_value={"results": []}))
+    await plugin.world.discover_places(plugin.spatial, plugin.now(), force=True, activity="公园")
+    assert '搜索服务返回为空' in plugin.world.place_status()['detail']
+    plugin.ctx.llm.generate.assert_not_awaited()
+    plugin.ctx.web.search.return_value = {"results": [{"title": "公园百科", "url": "https://example.org"}]}
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"places": []}'}
+    await plugin.world.discover_places(plugin.spatial, plugin.now(), force=True, activity="公园")
+    assert '模型未从资料中选出' in plugin.world.place_status()['detail']
+    assert '搜索返回 1 条资料，收录 0 处地点' in plugin.world.place_status()['detail']

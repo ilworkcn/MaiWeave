@@ -229,6 +229,7 @@ class World:
                 "status": (record.get("status", "尚未搜索") if current else "尚未搜索") if cfg.places_enabled else "已关闭",
                 "error": record.get("error", "") if current else "", "checked_at": record.get("attempted_at", "") if current else "",
                 "activity": record.get("activity", "") if current else "",
+                "detail": record.get("detail", "") if current else "",
                 "count": sum(p.get("city_key") == cfg.city + "|" + cfg.country_code for p in self.engine.store.all("place"))}
 
     def planning_places(self):
@@ -268,7 +269,7 @@ class World:
                 if places or not cached["place_ids"]:
                     with store.db:
                         store.put("world_status", {"id": "places", "city_key": city_key, "activity": activity,
-                                  "attempted_at": now.isoformat(), "status": "已使用缓存" if places else "暂无地点（缓存）", "error": ""})
+                                  "attempted_at": now.isoformat(), "status": "已使用缓存" if places else "暂无地点（缓存）", "detail": cached.get("detail", ""), "error": ""})
                     return places
         status = {"id": "places", "city_key": city_key, "activity": activity, "attempted_at": now.isoformat(), "status": "搜索中", "error": ""}
         with store.db:
@@ -287,7 +288,7 @@ class World:
                 for item in value.places:
                     if item.source_index >= len(sources) or item.name not in json.dumps(sources[item.source_index], ensure_ascii=False):
                         raise ValueError("地点名称和来源序号需对应搜索结果中的原文")
-            selected = await generate(self.ctx, store, self.config, "城市地点", prompt, CityPlaces, validate)
+            selected = await generate(self.ctx, store, self.config, "城市地点", prompt, CityPlaces, validate) if sources else CityPlaces(places=[])
             collected = []
             for item in selected.places:
                 existing = next((p for p in store.all("place") if p["name"] == item.name), None)
@@ -299,10 +300,11 @@ class World:
                 if not existing:
                     spatial.save_route(place["id"], "street", 15, "步行")
                 collected.append(place)
+            status["status"] = "已收录" if collected else "未找到地点"
+            status["detail"] = f"搜索返回 {len(sources)} 条资料，收录 {len(collected)} 处地点。" + ("" if collected else ("搜索服务返回为空，可调整活动需求后重试。" if not sources else "模型未从资料中选出符合当前城市和活动需求的具体地点，可调整需求或手动添加地点。"))
             with store.db:
                 store.put("place_search", {"id": cache_id, "place_ids": [p["id"] for p in collected],
-                          "searched_at": now.isoformat()})
-            status["status"] = "已收录" if collected else "未找到地点"
+                          "searched_at": now.isoformat(), "detail": status["detail"]})
         except Exception as error:
             status.update(status="搜索失败", error=str(error))
             raise
