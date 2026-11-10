@@ -20,9 +20,26 @@ with sync_playwright() as p:
         page.wait_for_function("document.getElementById('loading').hidden")
         assert page.locator('#error').is_hidden(), page.locator('#error').inner_text()
         page.locator('#shareSummary').get_by_text('今天已发送',exact=False).first.wait_for()
+        for row in data['share_summary']:
+            page.locator('#shareSummary').get_by_role('heading', name=row['session_name'], exact=True).first.wait_for()
+            assert not page.locator('#shareSummary').get_by_text(row['session'], exact=True).is_visible()
+        assert '预计下次检查' in page.locator('#shareSettings').inner_text()
+        assert '最近判断' in page.locator('#shareSummary').inner_text()
         assert not errors, errors
         assert page.locator('#error').is_hidden()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), '页面出现横向滚动'
+        if width > 850:
+            chart = page.locator('.chart-card').bounding_box()
+            book = page.locator('.book-card').bounding_box()
+            assert abs(book['y'] - chart['y'] - chart['height'] - 18) < 1
+            summary = page.locator('.accumulation-card').bounding_box()
+            assert abs(summary['y'] - book['y'] - book['height'] - 18) < 1
+        else:
+            diary = page.locator('.diary-card').bounding_box()
+            summary = page.locator('.accumulation-card').bounding_box()
+            assert abs(summary['y'] - diary['y'] - diary['height'] - 18) < 1
+        page.locator('#proactiveCard').screenshot(path=str(out/f'card-{width}.png'))
+        page.locator('.life-columns').screenshot(path=str(out/f'layout-{width}.png'))
         page.screenshot(path=str(out/f'proactive-{width}.png'), full_page=True)
     browser.close()
 print('主动交流概览在桌面和窄屏均正常显示')

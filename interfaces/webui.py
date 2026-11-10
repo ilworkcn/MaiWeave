@@ -310,7 +310,32 @@ class WebUI:
     async def ui_overview(self) -> dict:
         await self.living.receipts.refresh(self.now())
         self.living.settle_shares()
+        share_summary = self.living.share_summary(self.now())
+        share_decisions = self.living.receipts.history(self.living.share_decisions)
+        if share_summary or share_decisions:
+            streams = {row["stream_id"]: row for row in await self.ctx.chat.get_all_streams(platform="all_platforms")}
+            profiles = {row["session_id"]: row.get("name", "") for row in self.store.all("profile")}
+            for row in [*share_summary, *share_decisions]:
+                session = row["session"]
+                stream = streams.get(session, {})
+                group = bool(stream.get("group_id"))
+                if session == "全部":
+                    row["session_name"] = "全部聊天"
+                else:
+                    row["session_name"] = (stream.get("group_name") or stream.get("user_cardname") or
+                        stream.get("user_nickname") or profiles.get(session) or
+                        ("群聊" if group else "私聊" if stream else "未找到聊天资料"))
+                platform = stream.get("platform", "")
+                platform = {"qq": "QQ", "internal": "WebUI"}.get(platform, platform)
+                target = stream.get("group_id") if group else stream.get("user_id")
+                row["session_detail"] = " · ".join(part for part in [platform, "群聊" if group else "私聊" if stream else "",
+                    ("群号 " if group else "账号 ") + str(target) if target else ""] if part)
         now, state = self.now(), self.engine.state()
+        cfg = self.config.proactive
+        share_settings = {"mode": cfg.mode, "hours": f"{cfg.start_hour:02}:00—{cfg.end_hour:02}:00" if cfg.start_hour != cfg.end_hour else "全天",
+                          "interval": cfg.cooldown_minutes, "retry": cfg.retry_minutes,
+                          "next_check": (display_time(self.next_share_check.isoformat()) if self.next_share_check and self.next_share_check > now else "下一轮生活更新时")
+                              if cfg.enabled and self.config.life.enabled else "主动交流已关闭" if not cfg.enabled else "生活引擎已关闭"}
         current = self.engine.current(now)
         plans = self.store.all("plan", omit=('changes',))
         choices = sorted((p for p in plans if p.get("autonomous") and not p.get("activity_id")
@@ -342,8 +367,9 @@ class WebUI:
                 "planning_failure": failure["message"] if failure else "暂无失败记录",
                 "planning_history": decisions,
                 "share_status": f"已启用 · {self.config.proactive.mode}" if self.config.proactive.enabled else "已关闭",
-                "share_decisions": self.living.receipts.history(self.living.share_decisions),
-                "share_summary": self.living.share_summary(now),
+                "share_decisions": share_decisions,
+                "share_summary": share_summary,
+                "share_settings": share_settings,
                 "location": state["location"] or "未登记", "sleep": "睡眠中" if current and current["kind"] == "sleep" else "清醒",
                 "schedule_mode": "按日常作息" if self.config.life.schedule_enabled else "全天候交流",
                 "awake_until": display_time(self.living.awake_until(now).isoformat()) if self.living.awake_until(now) and self.config.life.schedule_enabled else "当前没有陪伴时段",

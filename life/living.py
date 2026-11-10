@@ -554,6 +554,8 @@ class Living:
                 pending.append({"title": item["title"], "next_at": at.isoformat(), "expires_at": end.isoformat(), "status": "等待发送回执" if waiting else "等待判断"})
             result.append({"session": session, "sent": sum(t.date() == now.date() for t in times), "limit": cfg.daily_limit,
                            "pending": sorted(pending, key=lambda r: r["next_at"]),
+                           "last_at": latest.get("created", ""), "last_outcome": latest.get("outcome", ""),
+                           "last_sent": max(times).isoformat() if times else "",
                            "last": latest.get("delivery") or latest.get("reason") or "等待首次判断"})
         return result
 

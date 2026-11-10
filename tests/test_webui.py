@@ -26,6 +26,31 @@ async def test_energy_and_mood_share_sample_times(plugin):
     assert all(p["mood"] == 50 - 2 * p["energy"] for p in points)
 
 
+async def test_share_card_names_channels_and_dates_last_decision(plugin):
+    now = plugin.now()
+    plugin.config.proactive.enabled = True
+    plugin.config.proactive.session_ids = ["private", "group", "missing"]
+    plugin.ctx.chat.get_all_streams.return_value = [
+        {"stream_id": "private", "platform": "qq", "user_nickname": "小明", "user_id": "123"},
+        {"stream_id": "group", "platform": "qq", "group_name": "读书群", "group_id": "456"}]
+    plugin.next_share_check = now + timedelta(minutes=7)
+    plugin.living.share_decisions.append({"created": (now - timedelta(hours=1)).isoformat(),
+        "at": "05:00", "session": "全部", "outcome": "跳过", "reason": "允许交流的时段为 06:00 至 23:00",
+        "mode": "自然交流", "score": "本轮未筛选经历"})
+    data = await plugin.ui_overview()
+    rows = {r["session"]: r for r in data["share_summary"]}
+    assert rows["private"]["session_name"] == "小明"
+    assert rows["private"]["session_detail"] == "QQ · 私聊 · 账号 123"
+    assert rows["group"]["session_name"] == "读书群"
+    assert rows["group"]["session_detail"] == "QQ · 群聊 · 群号 456"
+    assert rows["missing"]["session_name"] == "未找到聊天资料"
+    assert rows["private"]["last_at"] == (now - timedelta(hours=1)).isoformat()
+    assert data["share_decisions"][0]["session_name"] == "全部聊天"
+    assert data["share_settings"]["next_check"] == plugin.next_share_check.isoformat().replace("T", " ")[:19]
+    plugin.config.proactive.enabled = False
+    assert (await plugin.ui_overview())["share_settings"]["next_check"] == "主动交流已关闭"
+
+
 def test_config_labels_and_controls_are_chinese():
     instance = create_plugin()
     instance.set_plugin_config(instance.get_default_config())
