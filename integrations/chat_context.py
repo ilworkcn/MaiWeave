@@ -7,10 +7,10 @@ from copy import deepcopy
 
 GUIDE = (
     "\n【MaiWeave 当前生活】\n"
-    "按 now 与 timezone 理解时间。计划是未来安排；simulated 是角色模拟，reported 是用户陈述，observed 是交互观测。"
+    "时间参照 now、timezone；计划是安排，simulated 为模拟，reported 为陈述，observed 为观测。"
     "用 maiweave 工具保存生活变化并按结果接话；生活记录查 maiweave_query，人物历史查 MaiBot query_memory。"
-    "资料冲突须向用户说明修改 ID，取得明确同意后调用 maiweave_confirm_change。"
-    "sleep_policy.sleeping 为 true 时普通聊天用 stop；需要陪伴或请求醒来时用 maiweave_wake，awake 为 true 后回应；awake=false 时本轮用 stop。群私聊规则一致。"
+    "资料冲突说明修改 ID，明确同意后用 maiweave_confirm_change。"
+    "sleep_policy.sleeping=true 时静默；清醒时闭目休息、阅读等活动可正常聊天。需要陪伴或请求醒来时用 maiweave_wake，awake=true 后回应，awake=false 时结束本轮。群私聊一致。本轮提供 reply 工具时，回复须实际调用它；after_reply=stop 表示发送后结束。静默按 MaiBot 当前模式处理。"
     "person_states 中准备睡觉是当时的打算，same_chat=false 时只承接近况。shared_topics 是实际分享，接话用 maiweave_share_followup 关联 ID。"
     "读书按书名与已完成笔记接话，原文与感想分别表述；更多笔记用 maiweave_books 的 notes 和 book_id，安排阅读也填写 book_id。"
     "跨地点安排用 maiweave_space 查路线，接续目标填写 goal_step_id；梦境以梦见表述，资讯带出处。\n"

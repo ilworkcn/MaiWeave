@@ -24,6 +24,16 @@ def planner_task(items):
     return ""
 
 
+def output_summary(items):
+    """按原生响应条目统计正文、推理与实际工具调用。"""
+    body = sum(len(part.get("text", "")) for item in items
+               if item.get("item_type") == "AssistantMessageItem" for part in item.get("parts", []))
+    reasoning = sum(len(part) for item in items if item.get("item_type") == "ReasoningItem"
+                    for part in (*item.get("text_parts", []), *item.get("summary_parts", [])))
+    calls = [item["tool_call"]["func_name"] for item in items if item.get("item_type") == "FunctionCallItem"]
+    return f"正文 {body} 字；可见推理 {reasoning} 字；工具调用：{'、'.join(calls) if calls else '无'}"
+
+
 class ShareReceipts:
     def __init__(self, store, ctx):
         self.store = store
@@ -78,7 +88,7 @@ class ShareReceipts:
         if not row or row["session"] != session or row["outcome"] != "MaiBot 已受理":
             return
         if not any(item.get("item_type") == "FunctionCallItem" for item in items) and not row["calls"]:
-            row.update(outcome="Planner 未调用工具", delivery="本轮没有工具调用")
+            row.update(outcome="Planner 未调用工具", delivery=output_summary(items) + "。本轮尚无发送回执")
         for item in items:
             call = item.get("tool_call", {})
             if item.get("item_type") == "FunctionCallItem" and call.get("func_name") in {"stop", "reply", "send_emoji"}:

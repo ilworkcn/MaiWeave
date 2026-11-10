@@ -129,3 +129,18 @@ async def test_reload_finishes_interrupted_review_progress(plugin):
     assert "重新提交" in result["error"]
     assert plugin.store.get("review", confirmed["id"])["status"] == "待确认"
     assert plugin.store.all("profile") == []
+
+
+async def test_profile_delete_preserves_native_person(plugin):
+    plugin.memory.people = AsyncMock(return_value={"items": [{"person_id": "p", "person_name": "小明", "profile_text": "喜欢阅读"}]})
+    plugin.memory.edit_person = AsyncMock()
+    profile = plugin.anniversaries.save_profile("小明", "a", "u", person_id="p")
+    birthday = plugin.anniversaries.save_date(profile["id"], "生日", "solar", 8, 3)
+    decision(plugin, ["删除插件资料与生日"])
+    record = await plugin.reviews.submit("delete_profile", {"profile_id": profile["id"]})
+    assert record["status"] == "待确认"
+    assert plugin.store.find("anniversary", birthday["id"])
+    await plugin.reviews.decide(record["id"], True)
+    assert plugin.store.find("profile", profile["id"]) is None
+    assert plugin.store.find("anniversary", birthday["id"]) is None
+    plugin.memory.edit_person.assert_not_awaited()

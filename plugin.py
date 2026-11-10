@@ -21,7 +21,7 @@ from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, Relat
 from .core.store import Store
 from .integrations.chat_context import ChatContext
 from .core.retention import Retention
-from .integrations.share_receipts import planner_task
+from .integrations.share_receipts import planner_task, output_summary
 from .integrations.world import World
 from .life.spatial import Spatial
 from .life.rhythm import Rhythm
@@ -308,6 +308,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @HookHandler("maisaka.planner.after_response")
     async def planner_receipt(self, session_id: str, output_items: list, **kwargs):
         self.living.receipts.observe(session_id, output_items)
+        if not any(item.get("item_type") == "FunctionCallItem" for item in output_items):
+            self.ctx.logger.info("MaiWeave Planner 响应 [%s]：%s；睡眠静默=%s",
+                                 session_id, output_summary(output_items), self.living.sleeping(self.now()))
         return {"action": "continue"}
 
     @HookHandler("maisaka.replyer.before_request")

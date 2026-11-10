@@ -200,6 +200,10 @@ class Spatial:
             result = plan
         else:
             result = self.engine.transition(plan_id, action, session, now)
+        if action == "cancel" and plan["kind"] == "sleep" and self.engine.time(plan["start"]) <= now:
+            # 手动结束当前睡眠时，同时结束这次唤醒留下的续睡安排。
+            with self.engine.store.db:
+                self.engine.store.delete("runtime", "awakening")
         self.reconcile(now)
         return self.engine.store.get("plan", result["id"])
 

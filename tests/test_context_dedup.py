@@ -125,7 +125,7 @@ async def test_dedup_context_tracks_sleep_wake_and_return(plugin, session):
     plugin.chat_context.kinds[session] = session
     data = snapshot(plugin.context_text(session, text="上次做了什么"))
     assert data["sleep_policy"]["sleeping"]
-    assert "awake=false 时本轮用 stop" in plugin.context_text(session)
+    assert "awake=false 时结束本轮" in plugin.context_text(session)
     assert await plugin.sleep_before_send({"session_id": session}) == {"action": "abort"}
     result = await plugin.wake("现在需要陪伴", stream_id=session, user_id="u")
     assert result["content"]["awake"]

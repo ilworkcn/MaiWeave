@@ -79,6 +79,8 @@ class Reviews:
                 payload = event
             record["person_id"] = person_id
             record["existing"] = {"人物": profile, "纪念日": dates, "原生记忆": native}
+            scope = {"delete_profile": "删除范围是本插件指定个人资料及其关联生日、纪念日；原生人物画像与记忆继续保留。",
+                     "delete_anniversary": "删除范围是指定的一条生日或纪念日；个人资料与原生记忆继续保留。"}.get(record["action"], "")
             prompt = (
                 "核对拟写入的个人资料、日期或原生记忆与已有记录是否矛盾。输出 JSON：conflicts（具体冲突说明数组，兼容的补充填空数组）、"
                 "relationship（当前用户与角色的关系称呼）、level（0普通、1熟悉、2亲近、3亲密）、reason（判断依据）。"
@@ -86,7 +88,7 @@ class Reviews:
                 "比较同一人物、同一事件的日期、身份和事实。明确改正已有值也列出差异，交由用户确认。"
                 "区分公历农历、不同纪念日、转述和用户自己的信息。关系结合主体、时间和语境理解，"
                 "现任恋人可为亲密关系；前任、别人的恋人和引用的话按实际主体判断。删除有内容的记录时列出将删除的内容。"
-                f"操作：{record['action']}；已有：{json.dumps(record['existing'], ensure_ascii=False)}；新内容：{json.dumps(payload, ensure_ascii=False)}"
+                f"操作：{record['action']}；操作范围：{scope}；已有：{json.dumps(record['existing'], ensure_ascii=False)}；新内容：{json.dumps(payload, ensure_ascii=False)}"
             )
             record["phase"] = "模型正在核对经历与原生记忆是否冲突…" if record["action"] == "sync" else "模型正在核对资料冲突与亲密关系…"
             with p.store.db:
