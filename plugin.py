@@ -77,8 +77,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
             ("search", "world", "联网搜索", "复用 MaiBot 已配置的搜索服务。", ["search_enabled", "places_enabled"]),
             ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "mode", "natural_greetings", "session_ids", "share_threshold"]),
-            ("limits", "proactive", "何时聊", "发送间隔从实际发送计算，同一话题未发出时按重新判断间隔选择时机。", ["start_hour", "end_hour", "cooldown_minutes", "retry_minutes"]),
-            ("quota", "proactive", "聊多少", "每日额度是最多发送次数，分享内容来自生活经历和待跟进事项。", ["daily_limit"]),
+            ("limits", "proactive", "交流时段与间隔", "发送间隔从实际发送计算，同一话题未发出时按重新判断间隔选择时机。", ["start_hour", "end_hour", "cooldown_minutes", "retry_minutes"]),
+            ("quota", "proactive", "每日发送额度", "每日额度是最多发送次数，分享内容来自生活经历和待跟进事项。", ["daily_limit"]),
         ]
         original = schema["sections"]
         for name, choices in (("publish_mode", ["关闭", "手动发布", "日记完成后自动发布"]), ("publish_visibility", ["所有人", "好友", "仅自己"])):
