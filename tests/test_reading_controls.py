@@ -110,3 +110,45 @@ async def test_seek_retains_reading_goal(plugin):
     plugin.engine.advance(now+timedelta(minutes=16))
     await plugin.books.process(now+timedelta(minutes=16))
     assert plugin.store.get('goal',goal['id'])['completed_sessions'] == 1
+
+
+@pytest.mark.parametrize("action", ["switch", "seek", "skip"])
+async def test_webui_navigates_chat_reading_and_keeps_owner(plugin, action):
+    """管理页面调整聊天创建的阅读，替换日程沿用原聊天归属。"""
+    first = await upload(plugin)
+    second = await upload(plugin, '# 第一章 海\n潮水退去了。', '潮汐.md')
+    now = plugin.now()
+    plugin.now = lambda: now
+    old = await plugin.books_tool('schedule', book_id=first['id'], minutes=15, stream_id='chat-a', user_id='reader')
+    plugin.now = lambda: now + timedelta(minutes=1)
+    target = second if action == 'switch' else first
+    result = await plugin.ui_book_action(action, book_id=target['id'], chapter=1)
+    new = result['plan']
+    assert new['session_id'] == 'chat-a'
+    assert new['end'] == old['end'] and new['location'] == old['location']
+    assert new['autonomous'] == old['autonomous']
+    assert new['book_id'] == target['id']
+    plugin.engine.advance(plugin.now() + timedelta(seconds=1))
+    assert plugin.store.get('plan', new['id'])['status'] == 'active'
+    assert plugin.store.get('plan', old['id'])['status'] == 'cancelled'
+    if action != 'switch':
+        assert result['book']['chapter'] == 1
+
+
+@pytest.mark.parametrize("action", ["switch", "seek", "skip"])
+@pytest.mark.parametrize("caller", ["chat-b", ""])
+async def test_chat_reading_navigation_checks_owner(plugin, action, caller):
+    """其他聊天与空会话不能改动聊天创建的当前阅读。"""
+    first = await upload(plugin)
+    second = await upload(plugin, '# 第一章 海\n潮水退去了。', '潮汐.md')
+    now = plugin.now()
+    plugin.now = lambda: now
+    old = await plugin.books_tool('schedule', book_id=first['id'], minutes=15, stream_id='chat-a', user_id='reader')
+    plugin.now = lambda: now + timedelta(minutes=1)
+    target = second if action == 'switch' else first
+    with pytest.raises(ValueError, match='该记录不属于当前聊天流'):
+        await plugin.books_tool(action, book_id=target['id'], chapter=1, stream_id=caller, user_id='reader')
+    assert plugin.store.get('plan', old['id'])['status'] == 'active'
+    assert plugin.store.get('book', target['id'])['chapter'] == 0
+    result = await plugin.books_tool(action, book_id=target['id'], chapter=1, stream_id='chat-a', user_id='reader')
+    assert result['plan']['session_id'] == 'chat-a'

@@ -107,7 +107,11 @@ class WebUI:
         if action == "select":
             return self.books.select(book_id)
         if action in {"switch", "seek", "skip"}:
-            return self.books.navigate(action, book_id, chapter, self.spatial, self.now())
+            now = self.now()
+            current = self.engine.current(now)
+            # 管理页面沿用当前日程的归属，聊天工具使用调用者的聊天流。
+            session = current["session_id"] if current else ""
+            return self.books.navigate(action, book_id, chapter, self.spatial, now, session)
         if action == "schedule":
             return self.books.schedule(book_id, start, minutes, self.spatial, self.now(), location=location)
         if action == "retry":
