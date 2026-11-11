@@ -257,8 +257,9 @@ class Living:
         totals = {}
         recent = []
         for plan in plans:
-            activity = "阅读" if plan.get("book_id") or self.reading_title(plan["title"]) else plan.get("activity_label") or {"sleep":"睡眠", "meal":"用餐", "work":"工作", "study":"学习", "leisure":"休闲", "travel":"出行", "rest":"休息", "social":"社交", "diary":"写日记"}[plan["kind"]]
+            activity = "阅读" if self.is_reading(plan) else plan.get("activity_label") or {"sleep":"睡眠", "meal":"用餐", "work":"工作", "study":"学习", "leisure":"休闲", "travel":"出行", "rest":"休息", "social":"社交", "diary":"写日记"}[plan["kind"]]
             seconds = min(plan["elapsed_seconds"], max(0, (min(now, self.engine.time(plan["end"])) - max(start, self.engine.time(plan["start"]))).total_seconds()))
+            seconds = plan.get("elapsed_days", {}).get(now.date().isoformat(), 0) if "elapsed_days" in plan else seconds
             if seconds:
                 item = totals.setdefault(activity, {"activity": activity, "minutes": 0, "sessions": 0})
                 item["minutes"] += seconds / 60
@@ -274,6 +275,33 @@ class Living:
         return {"day": now.date().isoformat(), "totals": [{**r, "minutes": round(r["minutes"])} for r in totals.values()],
                 "recent": recent[-8:], "consecutive": consecutive,
                 "last_activity": recent[-1]["activity"] if recent else ""}
+
+    def is_reading(self, plan):
+        """按本次活动的书籍、名称和已保存类别识别阅读。"""
+        return bool(plan.get("book_id") or self.reading_title(plan["title"])
+                    or self.reading_title(plan.get("activity_label", "")))
+
+    def reading_allowance(self, now):
+        """按今天已读时长和上次阅读时间，计算自主阅读可用分钟。"""
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        seconds = 0
+        last_end = None
+        for plan in self.engine.store.all("plan", omit=("changes",)):
+            if not self.is_reading(plan) or plan.get("elapsed_seconds", 0) <= 0:
+                continue
+            began = self.engine.time(plan["start"])
+            ended = self.engine.time(plan["end"]) if plan["status"] == "completed" else began + timedelta(seconds=plan["elapsed_seconds"])
+            ended = min(now, self.engine.time(plan["last_active_at"]) if plan.get("last_active_at") else ended)
+            seconds += (plan["elapsed_days"].get(now.date().isoformat(), 0) if "elapsed_days" in plan else
+                        min(plan["elapsed_seconds"], max(0, (ended - max(start, began)).total_seconds())))
+            last_end = max(last_end, ended) if last_end else ended
+        books = self.config.books
+        remaining = books.session_minutes if books.autonomous_minutes == -1 else max(0, books.autonomous_minutes - seconds / 60)
+        next_at = last_end + timedelta(minutes=books.break_minutes) if last_end else None
+        minutes = min(books.session_minutes, int(remaining)) if not next_at or now >= next_at else 0
+        return {"read_minutes": round(seconds / 60), "daily_minutes": self.config.books.autonomous_minutes,
+                "available_minutes": minutes if minutes >= 10 else 0,
+                "next_at": next_at.isoformat() if next_at and next_at > now else None}
 
     async def choose_activity(self, now: datetime):
         engine, config = self.engine, self.config.life
@@ -315,6 +343,7 @@ class Living:
         continuation_id = ""
         place_query = ""
         book_id = ""
+        reading = self.reading_allowance(now)
         books = [b for b in engine.store.all("book") if b["status"] != "已读完" and not b.get("archived")]
         current_book = engine.store.find("runtime", "current_book")
         books.sort(key=lambda b: b["id"] != (current_book or {}).get("book_id"))
@@ -328,7 +357,9 @@ class Living:
         if habit and habit["kind"] == "sleep" and not config.schedule_enabled:
             habit = None
         next_step = self.continuity.next_step()
-        continuations = [r for r in engine.store.all("activity_memory") if r["next_action"]
+        arranged = {p.get("continuation_id") for p in engine.store.all("plan")
+                    if p["status"] in {"scheduled", "active", "paused", "blocked", "awaiting_confirmation"}}
+        continuations = [r for r in engine.store.all("activity_memory") if r["next_action"] and r["id"] not in arranged
                          and r.get("kind") in {"study", "work", "leisure", "rest", "meal", "social"}
                          and (not r.get("next_date") or r["next_date"] <= now.date().isoformat())]
         if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
@@ -364,15 +395,20 @@ class Living:
             prompt = (
                 "为角色选择接下来独自进行的一件小活动，输出 JSON 对象。"
                 "根据人格、兴趣、精力和长期目标，在角色的生活空间中安排活动。"
-                "读书、工作、休闲和休息都可以。kind 从 study/work/leisure/rest/meal/social 中选择，出行由地点路线自动安排。"
+                "先结合时段和生活背景决定做什么，再选合适地点。做饭、收拾房间、买日用品、散步、运动、听音乐、做手工、发呆都可以，具体活动符合角色身份与兴趣。"
+                "短暂空闲可以安排10至20分钟休息，今天已经做了很久的事留到之后。kind 从 study/work/leisure/rest/meal/social 中选择，出行由地点路线自动安排。"
                 "字段 title、kind、minutes（10到120）、location、motivation、goal_id（无关联填空字符串）。"
                 f"当前时间：{now.isoformat(timespec='minutes')}；可用分钟：{free}；"
                 f"今日实际活动与最近节奏：{json.dumps(balance, ensure_ascii=False)}；"
                 "结合累计时长、连续次数、饭点和身体状态决定继续还是换活动；有具体进展或兴致时可以继续。"
                 "motivation 简短说明这次继续或切换的具体理由。"
+                "时长按这次想完成的小事选择：随手收拾、坐一会儿可用10至20分钟；读一段、做一道菜按内容与空档安排。"
+                "疲惫或兴趣一般时选短一点，有具体兴致时可多留些时间。空闲也可以安静歇一会儿。"
                 f"此刻的习惯候选：{json.dumps(habit, ensure_ascii=False)}；目标下一步：{json.dumps(next_step, ensure_ascii=False)}；"
                 f"可接续的具体念头：{json.dumps(continuations[-12:], ensure_ascii=False)}。"
                 "选择接续时填写 continuation_id，并在活动里回应该念头；选择目标时填写 goal_id 和 goal_step_id。"
+                "接续可以换一种活动：做饭发现调料快用完，下次顺路买；散步看到想再去的店，合适时再逛。依据保存的具体经历安排，motivation说清这次与上次的联系。"
+                "已经安排在日程中的事按原安排进行。完成一件小事后，可以换个活动，也可以就此休息。"
                 "习惯、目标、接续与新活动一起权衡；next_date 表示适合接续的日期，日期未到的念头留到之后。"
                 f"上次用餐结束：{last_meal}。过去两小时已读书 {reading_minutes} 分钟。到饭点可以安排做饭、用餐。"
                 f"人格：{json.dumps(personality, ensure_ascii=False)}；补充背景：{config.background}；"
@@ -387,16 +423,19 @@ class Living:
                 "结合兴趣、订阅资料、最近经历或未完念头选择话题，并在motivation说明缘由。"
                 "新闻、天气、本地活动的research_freshness填current；菜谱、背景知识填knowledge。"
                 "查询近期信息时在问题中写明日期或城市；其他活动research_query留空。书架阅读与联网了解分别安排。"
-                f"书架：{json.dumps(books, ensure_ascii=False)}；阅读书架中的书时填写book_id，从已读位置继续。"
+                f"自主阅读安排：{json.dumps(reading, ensure_ascii=False)}。available_minutes为0时选择其他活动；有可用时间时根据这次想读的内容、近期感想和精力选择合适时长，最长取available_minutes。"
+                f"书架：{json.dumps(books if reading['available_minutes'] else [], ensure_ascii=False)}；阅读书架中的书时填写book_id，从已读位置继续。"
                 f"城市地点联网可用：{search_ready}。开启时可填写 place_query；关闭时从已有地点选择，place_query 留空。"
-                "阅读可以在住处、图书馆、安静的咖啡馆或公园进行。结合有效天气、时段、精力、出行耗时和近期地点选择；"
-                "天气舒适时可偶尔在公园阅读，寒冷、降雨、风大时选择室内。想换环境时可搜索适合阅读的场所。"
+                "阅读适合睡前的一段空闲、去图书馆、雨天在家，结合兴趣与今天的阅读量选择。"
+                "公园里的散步、看风景，咖啡馆里的喝咖啡、坐一会儿，都是完整的活动。偶尔带书出门时说明这次想读的具体缘由。"
                 "外出时优先复用当前城市已收录的合适地点；居家活动使用住处或厨房。"
                 f"；可选地点名称：{json.dumps(places, ensure_ascii=False)}；"
                 f"环境资料：{json.dumps(environment, ensure_ascii=False)}。这些资料供选择活动时参考，安排活动按本提示中的规则进行。"
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
             def validate_activity(choice):
+                if self.is_reading(choice.model_dump()) and not reading["available_minutes"]:
+                    raise ValueError("这会儿留给其他日常活动，请重新选择，book_id 填空字符串")
                 if choice.research_query and (not exploration["ready"] or choice.book_id or choice.kind not in {"study", "leisure"}):
                     raise ValueError("请按自主见闻条件安排独立的学习或休闲活动，其他活动research_query留空")
                 if choice.continuation_id and not any(r["id"] == choice.continuation_id for r in continuations):
@@ -406,6 +445,8 @@ class Living:
                 raise ValueError("自主规划返回了未允许的活动类型")
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation
             minutes = min(choice.minutes, free)
+            if self.is_reading(choice.model_dump()):
+                minutes = min(minutes, reading["available_minutes"])
             research_query, research_freshness = choice.research_query, choice.research_freshness
             place_query = choice.place_query
             book_id = choice.book_id
@@ -638,6 +679,10 @@ class Living:
             unseen = [e for e in in_window if e["id"] not in sent["experience_ids"]]
             finished = [e for e in unseen if not self.pending_share_result(e)]
             available = [e for e in finished if self.share_ready(e["id"], session, now)]
+            tired = engine.state()["energy"] <= 25
+            resting_events = [e for e in available if tired and e["importance"] < 7]
+            if tired:
+                available = [e for e in available if e["importance"] >= 7]
             best = max(available, key=lambda e: (e["importance"], engine.time(e["occurred_at"])), default=None)
             threshold = config.share_threshold
             event, selection_reason = self.select_share(available, session, now)
@@ -674,7 +719,7 @@ class Living:
             else:
                 greeting = None
             if not notices and not event:
-                reason = f"没有待发提醒。{screening}"
+                reason = f"精力较低，先歇一会儿，{len(resting_events)} 条日常分享稍后再聊" if resting_events else f"没有待发提醒。{screening}"
                 if best:
                     reason += "，剩余经历的最高分低于门槛"
                 record("跳过", reason, session, score)
@@ -684,6 +729,8 @@ class Living:
                 "从角色自己的视角分享这次经历，给对方自由接话的空间。"
                 f"值得分享的原因={event['score_reason']}；经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
             )
+            if tired:
+                intent += "现在有些累，表达简短自然，重要的事照常说清楚。"
             intent += (f"\n接收人物的有效近况：{json.dumps(presence, ensure_ascii=False)}。"
                        f"最近实际分享与回应：{json.dumps(self.receipts.context(session, now), ensure_ascii=False)}。"
                        "已经接话的主题顺着回应继续；尚待回应的主题留出空间，有新进展时再自然提起。")

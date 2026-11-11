@@ -104,7 +104,7 @@ async def test_finished_activity_triggers_next_plan_inside_interval(plugin):
     plugin.config.life.schedule_enabled = False
     plugin.config.life.autonomous = True
     plugin.ctx.llm.generate.return_value = {"success": True, "response": json.dumps({
-        "title": "读书", "kind": "leisure", "minutes": 10, "location": "住处", "motivation": "想读书"})}
+        "title": "听音乐", "kind": "leisure", "minutes": 10, "location": "住处", "motivation": "听一会儿音乐"})}
     await plugin.living.choose_activity(now)
     await plugin.living.choose_activity(now + timedelta(minutes=1))
     assert plugin.ctx.llm.generate.await_count == 1

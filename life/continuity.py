@@ -64,6 +64,8 @@ class Continuity:
         if plan.get("research_query") and (not research or research["status"] not in {"资料就绪", "已完成"}):
             return {"status": "等待联网资料"}
         event = store.get("experience", plan["experience_id"])
+        continuation = store.get("activity_memory", plan["continuation_id"]) if plan.get("continuation_id") else None
+        prior_event = store.find("experience", continuation["experience_id"]) if continuation else None
         old = store.find("reflection", plan_id)
         if old and old["status"] == "已完成":
             return old
@@ -85,6 +87,7 @@ class Continuity:
             f"已有类别：{json.dumps(meanings, ensure_ascii=False)}；活动：{json.dumps(plan, ensure_ascii=False)}；"
             f"现有经历：{json.dumps(event, ensure_ascii=False)}；目标：{json.dumps(goal, ensure_ascii=False)}；"
             f"最近经历：{json.dumps(history, ensure_ascii=False)}；"
+            f"这次接着做的事：{json.dumps(continuation, ensure_ascii=False)}；前次经历：{json.dumps(prior_event, ensure_ascii=False)}；"
             f"已保存的接续内容：{json.dumps(self.context(plan['session_id'], now)['continuations'], ensure_ascii=False)}。"
         )
         if research:
@@ -98,6 +101,11 @@ class Continuity:
             prompt += (
                 "为这次已完成的角色活动补充过程和结果，接续已有作品进度与细节，"
                 "按活动时长安排合理进展，内容围绕角色独自进行的活动展开。"
+                "summary与details写本次日程内完成的活动；标题或细节里提到的打算、下次和之后要做的事放入next_action。"
+                "平淡的活动可以只记一两件小事，比如桌面收拾好了、坐着听完两首歌。"
+                "next_action只在这次经历留下具体想法或实际未完事项时填写，顺利收尾时填空字符串。"
+                "接续已有事项时写清这次做成了什么；原来惦记的事办完就收尾，新的想法依据这次经历。"
+                "activity描述本次实际做的活动；仍在做同一作品时沿用subject，换成买东西等后续活动时填写这次的具体对象。"
                 "返回activity、subject、summary、details（中文键和值的对象，包含过程、结果、进度）、"
                 "enjoyment（-5到5）、mood和stress（-5到5）、next_action（留下一件具体想尝试的事或尚未想明白的问题，顺其自然时可留空）、"
                 "next_date（适合接续的日期 YYYY-MM-DD，例如周末再做一道菜；随时可做时为null）。"
@@ -108,9 +116,8 @@ class Continuity:
                        "关联阶段目标时，依据现有结果返回goal_units（有实质进展为1，没有或未知为0）和next_action（依据现有记录提出下一步）。")
         try:
             result = await self.ask(prompt, ActivityOutcome if enrich else ActivityAssessment, "活动结果" if enrich else "习惯归类")
-            if plan.get("continuation_id"):
-                continuation = store.get("activity_memory", plan["continuation_id"])
-                result = result.model_copy(update={"activity": continuation["activity"], "subject": continuation["subject"]})
+            if continuation and not continuation.get("completed", False) and plan["kind"] == continuation.get("kind"):
+                result = result.model_copy(update={"subject": continuation["subject"]})
             plan = store.get("plan", plan_id)
             event = store.get("experience", plan["experience_id"])
             key = hashlib.sha256(f"{plan['session_id']}|{plan['kind']}|{result.activity}".encode()).hexdigest()[:16]
@@ -120,6 +127,10 @@ class Continuity:
                 store.put("plan", plan)
                 if enrich and event["revision"] == 1:
                     additions = {k: v for k, v in result.details.items() if k not in event["details"]}
+                    if continuation:
+                        additions["接续缘由"] = continuation["next_action"]
+                        if prior_event:
+                            additions["上次经历"] = prior_event["summary"]
                     event = self.engine.revise_experience(event["id"], additions, result.summary,
                                                          "依据已完成计划、已有进度和活动时长生成的角色模拟细节", plan["session_id"], now)
                     event.update(enjoyment=result.enjoyment, next_action=result.next_action)

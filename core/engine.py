@@ -131,6 +131,8 @@ class LifeEngine:
                 step = next((s for s in goal["steps"] if s["status"] != "completed"), None)
                 if not step or value.goal_step_id != step["id"]:
                     raise ValueError("关联分阶段目标时，请填写当前未完成阶段的 goal_step_id")
+        if value.continuation_id:
+            self.owned("activity_memory", value.continuation_id, session)
         plan = {**value.model_dump(), "id": uid(), "session_id": session,
                 "start": start.isoformat(), "end": end.isoformat(), "status": "scheduled",
                 "autonomous": autonomous, "flexible": value.flexible or autonomous,
@@ -408,6 +410,16 @@ class LifeEngine:
                 seconds = (right - left).total_seconds()
                 self._evolve(state, seconds / 3600, current["kind"] if current else "idle")
                 if current:
+                    if current["elapsed_seconds"] == 0:
+                        current["elapsed_days"] = {}
+                    if "elapsed_days" in current:
+                        part = left
+                        while part < right:
+                            stop = min(right, (part + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0))
+                            day = part.date().isoformat()
+                            current["elapsed_days"][day] = current["elapsed_days"].get(day, 0) + (stop - part).total_seconds()
+                            part = stop
+                    current["last_active_at"] = right.isoformat()
                     current["elapsed_seconds"] += seconds
                     if current.get("route"):
                         position = travel_position(current)

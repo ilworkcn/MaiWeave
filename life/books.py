@@ -428,6 +428,17 @@ class Books:
                          evidence=f"模型已阅读上传文件 {book['filename']}，第{note.get('text_chapter', note['chapter']) + 1}章字符{note.get('text_offset', note['offset'])}至{note['end']}",
                          details={"书名": book["title"], "章节": note["chapter_title"], "内容": note["summary"], "原文摘句": note["quote"],
                                   "角色读后感": note["thoughts"], "读后问题": note["question"], "阅读地点": note.get("location", plan["location"])})
+            if plan.get("continuation_id"):
+                continuation = store.get("activity_memory", plan["continuation_id"])
+                event["details"]["接续缘由"] = continuation["next_action"]
+                prior = store.find("experience", continuation["experience_id"])
+                if prior:
+                    event["details"]["上次经历"] = prior["summary"]
+                store.put("activity_memory", {**continuation, "activity": "阅读", "subject": book["title"],
+                                             "kind": plan["kind"], "location": plan["location"],
+                                             "next_action": "", "next_date": "", "completed": True,
+                                             "experience_id": event["id"], "details": event["details"],
+                                             "updated_at": now.isoformat(), "last_continued_at": now.isoformat()})
             store.put("experience", event)
             if plan.get("goal_step_id"):
                 self.engine.progress_stage(plan, 1, note["summary"])

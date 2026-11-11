@@ -15,6 +15,8 @@ from test_plugin import plugin
 @pytest.mark.parametrize("action", ["anniversary", "delete_anniversary"])
 async def test_linked_activity_and_confirmation_fit_budget(plugin, session, budget, action):
     now = plugin.now()
+    with plugin.store.db:
+        plugin.store.put("state", {**plugin.engine.state(), "energy": 20})
     plugin.chat_context.kinds[session] = session
     setattr(plugin.config.context, session + "_chars", budget)
     plan = plugin.engine.create_plan(PlanInput(title="很长的阅读活动名称" * 12, kind="leisure",

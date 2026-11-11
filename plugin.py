@@ -85,6 +85,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ('model_arrangement', 'models', '日常安排', '按功能选择 MaiBot 已配置的模型任务。', ['activity', 'diary_schedule', 'habits', 'goals']),
             ('model_expression', 'models', '阅读与表达', '设置活动感想、阅读、日记、梦境和空间文案使用的任务。', ['outcomes', 'reading', 'diary', 'dreams', 'qzone']),
             ('model_information', 'models', '资料整理', '设置资料核对和城市地点整理使用的任务。', ['review', 'places']),
+            ('reading_rhythm', 'books', '日常阅读', '给读书留一点时间，也留时间做别的事。', ['autonomous_minutes']),
             ('rhythm', 'rhythm', '重复日程与习惯', '选择是否学习和参考生活习惯。', ['habits_enabled', 'follow_habits']),
             ('continuity', 'continuity', '生活连贯性', '设置活动结果、长期目标与共同安排提醒。', ['outcomes_enabled', 'semantic_learning', 'goal_planning', 'adaptive_schedule', 'reminder_minutes']),
             ('dreams', 'dreams', '睡眠与梦境', '设置梦境生成及醒后的心情变化。', ['enabled', 'mood_effect']),
@@ -94,6 +95,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ('dream_details', 'dreams', '梦境生成条件', '设置产生梦境所需的睡眠时长。', ['minimum_hours']),
             ('followup_details', 'continuity', '事项跟进', '设置未完成事项的跟进间隔。', ['followup_hours']),
             ('retry_details', 'proactive', '交流重新判断', '设置同一话题未发出后的再次判断间隔。', ['retry_minutes']),
+            ('reading_details', 'books', '自主阅读节奏', '调整每次自主阅读的时长和两次之间的间隔。', ['session_minutes', 'break_minutes']),
             ('books', 'books', '阅读与容量', '设置书架容量和每次阅读的正文长度。', ['max_books', 'storage_mb', 'max_file_mb', 'reading_chars']),
             ('context_limits', 'context', '聊天上下文长度', '设置每次聊天带入的生活信息长度。', ['group_chars', 'private_chars']),
             ('book_context', 'books', '书架上下文长度', '设置工具查询带入的书目和近期笔记长度。', ['context_chars']),
@@ -119,12 +121,12 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             }
         schema["layout"] = {"type": "tabs", "tabs": [
             {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams"], "order": 0},
-            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary"], "order": 1},
+            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "reading_rhythm", "diary"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "explore", "news", "search"], "order": 2},
             {"id": "context", "title": "聊天上下文", "sections": ["context"], "order": 3},
             {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "quota", "memory"], "order": 4},
         ]}
-        advanced = ["planning", "world_updates", "rhythm_details", "dream_details", "followup_details", "retry_details", "books", "context_limits", "book_context", "retention", "plugin"]
+        advanced = ["planning", "world_updates", "rhythm_details", "dream_details", "followup_details", "retry_details", "reading_details", "books", "context_limits", "book_context", "retention", "plugin"]
         schema["layout"]["tabs"].extend([
             {"id": "models", "title": "模型设置", "sections": ["model_default", "model_arrangement", "model_expression", "model_information"], "order": 5},
             {"id": "advanced", "title": "高级设置", "sections": advanced, "order": 6},
@@ -578,7 +580,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.11.3\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.11.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

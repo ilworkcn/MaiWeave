@@ -19,7 +19,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.11.3", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.11.4", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -130,6 +130,9 @@ class DiaryConfig(PluginConfigBase):
 
 class BooksConfig(PluginConfigBase):
     __ui_label__ = "书架与阅读"
+    autonomous_minutes: int = setting("每天自主阅读上限（分钟）", default=90, ge=-1, le=480, description="当天阅读达到这个时长后，自主安排会选择其他活动；0 表示关闭自主阅读，-1 表示每日无上限。")
+    session_minutes: int = setting("单次自主阅读上限（分钟）", default=40, ge=10, le=120, description="每次自主安排阅读的最长时间，实际时长结合内容、精力和空闲时间选择。")
+    break_minutes: int = setting("自主阅读间隔（分钟）", default=60, ge=0, le=1440, description="上次阅读结束后，隔多久可以再次自主安排阅读；0 表示不设间隔。")
     max_books: int = setting("最多书籍数", default=100, ge=1, le=1000, description="包含已归档书籍；删除书籍可释放名额。")
     storage_mb: int = setting("书架文件总容量（MB）", default=200, ge=1, le=10240, description="计算原始文件、解析后的正文和上传中的文件。")
     max_file_mb: int = setting("单本文件容量（MB）", default=20, ge=1, le=100, description="同时作为 EPUB 解压内容上限，正文解析后还会检查书架总容量。")
