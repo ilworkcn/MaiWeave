@@ -71,14 +71,32 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("profile", "life", "角色设定", "时区已有默认值，背景和兴趣按需补充。", ["timezone", "interests", "background"]),
             ("sleep", "life", "日常作息", "关闭作息可全天候交流；开启后按 24 小时制安排睡眠。", ["schedule_enabled", "nap_quiet", "sleep_hour", "wake_hour"]),
             ("wake", "life", "睡眠唤醒", "设置能唤醒角色的词语和醒来后留给聊天的时间。", ["wake_enabled", "wake_minutes", "wake_keywords"]),
-            ("planning", "life", "模型与更新频率", "已有可用初始值，通常无需调整。", ["model_task", "tick_seconds", "planning_interval_minutes"]),
-            ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "weather_minutes", "city", "country_code"]),
+            ("planning", "life", "更新与规划", "设置生活推进和自主规划的检查间隔。", ["tick_seconds", "planning_interval_minutes"]),
+            ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "city", "country_code"]),
             ("explore", "world", "自主见闻", "安排时间了解感兴趣的事，再把发现带回生活。", ["explore_enabled", "explore_topics", "explore_daily_limit", "explore_interval_minutes"]),
-            ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "news_minutes", "feed_urls"]),
+            ("news", "world", "资讯订阅", "按需开启；订阅地址需要自行提供。", ["news_enabled", "feed_urls"]),
             ("search", "world", "联网搜索", "复用 MaiBot 已配置的搜索服务。", ["search_enabled", "places_enabled"]),
             ("proactive", "proactive", "主动交流对象", "个人资料的聊天流用于交流和提醒；其他接收对象可在下方补充。", ["enabled", "mode", "natural_greetings", "session_ids", "share_threshold"]),
-            ("limits", "proactive", "交流时段与间隔", "发送间隔从实际发送计算，同一话题未发出时按重新判断间隔选择时机。", ["start_hour", "end_hour", "cooldown_minutes", "retry_minutes"]),
+            ("limits", "proactive", "交流时段与间隔", "发送间隔从实际发送计算，同一话题未发出时按重新判断间隔选择时机。", ["start_hour", "end_hour", "cooldown_minutes"]),
             ("quota", "proactive", "每日发送额度", "每日额度是最多发送次数，分享内容来自生活经历和待跟进事项。", ["daily_limit"]),
+        ]
+        groups += [
+            ('model_default', 'life', '默认生活模型', '各功能选择跟随默认时使用此任务。', ['model_task']),
+            ('model_arrangement', 'models', '日常安排', '按功能选择 MaiBot 已配置的模型任务。', ['activity', 'diary_schedule', 'habits', 'goals']),
+            ('model_expression', 'models', '阅读与表达', '设置活动感想、阅读、日记、梦境和空间文案使用的任务。', ['outcomes', 'reading', 'diary', 'dreams', 'qzone']),
+            ('model_information', 'models', '资料整理', '设置资料核对和城市地点整理使用的任务。', ['review', 'places']),
+            ('rhythm', 'rhythm', '重复日程与习惯', '选择是否学习和参考生活习惯。', ['habits_enabled', 'follow_habits']),
+            ('continuity', 'continuity', '生活连贯性', '设置活动结果、长期目标与共同安排提醒。', ['outcomes_enabled', 'semantic_learning', 'goal_planning', 'adaptive_schedule', 'reminder_minutes']),
+            ('dreams', 'dreams', '睡眠与梦境', '设置梦境生成及醒后的心情变化。', ['enabled', 'mood_effect']),
+            ('context', 'context', '聊天上下文', '选择群聊、私聊的信息量及带入内容。', ['group_mode', 'private_mode', 'schedule', 'people', 'reading', 'continuity', 'experiences', 'sharing', 'environment', 'dreams']),
+            ('world_updates', 'world', '天气与资讯更新', '设置天气和资讯的刷新间隔。', ['weather_minutes', 'news_minutes']),
+            ('rhythm_details', 'rhythm', '日程与习惯参数', '设置预排范围和习惯学习所需天数。', ['horizon_days', 'learning_days', 'habit_min_days']),
+            ('dream_details', 'dreams', '梦境生成条件', '设置产生梦境所需的睡眠时长。', ['minimum_hours']),
+            ('followup_details', 'continuity', '事项跟进', '设置未完成事项的跟进间隔。', ['followup_hours']),
+            ('retry_details', 'proactive', '交流重新判断', '设置同一话题未发出后的再次判断间隔。', ['retry_minutes']),
+            ('books', 'books', '阅读与容量', '设置书架容量和每次阅读的正文长度。', ['max_books', 'storage_mb', 'max_file_mb', 'reading_chars']),
+            ('context_limits', 'context', '聊天上下文长度', '设置每次聊天带入的生活信息长度。', ['group_chars', 'private_chars']),
+            ('book_context', 'books', '书架上下文长度', '设置工具查询带入的书目和近期笔记长度。', ['context_chars']),
         ]
         original = schema["sections"]
         for name, choices in (("publish_mode", ["关闭", "手动发布", "日记完成后自动发布"]), ("publish_visibility", ["所有人", "好友", "仅自己"])):
@@ -92,26 +110,39 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         for section, keys in (("life", ("sleep_hour", "wake_hour")), ("proactive", ("start_hour", "end_hour"))):
             for key in keys:
                 original[section]["fields"][key].update(choices=list(range(24)), ui_type="select")
-        schema["sections"] = {key: value for key, value in original.items() if key not in {"life", "world", "proactive"}}
+        schema["sections"] = {key: value for key, value in original.items() if key not in {source for _, source, _, _, _ in groups}}
         for key, source, title, description, fields in groups:
             schema["sections"][key] = {
                 **original[source], "name": source, "title": title, "description": description,
                 "fields": {name: {**original[source]["fields"][name], "order": order} for order, name in enumerate(fields)},
-                "collapsed": key == "planning",
+                "collapsed": False,
             }
         schema["layout"] = {"type": "tabs", "tabs": [
-            {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams", "planning"], "order": 0},
-            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary", "books"], "order": 1},
+            {"id": "life", "title": "角色与作息", "sections": ["life", "profile", "sleep", "wake", "dreams"], "order": 0},
+            {"id": "growth", "title": "日程与成长", "sections": ["rhythm", "continuity", "diary"], "order": 1},
             {"id": "world", "title": "天气与见闻", "sections": ["weather", "explore", "news", "search"], "order": 2},
             {"id": "context", "title": "聊天上下文", "sections": ["context"], "order": 3},
-            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "quota", "memory", "retention", "plugin"], "order": 4},
+            {"id": "connections", "title": "交流与记忆", "sections": ["proactive", "limits", "quota", "memory"], "order": 4},
         ]}
+        advanced = ["planning", "world_updates", "rhythm_details", "dream_details", "followup_details", "retry_details", "books", "context_limits", "book_context", "retention", "plugin"]
+        schema["layout"]["tabs"].extend([
+            {"id": "models", "title": "模型设置", "sections": ["model_default", "model_arrangement", "model_expression", "model_information"], "order": 5},
+            {"id": "advanced", "title": "高级设置", "sections": advanced, "order": 6},
+        ])
+        for key in advanced:
+            schema["sections"][key]["collapsed"] = True
         return schema
 
     def get_webui_config_schema(self, **kwargs):
         schema = super().get_webui_config_schema(**kwargs)
-        field = schema["sections"]["planning"]["fields"]["model_task"]
+        field = schema["sections"]["model_default"]["fields"]["model_task"]
         field.update(choices=list(dict.fromkeys([*self.model_tasks, self.config.life.model_task])), ui_type="select")
+        for key in ("model_arrangement", "model_expression", "model_information"):
+            for name, field in schema["sections"][key]["fields"].items():
+                selected = getattr(self.config.models, name)
+                task = self.config.life.model_task if selected == "跟随默认" else selected
+                hint = field["description"] + " 当前使用：" + task + "。"
+                field.update(choices=list(dict.fromkeys(["跟随默认", *self.model_tasks, selected])), ui_type="select", hint=hint, description=hint)
         return schema
 
     def now(self) -> datetime:

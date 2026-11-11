@@ -150,6 +150,8 @@ MaiWeave 为 MaiBot 添加自主日程、睡眠作息、情绪、阅读和日记
 
 **接上麦麦已有的记忆。** 在 MaiBot 人物画像中选中你，补上生活备注、生日和纪念日，让之后的相处接着这些记忆继续。同机运行的 MaiBot 1.4 可自动连接，状态在人物页面查看。[记忆连接设置 →](https://github.com/ilworkcn/MaiWeave/blob/main/docs/配置指南.md)
 
+模型任务可在插件配置的「模型设置」中按功能选择；更新频率、容量和数据保留集中在「高级设置」。详见[配置指南](docs/配置指南.md)。
+
 天气由 Open-Meteo 提供，联网见闻和地点搜索使用 MaiBot 已配置的联网服务。主动交流方式、发送频率和聊天细节等选项，见[配置指南](https://github.com/ilworkcn/MaiWeave/blob/main/docs/配置指南.md)。
 
 <details>

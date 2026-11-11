@@ -258,11 +258,11 @@ async def test_memory_failure_reports_local_save_separately(plugin):
 async def test_model_task_dropdown_uses_host_tasks_and_keeps_selection(plugin):
     plugin.ctx.llm.get_available_models.assert_awaited_once()
     plugin.config.life.model_task = "custom_life"
-    field = plugin.get_webui_config_schema()["sections"]["planning"]["fields"]["model_task"]
+    field = plugin.get_webui_config_schema()["sections"]["model_default"]["fields"]["model_task"]
     assert field["ui_type"] == "select"
     assert field["choices"] == ["utils", "replyer", "planner", "custom_life"]
     plugin.config.life.model_task = "planner"
-    field = plugin.get_webui_config_schema()["sections"]["planning"]["fields"]["model_task"]
+    field = plugin.get_webui_config_schema()["sections"]["model_default"]["fields"]["model_task"]
     assert field["choices"] == ["utils", "replyer", "planner"]
     from maiweave.integrations.usage import generate
     plugin.ctx.llm.generate.return_value = {"success": True, "response": "已完成"}

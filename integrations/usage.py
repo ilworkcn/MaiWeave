@@ -7,15 +7,20 @@ from time import perf_counter
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from ..config import MODEL_FEATURES
+
 
 async def _once(ctx, store, config, feature, prompt):
+    key = MODEL_FEATURES.get(feature)
+    selected = getattr(config.models, key) if key else "跟随默认"
+    task = config.life.model_task if selected == "跟随默认" else selected
     started = perf_counter()
     record = {"id": uuid4().hex, "at": datetime.now(ZoneInfo(config.life.timezone)).isoformat(),
-              "feature": feature, "task": config.life.model_task, "model": "", "status": "失败", "error": "",
+              "feature": feature, "task": task, "model": "", "status": "失败", "error": "",
               "prompt_tokens": None, "completion_tokens": None, "total_tokens": None,
               "prompt_cache_hit_tokens": None}
     try:
-        result = await asyncio.wait_for(ctx.llm.generate(prompt, task_name=config.life.model_task, timeout_ms=95000), timeout=90)
+        result = await asyncio.wait_for(ctx.llm.generate(prompt, task_name=task, timeout_ms=95000), timeout=90)
         record.update(model=result.get("model") or result.get("model_name", ""),
                       status="成功" if result["success"] else "失败", error=result.get("error", ""))
         for key in ("prompt_tokens", "completion_tokens", "total_tokens", "prompt_cache_hit_tokens"):

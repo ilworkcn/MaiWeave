@@ -29,7 +29,7 @@ class LifeConfig(PluginConfigBase):
     enabled: bool = setting("启用生活引擎", default=True, description="控制生活推进和对话工具")
     autonomous: bool = setting("自主安排活动", default=True, description="空闲时由角色选择活动")
     timezone: str = setting("生活时区（必填）", default="Asia/Shanghai", description="已填中国标准时间，可直接使用；其他地区例如 Asia/Tokyo。")
-    model_task: str = setting("生活规划模型任务（必填）", default="utils", description="从 MaiBot 已配置的模型任务中选择，默认 utils；任务选项在插件加载时更新。")
+    model_task: str = setting("默认生活模型（必填）", default="utils", description="从 MaiBot 已配置的模型任务中选择，默认 utils；任务选项在插件加载时更新。")
     schedule_enabled: bool = setting("遵循日常作息", default=True, description="关闭后切换为全天候模式，已有约定继续执行。")
     nap_quiet: bool = setting("午睡期间保持安静", default=True, description="日间睡眠时保持安静，醒来后接上当前话题。日间按入睡与起床时间之外判断；关闭后可在日间睡眠时回复，唤醒沿用现有设置。")
     wake_enabled: bool = setting("允许聊天唤醒", default=True, description="亲密人物可通过关键词或当前陪伴请求唤醒角色，群聊和私聊共用人物关系。")
@@ -179,7 +179,38 @@ class RetentionConfig(PluginConfigBase):
     history_count: int = setting("每条记录保留历史条数", default=10, ge=0, description="经历修订、关系变化和目标分解分别保留最近的历史；0 表示保留全部版本。")
 
 
+MODEL_FEATURES = {
+    "自主活动": "activity",
+    "日记安排": "diary_schedule",
+    "习惯归类": "habits",
+    "活动结果": "outcomes",
+    "目标分解": "goals",
+    "书籍阅读": "reading",
+    "生活日记": "diary",
+    "梦境": "dreams",
+    "资料核对": "review",
+    "城市地点": "places",
+    "空间文案": "qzone",
+}
+
+
+class ModelConfig(PluginConfigBase):
+    __ui_label__ = "功能模型"
+    activity: str = setting("自主活动", default="跟随默认", description="选择活动和安排日程；选择跟随默认时使用默认生活模型。")
+    diary_schedule: str = setting("日记安排", default="跟随默认", description="选择写日记的时间；选择跟随默认时使用默认生活模型。")
+    habits: str = setting("习惯归类", default="跟随默认", description="归类已完成活动并整理习惯；选择跟随默认时使用默认生活模型。")
+    outcomes: str = setting("活动结果", default="跟随默认", description="整理活动结果与角色感想；选择跟随默认时使用默认生活模型。")
+    goals: str = setting("目标分解", default="跟随默认", description="将长期目标拆成具体步骤；选择跟随默认时使用默认生活模型。")
+    reading: str = setting("书籍阅读", default="跟随默认", description="理解正文并生成阅读感想；选择跟随默认时使用默认生活模型。")
+    diary: str = setting("生活日记", default="跟随默认", description="根据当天经历写日记；选择跟随默认时使用默认生活模型。")
+    dreams: str = setting("梦境", default="跟随默认", description="结合睡眠和经历生成梦境；选择跟随默认时使用默认生活模型。")
+    review: str = setting("资料核对", default="跟随默认", description="理解个人资料与人物关系变更；选择跟随默认时使用默认生活模型。")
+    places: str = setting("城市地点", default="跟随默认", description="从搜索资料中整理生活地点；选择跟随默认时使用默认生活模型。")
+    qzone: str = setting("空间文案", default="跟随默认", description="根据日记生成空间随笔；选择跟随默认时使用默认生活模型。")
+
+
 class MaiWeaveConfig(PluginConfigBase):
+    models: ModelConfig = Field(default_factory=ModelConfig)
     plugin: PluginSection = Field(default_factory=PluginSection)
     life: LifeConfig = Field(default_factory=LifeConfig)
     proactive: ProactiveConfig = Field(default_factory=ProactiveConfig)
