@@ -587,8 +587,35 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     @API("get_life_status", description="只读查询当前生活状态", version="1", public=True)
     async def get_life_status(self) -> dict:
-        return read_life_status(self.store, self.now(), enabled=self.config.life.enabled,
-                                schedule_enabled=self.config.life.schedule_enabled)
+        now = self.now()
+        status = read_life_status(self.store, now, enabled=self.config.life.enabled,
+                                  schedule_enabled=self.config.life.schedule_enabled)
+        status.update(effective_sleeping=None, quiet=None, sleep_until=None)
+        if status["ready"]:
+            status.update(effective_sleeping=self.living.sleeping(now), quiet=self.living.quiet_sleep(now),
+                          sleep_until=self.living.sleep_until(now))
+        return status
+
+    @API("evaluate_behavior", description="只读判断当前生活状态是否适合普通对话或主动交流", version="1", public=True)
+    async def evaluate_behavior(self, behavior: str) -> dict:
+        if behavior not in {"conversation", "proactive"}:
+            raise ValueError("请选择 conversation（普通对话）或 proactive（主动交流）")
+        status = await self.get_life_status()
+        result = {"version": 1, "behavior": behavior, "queried_at": status["queried_at"],
+                  "decision": "allow", "reason": "available", "message": "当前生活状态允许", "until": None}
+        if not status["enabled"]:
+            result.update(decision="abstain", reason="disabled", message="生活引擎已关闭，由调用方安排")
+        elif not status["ready"]:
+            result.update(decision="unknown", reason="not_ready", message="生活状态尚未就绪")
+        elif behavior == "conversation":
+            if status["quiet"]:
+                result.update(decision="defer", reason="sleeping", message="正在睡觉，稍后再聊", until=status["sleep_until"])
+        else:
+            pause = self.living.proactive_pause(datetime.fromisoformat(status["queried_at"]))
+            if pause:
+                result.update(decision="defer", **pause)
+        return result
+
 
     def get_components(self):
         components = super().get_components()

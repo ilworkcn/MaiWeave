@@ -11,7 +11,7 @@ from maibot_sdk.context import PluginContext
 from maibot_sdk.capabilities.maisaka import MaisakaReplyCapability
 from maibot_sdk.capabilities.send import SendCapability
 from maiweave.config import MaiWeaveConfig
-from maiweave.core.models import ExperienceInput
+from maiweave.core.models import ExperienceInput, PlanInput
 from maiweave.plugin import create_plugin
 from test_plugin import plugin
 
@@ -118,10 +118,9 @@ async def test_expression_respects_life_and_sharing_settings(plugin, monkeypatch
         cfg.enabled = False
     elif gate == "时段":
         cfg.start_hour, cfg.end_hour = 14, 22
-    elif gate == "睡眠":
-        monkeypatch.setattr(plugin.living, "sleeping", lambda at: True)
-    elif gate == "学习":
-        monkeypatch.setattr(plugin.engine, "current", lambda at: {"kind": "study", "title": "学习"})
+    elif gate in {"睡眠", "学习"}:
+        plugin.engine.create_plan(PlanInput(title=gate, kind="sleep" if gate == "睡眠" else "study",
+            start=now.isoformat(), end=(now + timedelta(minutes=30)).isoformat()), "", now)
     elif gate == "额度":
         cfg.daily_limit = 0
     else:

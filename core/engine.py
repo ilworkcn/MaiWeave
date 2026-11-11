@@ -34,7 +34,7 @@ def read_life_status(store: Store, now: datetime, *, enabled: bool, schedule_ena
     """读取生活状态，供插件 API 和首页卡片共用。"""
     state = store.find("state", "life")
     result = {"version": 1, "ready": state is not None, "enabled": enabled,
-              "schedule_enabled": schedule_enabled, "updated_at": None,
+              "schedule_enabled": schedule_enabled, "updated_at": None, "queried_at": now.isoformat(),
               "sleeping": None, "awake_until": None, "current": None,
               "next_plan": None, "location": None, "energy": None, "mood": None}
     if state is None:

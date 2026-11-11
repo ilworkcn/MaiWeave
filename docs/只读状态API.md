@@ -79,7 +79,7 @@ async def describe_maiweave_sleep(self):
     if status["awake_until"]:
         until = datetime.fromisoformat(status["awake_until"])
         return f"已唤醒，陪伴到 {until:%H:%M}"
-    if status["sleeping"]:
+    if status["effective_sleeping"]:
         return "正在睡觉"
     return "清醒"
 ```
@@ -118,6 +118,10 @@ async def describe_maiweave_next_plan(self):
   "enabled": true,
   "schedule_enabled": true,
   "updated_at": "2026-11-06T17:15:00+08:00",
+  "queried_at": "2026-11-06T17:15:05+08:00",
+  "effective_sleeping": false,
+  "quiet": false,
+  "sleep_until": null,
   "sleeping": false,
   "awake_until": null,
   "current": {
@@ -149,11 +153,15 @@ async def describe_maiweave_next_plan(self):
 | 字段 | 含义 |
 | --- | --- |
 | `version` | 数据格式版本，当前为整数 `1` |
-| `ready` | `true` 表示已有生活状态；`false` 时下面的状态数据为 `null`，两个配置开关仍有值 |
+| `ready` | `true` 表示已有生活状态；`false` 时状态数据为 `null`，配置开关和查询时间仍有值 |
 | `enabled` | 生活引擎开关 |
 | `schedule_enabled` | 日常作息开关，`false` 为全天候模式 |
 | `updated_at` | 精力、心情、位置等生活状态最后更新的时间 |
-| `sleeping` | 是否处于睡眠日程，布尔值 |
+| `sleeping` | 是否处于睡眠日程，保留原有含义 |
+| `effective_sleeping` | 按内部作息规则判断的有效睡眠状态；包含临时唤醒到期、续睡日程尚未生成的阶段 |
+| `quiet` | 当前是否按睡眠规则保持聊天静默，与午睡静默开关及聊天发送判断一致 |
+| `sleep_until` | 有效睡眠预计结束时间；有效睡眠为 false 或状态未就绪时为 null |
+| `queried_at` | 本次查询时间，含时区的 ISO 8601 字符串 |
 | `awake_until` | 有效的唤醒陪伴截止时间，到期后返回 `null` |
 | `current` | 当前活动；空闲时为 `null` |
 | `next_plan` | 下一项安排；没有未来安排时为 `null` |
@@ -185,3 +193,57 @@ async def describe_maiweave_next_plan(self):
 做状态面板时，可以每 30 秒查询一次；其他插件也可以在需要时调用。一次查询只读取记录，麦麦的生活仍由原来的生活循环推进。活动结束或陪伴到期时，即使 `updated_at` 相同，相应字段也会变化。
 
 MaiWeave 自带首页卡片目前展示加载时快照；「此刻生活」页面每 30 秒刷新。两种展示方式的刷新频率由各自页面决定。
+
+
+## 判断现在是否适合交流
+
+`ilworkcn.maiweave.evaluate_behavior`，接口版本 `"1"`。参数 `behavior` 可选：
+
+- `conversation`：普通对话，使用角色当前的聊天静默规则。
+- `proactive`：主动交流，使用内部主动交流的生活状态规则；睡眠、工作和学习期间暂缓。
+
+```python
+async def read_conversation_policy(self):
+    return await self.ctx.api.call(
+        "ilworkcn.maiweave.evaluate_behavior",
+        version="1",
+        behavior="conversation",
+    )
+```
+
+例如午睡期间开启静默时返回：
+
+```json
+{
+  "version": 1,
+  "behavior": "conversation",
+  "queried_at": "2026-11-11T13:05:00+08:00",
+  "decision": "defer",
+  "reason": "sleeping",
+  "message": "正在睡觉，稍后再聊",
+  "until": "2026-11-11T13:30:00+08:00"
+}
+```
+
+| decision | reason | 含义 |
+| --- | --- | --- |
+| `allow` | `available` | 当前生活状态允许 |
+| `defer` | `sleeping` | 睡眠期间暂缓 |
+| `defer` | `busy` | 工作或学习期间暂缓主动交流 |
+| `abstain` | `disabled` | 生活引擎关闭，由调用方安排 |
+| `unknown` | `not_ready` | 生活状态尚未就绪，调用方稍后重查 |
+
+`until` 是本次睡眠或活动的预计结束时间，其余情况为 `null`。日程、作息设置或唤醒状态变化后可重新查询。此接口判断生活状态；实际回复决策、接收对象、发送时段和次数由调用方的功能继续处理。参数值写错时抛出参数错误，调用异常由 SDK 传给调用方。
+
+### 睡眠、午睡与全天候模式
+
+| 场景 | effective_sleeping / quiet | 普通对话 | 主动交流 |
+| --- | --- | --- | --- |
+| 夜间睡眠 | true / true | 暂缓 | 暂缓 |
+| 午睡，开启静默 | true / true | 暂缓 | 暂缓 |
+| 午睡，关闭静默 | true / false | 允许 | 暂缓 |
+| 临时唤醒陪伴中 | false / false | 允许 | 按当前活动判断 |
+| 陪伴已到期，原睡眠尚未结束，续睡日程尚未生成 | true / 按午睡与夜间规则判断 | 按静默设置判断 | 暂缓 |
+| 全天候模式 | false / false | 允许 | 用户明确安排的睡眠、工作和学习期间仍暂缓 |
+
+普通对话的允许表示作息规则允许处理，并不表示每条消息都会回复。关闭生活引擎时，行为接口返回 `abstain`。查询只读记录和当前时间，不推进日程、不恢复睡眠、不调用模型。

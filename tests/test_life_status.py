@@ -63,3 +63,89 @@ def test_status_without_saved_state(tmp_path):
     assert result["ready"] is False and result["sleeping"] is None
     assert list(store.db.iterdump()) == before
     store.close()
+
+
+@pytest.mark.parametrize("kind,hour,nap,schedule,conversation,proactive", [
+    ("sleep", 13, True, True, "defer", "defer"),
+    ("sleep", 13, False, True, "allow", "defer"),
+    ("sleep", 23, False, True, "defer", "defer"),
+    ("sleep", 13, True, False, "allow", "defer"),
+    ("work", 13, True, True, "allow", "defer"),
+    ("study", 13, True, True, "allow", "defer"),
+    ("rest", 13, True, True, "allow", "allow"),
+    ("leisure", 13, True, True, "allow", "allow"),
+])
+async def test_behavior_matches_internal_policy(plugin, monkeypatch, kind, hour, nap, schedule, conversation, proactive):
+    from maiweave.core.models import PlanInput
+    now = plugin.now().replace(hour=hour, minute=0, second=0, microsecond=0)
+    monkeypatch.setattr(plugin, "now", lambda: now)
+    plugin.config.life.nap_quiet = nap
+    plugin.config.life.schedule_enabled = schedule
+    end = (now + timedelta(minutes=30)).isoformat()
+    plugin.engine.create_plan(PlanInput(title="状态查询验证", kind=kind, start=now.isoformat(), end=end), "", now)
+    before = list(plugin.store.db.iterdump())
+    monkeypatch.setattr(plugin.engine, "advance", Mock(side_effect=AssertionError("查询不推进日程")))
+    monkeypatch.setattr(plugin.living, "resume_sleep", Mock(side_effect=AssertionError("查询不恢复睡眠")))
+    status = await plugin.get_life_status()
+    assert status["effective_sleeping"] == plugin.living.sleeping(now)
+    assert status["quiet"] == plugin.living.quiet_sleep(now)
+    assert status["queried_at"] == now.isoformat()
+    assert status["sleep_until"] == (end if kind == "sleep" and schedule else None)
+    for behavior, expected in [("conversation", conversation), ("proactive", proactive)]:
+        result = await plugin.evaluate_behavior(behavior)
+        assert result["decision"] == expected
+        assert result["until"] == (end if expected == "defer" else None)
+    assert list(plugin.store.db.iterdump()) == before
+    plugin.ctx.llm.generate.assert_not_called()
+
+
+async def test_wake_expiry_before_resume_is_visible(plugin, monkeypatch):
+    from maiweave.core.models import PlanInput
+    from test_sleep_identity import linked_person
+    await linked_person(plugin)
+    now = plugin.now().replace(hour=13, minute=0, second=0, microsecond=0)
+    plugin.config.life.wake_minutes = 1
+    end = now + timedelta(minutes=30)
+    plugin.engine.create_plan(PlanInput(title="午睡", kind="sleep", start=now.isoformat(), end=end.isoformat()), "", now)
+    assert plugin.living.wake("private", now, "陪伴请求", "u")
+    monkeypatch.setattr(plugin, "now", lambda: now)
+    awake = await plugin.get_life_status()
+    assert not awake["sleeping"] and not awake["effective_sleeping"] and not awake["quiet"]
+    assert awake["awake_until"] and awake["sleep_until"] is None
+    expired = plugin.engine.time(awake["awake_until"])
+    monkeypatch.setattr(plugin, "now", lambda: expired)
+    before = list(plugin.store.db.iterdump())
+    status = await plugin.get_life_status()
+    assert status["current"] is None and not status["sleeping"] and status["awake_until"] is None
+    assert status["effective_sleeping"] and status["quiet"]
+    assert status["sleep_until"] == end.isoformat()
+    for behavior in ["conversation", "proactive"]:
+        result = await plugin.evaluate_behavior(behavior)
+        assert result["decision"] == "defer" and result["reason"] == "sleeping"
+    assert list(plugin.store.db.iterdump()) == before
+    plugin.config.life.schedule_enabled = False
+    status = await plugin.get_life_status()
+    assert not status["effective_sleeping"] and not status["quiet"]
+    assert (await plugin.evaluate_behavior("proactive"))["decision"] == "allow"
+    plugin.config.life.schedule_enabled = True
+    monkeypatch.setattr(plugin, "now", lambda: end)
+    assert not (await plugin.get_life_status())["effective_sleeping"]
+    assert (await plugin.evaluate_behavior("conversation"))["decision"] == "allow"
+
+
+async def test_disabled_unknown_invalid_and_registration(plugin):
+    plugin.config.life.enabled = False
+    for behavior in ["conversation", "proactive"]:
+        assert (await plugin.evaluate_behavior(behavior))["decision"] == "abstain"
+    plugin.config.life.enabled = True
+    with plugin.store.db:
+        plugin.store.delete("state", "life")
+    status = await plugin.get_life_status()
+    assert not status["ready"]
+    assert status["effective_sleeping"] is None and status["quiet"] is None and status["sleep_until"] is None
+    for behavior in ["conversation", "proactive"]:
+        assert (await plugin.evaluate_behavior(behavior))["decision"] == "unknown"
+    with pytest.raises(ValueError, match="请选择"):
+        await plugin.evaluate_behavior("cognition")
+    api = next(c for c in plugin.get_components() if c["name"] == "evaluate_behavior")
+    assert api["metadata"]["public"] is True and api["metadata"]["version"] == "1"

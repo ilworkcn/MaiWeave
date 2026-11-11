@@ -66,6 +66,25 @@ class Living:
         config = self.config.life
         return self.sleeping(now) and (config.nap_quiet or in_hours(now.hour, config.sleep_hour, config.wake_hour))
 
+    def sleep_until(self, now):
+        """返回当前有效睡眠的预计结束时间。"""
+        if not self.sleeping(now):
+            return None
+        current = self.engine.current(now)
+        if current:
+            return current["end"]
+        return self.engine.store.get("runtime", "awakening")["sleep_end"]
+
+    def proactive_pause(self, now):
+        """查询生活状态导致的主动交流暂停原因。"""
+        current = self.engine.current(now)
+        if self.sleeping(now):
+            return {"reason": "sleeping", "message": "正在睡觉", "until": self.sleep_until(now)}
+        if current and current["kind"] in {"sleep", "work", "study"}:
+            return {"reason": "sleeping" if current["kind"] == "sleep" else "busy",
+                    "message": "正在" + current["title"], "until": current["end"]}
+        return None
+
     def resume_sleep(self, now):
         wake = self.engine.store.find("runtime", "awakening")
         if not wake or not wake.get("sleep_end") or self.awake_until(now) or self.engine.current(now):
@@ -577,8 +596,9 @@ class Living:
             record("跳过", f"允许交流的时段为 {config.start_hour:02}:00 至 {config.end_hour:02}:00")
             return
         current = engine.current(now)
-        if self.sleeping(now) or (current and current["kind"] in {"sleep", "work", "study"}):
-            record("跳过", f"正在{current['title']}" if current else "角色正在睡眠")
+        pause = self.proactive_pause(now)
+        if pause:
+            record("跳过", pause["message"])
             return
         sessions = dict.fromkeys([*config.session_ids, *(p["session_id"] for p in engine.store.all("profile"))])
         if not sessions:
