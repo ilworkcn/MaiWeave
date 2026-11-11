@@ -174,10 +174,12 @@ uv pip install --python .venv -r plugins/MaiWeave/requirements.txt
 
 ## 📚 使用与致谢
 
+[文档目录](docs/README.md)按用途汇总了下面这些说明。
+
 - [使用手册](https://github.com/ilworkcn/MaiWeave/blob/main/docs/使用手册.md)：日程、阅读、生日提醒等操作。
 - [配置指南](https://github.com/ilworkcn/MaiWeave/blob/main/docs/配置指南.md)：配置项、默认值与连接设置。
-- [架构与接口](https://github.com/ilworkcn/MaiWeave/blob/main/docs/架构与接口.md)：代码目录和 MaiBot 接口。
-- [只读状态 API](https://github.com/ilworkcn/MaiWeave/blob/main/docs/只读状态API.md)：其他插件查询生活状态的调用示例。
+- [功能与数据说明](https://github.com/ilworkcn/MaiWeave/blob/main/docs/架构与接口.md)：日程、经历、聊天与记忆如何配合。
+- [只读状态 API](https://github.com/ilworkcn/MaiWeave/blob/main/docs/只读状态API.md)：两个只读接口的调用方式、完整字段与场景示例。
 
 运行明细每天按保留天数和条数整理，可在「经历与记忆」预览清理；日记、空间发布记录和阅读笔记长期保存。
 
