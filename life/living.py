@@ -725,10 +725,13 @@ class Living:
                 record("跳过", reason, session, score)
                 continue
             intent = notices[0][1] if notices else (
-                "分享一件刚发生的生活经历。"
+                "分享本次选定的一件生活经历。"
                 "从角色自己的视角分享这次经历，给对方自由接话的空间。"
                 f"值得分享的原因={event['score_reason']}；经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
             )
+            intent += (f"当前时间={now.isoformat()}；当前活动={current['title'] if current else '空闲'}。"
+                       + (f"本次经历发生时间={event['occurred_at']}。" if not notices else "")
+                       + "已结束的经历按过去的事情表达；此刻在做什么以当前活动为准。一次围绕选定的一件事说。")
             if tired:
                 intent += "现在有些累，表达简短自然，重要的事照常说清楚。"
             intent += (f"\n接收人物的有效近况：{json.dumps(presence, ensure_ascii=False)}。"
@@ -753,6 +756,16 @@ class Living:
             if greeting:
                 row.update(greeting_key=greeting["key"], greeting_kind=greeting["kind"],
                            greeting_until=greeting["until"], score="作息问候，按近期互动与关系判断")
+            if not notices:
+                decision = await self.receipts.decide(session, intent, now, self.config)
+                row["share_reason"] = decision.reason
+                if not decision.send:
+                    record("稍后再聊", decision.reason, session, score)
+                    with engine.store.db:
+                        engine.store.put("share_receipt", {**row, "id": "deferred:" + uuid4().hex,
+                            "created": now.isoformat(), "finished_at": now.isoformat(), "calls": {},
+                            "outcome": "稍后再聊", "delivery": decision.reason})
+                    continue
             if config.mode == "主动表达":
                 await self.receipts.express(session, intent, row, now)
             else:

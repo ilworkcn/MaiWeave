@@ -172,3 +172,9 @@ class GoalStep(BaseModel):
 
 class GoalOutline(BaseModel):
     steps: list[GoalStep] = Field(min_length=1, max_length=12)
+
+
+class ShareDecision(BaseModel):
+    """结合已发送内容判断这次经历是否值得主动提起。"""
+    send: bool
+    reason: str = Field(min_length=1, max_length=300)

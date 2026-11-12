@@ -61,6 +61,12 @@ async def test_concrete_results_persist_once_and_continue(life):
 async def test_share_waits_only_for_enabled_activity_results(life, outcomes_enabled, plugin):
     x = life
     x.ctx.maisaka = plugin.ctx.maisaka
+    x.ctx.db = plugin.ctx.db
+    async def reply(prompt, **kwargs):
+        if prompt.startswith("判断这次生活经历"):
+            return {"success": True, "response": json.dumps({"send": True, "reason": "这次有新内容"})}
+        return x.ctx.llm.generate.return_value
+    x.ctx.llm.generate.side_effect = reply
     plan = complete(x, title="做午饭", kind="meal")
     x.cfg.continuity.outcomes_enabled = outcomes_enabled
     x.cfg.proactive.enabled = True

@@ -6,6 +6,9 @@ import asyncio
 from uuid import uuid4
 from datetime import datetime, timedelta
 
+from ..core.models import ShareDecision
+from .usage import generate
+
 TASK = re.compile(r'^<plugin_proactive_task id="(proactive:ilworkcn\.maiweave:\d+)" plugin_id="ilworkcn\.maiweave">')
 
 
@@ -52,6 +55,23 @@ class ShareReceipts:
             self.store.put("share_receipt", {**row, "id": task, "created": now.isoformat(), "calls": {},
                                             "outcome": "MaiBot 已受理", "delivery": "等待 Planner 处理"})
 
+    async def recent_chat(self, session):
+        history = await self.ctx.db.get("Messages", filters={"session_id": session, "is_command": False},
+                                        order_by="-timestamp", limit=10)
+        return [{"时间": item["timestamp"], "人物": item["user_nickname"],
+                 "内容": item["processed_plain_text"][:500]} for item in reversed(history or [])]
+
+    async def decide(self, session, intent, now, config):
+        prompt = (
+            "判断这次生活经历是否值得现在主动告诉对方，输出JSON：send（布尔值）、reason（简短中文原因）。"
+            "结合最近实际说过的话、对方回应和本次内容判断新意。不同经历ID也可能在说同一件事。"
+            "已经说过的煮面、吃饭等日常内容，只有相似过程且没有新进展时send=false；"
+            "对方尚未回应时给话题留出空间。有具体新发现、明显变化或对方关心的进展时可以发送。"
+            "重要度用于候选排序，是否发送仍根据实际内容判断。"
+            + intent + "\n最近聊天：" + json.dumps(await self.recent_chat(session), ensure_ascii=False)
+        )
+        return await generate(self.ctx, self.store, config, "分享判断", prompt, ShareDecision)
+
     async def express(self, session, intent, row, now):
         """通过原生 Replyer 生成分享，发送回执用于结算额度。"""
         row = {**row, "id": f"express:{uuid4().hex}", "created": now.isoformat(),
@@ -60,13 +80,10 @@ class ShareReceipts:
             self.store.put("share_receipt", row)
         stage = "生成失败"
         try:
-            history = await self.ctx.db.get("Messages", filters={"session_id": session, "is_command": False},
-                                            order_by="-timestamp", limit=10)
-            context = [{"时间": item["timestamp"], "人物": item["user_nickname"],
-                        "内容": item["processed_plain_text"]} for item in reversed(history)]
+            context = await self.recent_chat(session)
             result = await self.ctx.maisaka.reply.generate(
                 session, intent + "\n最近聊天：" + json.dumps(context, ensure_ascii=False),
-                format_instruction="请以角色自己的口吻向当前聊天中的对方主动说几句话。结合最近聊天承接话题，直接输出可发送的聊天正文。",
+                format_instruction="以角色自己的口吻，只围绕本次选定的一件事简短表达，通常一小段。最近聊天和其他生活资料用于承接话题，具体表达沿用角色习惯。区分过去经历与此刻活动，直接输出可发送的正文。",
                 timeout_ms=95000)
             if not result["success"]:
                 raise RuntimeError(result.get("error") or "回复生成失败")
@@ -80,7 +97,7 @@ class ShareReceipts:
                 raise RuntimeError(result.get("error") or "MaiBot 返回发送失败")
             sent_at = datetime.now(now.tzinfo)
             row.update(outcome="实际已发送", delivery=f"{sent_at:%H:%M:%S} 已确认投递",
-                       sent_at=sent_at.isoformat(), message_id=result["message_id"])
+                       sent_at=sent_at.isoformat(), message_id=result["message_id"], sent_text=text[:600])
         except asyncio.CancelledError:
             row.update(outcome="已中断", delivery="生成或发送随插件停止而中断")
             raise
@@ -130,10 +147,15 @@ class ShareReceipts:
                         or (name == "send_emoji" and data["success"])):
                     ids = meta.get("sent_message_ids") or [part["message_id"] for part in segments if part.get("success") and part.get("message_id")]
                     sent_at = result["timestamp"]
-                    if ids:
-                        message = await self.ctx.db.get("Messages", filters={"session_id": row["session"], "message_id": ids[0]}, single_result=True)
-                        if message and message.get("timestamp"):
-                            sent_at = message["timestamp"]
+                    delivered = []
+                    for message_id in ids:
+                        message = await self.ctx.db.get("Messages", filters={"session_id": row["session"], "message_id": message_id}, single_result=True)
+                        if message:
+                            delivered.append(message.get("processed_plain_text", ""))
+                            if message.get("timestamp"):
+                                sent_at = message["timestamp"]
+                    if delivered:
+                        row["sent_text"] = "\n".join(delivered)[:600]
                     row.update(outcome="实际已发送", delivery=f"{datetime.fromisoformat(sent_at).astimezone(now.tzinfo):%H:%M:%S} 已确认投递", sent_at=sent_at)
                     break
                 if not data["success"]:
@@ -163,7 +185,7 @@ class ShareReceipts:
                        and timedelta() <= now - self.time(r["sent_at"], now.tzinfo) < timedelta(days=2)),
                       key=lambda r: r["sent_at"], reverse=True)[:3]
         return [{"id": r["id"], "topic": r.get("topic", r.get("share_activity", "生活分享")), "sent_at": r["sent_at"],
-                 "status": r.get("followup", "waiting"), "response": r.get("response", ""),
+                 "sent_text": r.get("sent_text", ""), "status": r.get("followup", "waiting"), "response": r.get("response", ""),
                  "observation": r.get("observation", ""), "experience_id": r.get("experience_id", "")}
                 for r in rows]
 

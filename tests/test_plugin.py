@@ -28,6 +28,11 @@ async def plugin(tmp_path):
                               llm=SimpleNamespace(get_available_models=AsyncMock(return_value=["utils", "replyer", "planner"]), generate=AsyncMock(return_value={"success": False, "error": "测试尚未设置模型结果"})),
                               db=SimpleNamespace(get=AsyncMock(return_value=None)),
                               maisaka=SimpleNamespace(proactive=SimpleNamespace(trigger=AsyncMock(return_value={"success": True, "task_id": "proactive:ilworkcn.maiweave:1"}))))
+    async def model_reply(prompt, **kwargs):
+        if prompt.startswith("判断这次生活经历"):
+            return {"success": True, "response": json.dumps({"send": True, "reason": "本次有新的具体内容"})}
+        return context.llm.generate.return_value
+    context.llm.generate.side_effect = model_reply
     plugin._set_context(context)
     await plugin.on_load()
     plugin.world.host_config_path = tmp_path / "model_config.toml"
@@ -121,7 +126,7 @@ async def test_proactive_delivery_controls_budget(plugin, tool, outcome):
     await plugin.planner_receipt("chat-a", [{"item_type": "FunctionCallItem", "tool_call": {"func_name": tool, "call_id": "c1"}}])
     at = now + timedelta(minutes=2)
     data = {"success": True, "metadata": {"send_results": [{"success": True}, {"success": True}]} if tool == "reply" else {}}
-    plugin.ctx.db.get.return_value = {"tool_name": tool, "timestamp": at.isoformat(), "tool_data": json.dumps(data)}
+    plugin.ctx.db.get.side_effect = lambda table, **kwargs: ({"tool_name": tool, "timestamp": at.isoformat(), "tool_data": json.dumps(data)} if table == "ToolRecord" else [])
     await plugin.living.receipts.refresh(at)
     await plugin.living.receipts.refresh(at)
     assert plugin.store.get("share_receipt", task)["outcome"] == outcome

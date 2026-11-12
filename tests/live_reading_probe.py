@@ -2,6 +2,7 @@
 import asyncio
 import base64
 import importlib.util
+import re
 import sys
 from contextlib import suppress
 from datetime import datetime, timedelta
@@ -9,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from maibot_sdk import API, MaiBotPlugin
+from maibot_sdk import API, HookHandler, MaiBotPlugin
 
 
 class Probe(MaiBotPlugin):
@@ -23,6 +24,33 @@ class Probe(MaiBotPlugin):
         self.create = create_plugin
         self.result = {}
         self.task = None
+        self.active = None
+
+    @HookHandler("maisaka.planner.before_request")
+    async def planner_context(self, **kwargs):
+        if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            result = await self.active.planner_context(**kwargs)
+            # 临时插件的主动任务使用临时插件 ID，回执仍取宿主返回的任务编号。
+            for item in reversed(kwargs["items"]):
+                text = "".join(part.get("text", "") for part in item.get("parts", []))
+                match = re.match(r'<plugin_proactive_task id="([^"]+)" plugin_id="ilworkcn.maiweave-reading-probe">', text)
+                if match:
+                    self.active.living.receipts.turn[kwargs["session_id"]] = match[1]
+                    break
+            return result
+        return {"action": "continue"}
+
+    @HookHandler("maisaka.planner.after_response")
+    async def planner_receipt(self, **kwargs):
+        if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            return await self.active.planner_receipt(**kwargs)
+        return {"action": "continue"}
+
+    @HookHandler("maisaka.replyer.before_request")
+    async def reply_context(self, **kwargs):
+        if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            return await self.active.reply_context(**kwargs)
+        return {"action": "continue"}
 
     async def on_unload(self):
         if self.task:
@@ -82,7 +110,39 @@ class Probe(MaiBotPlugin):
                     p.store.put("plan", plan)
                 return plan
             output = {}
-            if case == "settings":
+            if case in {"share_express", "share_natural"}:
+                self.active = p
+                now = datetime.now(now.tzinfo)
+                stream="3a2048f0aa247f60f912da52c3a8ece6"
+                p.config.proactive.enabled=True
+                p.config.proactive.mode="主动表达" if case=="share_express" else "自然交流"
+                p.config.proactive.session_ids=[stream]
+                p.config.proactive.start_hour=p.config.proactive.end_hour=0
+                p.config.proactive.daily_limit=20
+                with p.store.db:
+                    p.store.put("state",{**p.engine.state(),"updated_at":now.isoformat(),"energy":80,"hunger":20})
+                    p.store.put("share_receipt",{"id":"earlier-noodles","session":stream,"created":(now-timedelta(hours=3)).isoformat(),"sent_at":(now-timedelta(hours=3)).isoformat(),"outcome":"实际已发送","topic":"煮面","sent_text":"傍晚煮了一碗面，已经吃完了。","followup":"waiting"})
+                event=p.engine.record_experience(ExperienceInput(summary="煮了一碗普通面条，吃完了，没有新的变化",source="simulated",evidence="实机测试场景",importance=8,occurred_at=(now-timedelta(hours=1)).isoformat()),stream,now)
+                await p.living.share(now)
+                deferred=p.store.all("share_receipt")[-1]
+                assert deferred["outcome"]=="稍后再聊",deferred
+                with p.store.db:
+                    p.store.delete("experience",event["id"])
+                    p.store.delete("share_receipt","earlier-noodles")
+                p.engine.record_experience(ExperienceInput(summary=("今天终于把一直断线的旧收音机修好了，第一次完整听完那首惦记很久的歌，想分享这一刻" if case=="share_express" else "种了一周的薄荷今天终于长出第一对嫩叶，早上差点以为种不活了，半小时前看到新叶特别开心"),source="simulated",evidence="MaiWeave 实机专用测试生活场景",importance=9,occurred_at=(now-timedelta(minutes=30)).isoformat()),stream,now)
+                await p.living.share(now)
+                row=p.store.all("share_receipt")[-1]
+                for _ in range(90):
+                    if row["outcome"] != "MaiBot 已受理":
+                        break
+                    await asyncio.sleep(2)
+                    await p.living.receipts.refresh(datetime.now(now.tzinfo))
+                    row=p.store.get("share_receipt",row["id"])
+                assert row["outcome"] in {"实际已发送","Planner 选择沉默"},row
+                if row["outcome"]=="实际已发送":
+                    assert row.get("sent_text"),row
+                output={"mode":p.config.proactive.mode,"repeat":deferred["delivery"],"outcome":row["outcome"],"sent_text":row.get("sent_text",""),"models":[{"feature":x["feature"],"status":x["status"]} for x in p.store.all("model_usage")]}
+            elif case == "settings":
                 reading(120,30)
                 p.config.books.autonomous_minutes=-1
                 p.config.books.session_minutes=25
@@ -222,6 +282,7 @@ class Probe(MaiBotPlugin):
             self.ctx.logger.exception("阅读与精力实机验证失败")
             self.result={"status":"失败","case":case,"error":str(error)}
         finally:
+            self.active = None
             await p.on_unload()
 
 
