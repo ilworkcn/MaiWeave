@@ -257,7 +257,7 @@ class Living:
         totals = {}
         recent = []
         for plan in plans:
-            activity = "阅读" if self.is_reading(plan) else plan.get("activity_label") or {"sleep":"睡眠", "meal":"用餐", "work":"工作", "study":"学习", "leisure":"休闲", "travel":"出行", "rest":"休息", "social":"社交", "diary":"写日记"}[plan["kind"]]
+            activity = "阅读" if self.is_reading(plan) else plan.get("activity_label") or {"sleep":"睡眠", "cook":"做饭", "meal":"用餐", "work":"工作", "study":"学习", "leisure":"休闲", "travel":"出行", "rest":"休息", "social":"社交", "diary":"写日记"}[plan["kind"]]
             seconds = min(plan["elapsed_seconds"], max(0, (min(now, self.engine.time(plan["end"])) - max(start, self.engine.time(plan["start"]))).total_seconds()))
             seconds = plan.get("elapsed_days", {}).get(now.date().isoformat(), 0) if "elapsed_days" in plan else seconds
             if seconds:
@@ -360,7 +360,7 @@ class Living:
         arranged = {p.get("continuation_id") for p in engine.store.all("plan")
                     if p["status"] in {"scheduled", "active", "paused", "blocked", "awaiting_confirmation"}}
         continuations = [r for r in engine.store.all("activity_memory") if r["next_action"] and r["id"] not in arranged
-                         and r.get("kind") in {"study", "work", "leisure", "rest", "meal", "social"}
+                         and r.get("kind") in {"study", "work", "leisure", "rest", "cook", "meal", "social"}
                          and (not r.get("next_date") or r["next_date"] <= now.date().isoformat())]
         if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
             source = "日常作息"
@@ -369,16 +369,11 @@ class Living:
         elif self.bedtime(now) and (self.bedtime(now) - now).total_seconds() / 60 <= self.spatial.route(state["location"], self.spatial.place("home")["name"])["minutes"] + 10:
             source = "睡前收尾"
             title, kind, location, motivation, minutes = "回家准备休息", "rest", self.spatial.place("home")["name"], "收好手边的事，准备睡觉", free
-        elif state["hunger"] >= 65:
-            source = "身体需要 · 用餐"
-            title, kind, location, motivation, minutes = "吃饭", "meal", state["location"], "有些饿了", min(free, 30)
-            if self.config.world.places_enabled and state["location"] not in {self.spatial.place("home")["name"], self.spatial.place("kitchen")["name"]} and free >= 30:
-                place_query = "餐厅"
-        elif state["energy"] <= 25:
+        elif state["energy"] <= 25 and state["hunger"] < 65:
             source = "身体需要 · 休息"
             title, kind, location, motivation, minutes = "休息一会儿", "rest", state["location"], "精力不足", min(free, 45)
         else:
-            source = "模型自主选择"
+            source = "身体需要 · 用餐" if state["hunger"] >= 65 else "模型自主选择"
             balance = self.activity_balance(now)
             goals = [g for g in engine.store.all("goal") if g["status"] == "active"]
             completed = sorted((p for p in engine.store.all("plan") if p["status"] == "completed"),
@@ -396,11 +391,15 @@ class Living:
                 "为角色选择接下来独自进行的一件小活动，输出 JSON 对象。"
                 "根据人格、兴趣、精力和长期目标，在角色的生活空间中安排活动。"
                 "先结合时段和生活背景决定做什么，再选合适地点。做饭、收拾房间、买日用品、散步、运动、听音乐、做手工、发呆都可以，具体活动符合角色身份与兴趣。"
-                "短暂空闲可以安排10至20分钟休息，今天已经做了很久的事留到之后。kind 从 study/work/leisure/rest/meal/social 中选择，出行由地点路线自动安排。"
+                "短暂空闲可以安排10至20分钟休息，今天已经做了很久的事留到之后。kind 从 study/work/leisure/rest/cook/meal/social 中选择，出行由地点路线自动安排。"
                 "字段 title、kind、minutes（10到120）、location、motivation、goal_id（无关联填空字符串）。"
                 f"当前时间：{now.isoformat(timespec='minutes')}；可用分钟：{free}；"
                 f"今日实际活动与最近节奏：{json.dumps(balance, ensure_ascii=False)}；"
                 "结合累计时长、连续次数、饭点和身体状态决定继续还是换活动；有具体进展或兴致时可以继续。"
+                "做饭、备菜和烹饪使用cook，吃饭使用meal，洗碗收拾使用leisure。"
+                "刚做好这顿饭、尚未吃时，优先接着安排用餐，填入对应continuation_id。用餐时长根据饭菜内容、分量、身体状态和可用空档选择，简单吃点和慢慢吃一顿分别安排合适时间。"
+                "外卖和餐厅用餐可以直接安排meal；做饭并吃饭可合并为meal，标题写明两件事，时长包含烹饪和实际用餐。饥饿值达到65时优先解决吃饭，根据已有饭菜选择直接吃、点餐或做饭。"
+                "饭菜只做出来时属于做好饭，饭后活动接在实际用餐之后；按既有约定处理为明天备餐等情况。"
                 "motivation 简短说明这次继续或切换的具体理由。"
                 "时长按这次想完成的小事选择：随手收拾、坐一会儿可用10至20分钟；读一段、做一道菜按内容与空档安排。"
                 "疲惫或兴趣一般时选短一点，有具体兴致时可多留些时间。空闲也可以安静歇一会儿。"
@@ -441,7 +440,7 @@ class Living:
                 if choice.continuation_id and not any(r["id"] == choice.continuation_id for r in continuations):
                     raise ValueError("continuation_id 请选择本次可接续念头的 ID，新活动填空字符串")
             choice = await generate(self.ctx, engine.store, self.config, "自主活动", prompt, ActivityChoice, validate_activity)
-            if choice.kind not in {"study", "work", "leisure", "rest", "meal", "social"}:
+            if choice.kind not in {"study", "work", "leisure", "rest", "cook", "meal", "social"}:
                 raise ValueError("自主规划返回了未允许的活动类型")
             title, kind, location, motivation = choice.title, choice.kind, choice.location, choice.motivation
             minutes = min(choice.minutes, free)
@@ -537,7 +536,7 @@ class Living:
         if plan.get("book_id"):
             return "阅读"
         return plan.get("activity_label") or {
-            "sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习",
+            "sleep": "睡眠", "cook": "做饭", "meal": "用餐", "work": "工作", "study": "学习",
             "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "日记",
         }[plan["kind"]]
 

@@ -157,6 +157,7 @@ async def read_maiweave_behavior(self, behavior: str):
 | `sleep` | 睡眠 | `meal` | 用餐 | `work` | 工作 |
 | `study` | 学习 | `leisure` | 休闲 | `travel` | 出行 |
 | `rest` | 休息 | `social` | 社交 | `diary` | 写日记 |
+| `cook` | 做饭、备菜烹饪 | | | | |
 
 当前活动满足 `start <= 查询时间 < end`，下一项安排满足 `start > 查询时间`。两者都从 `scheduled`、`active` 的日程中选择。暂停、取消、已完成和待确认的安排不在这两个字段中。
 

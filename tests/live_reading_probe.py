@@ -142,6 +142,31 @@ class Probe(MaiBotPlugin):
                 if row["outcome"]=="实际已发送":
                     assert row.get("sent_text"),row
                 output={"mode":p.config.proactive.mode,"repeat":deferred["delivery"],"outcome":row["outcome"],"sent_text":row.get("sent_text",""),"models":[{"feature":x["feature"],"status":x["status"]} for x in p.store.all("model_usage")]}
+            elif case == "cooking":
+                now = now.replace(hour=18)
+                with p.store.db:
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 50, "energy": 80})
+                cook = p.engine.create_plan(PlanInput(title="为自己做今晚的晚饭：煮番茄鸡蛋面", kind="cook", start=now.isoformat(), end=(now+timedelta(minutes=30)).isoformat()), "", now)
+                now += timedelta(minutes=30)
+                p.engine.advance(now)
+                before = p.engine.state()["hunger"]
+                assert before == 52.5, before
+                await p.continuity.reflect(cook["id"],now)
+                memory = p.store.all("activity_memory")[-1]
+                p.config.life.autonomous = True
+                await p.living.choose_activity(now)
+                meal = p.engine.current(now)
+                assert meal["kind"] == "meal", meal
+                assert meal["continuation_id"] == memory["id"], (meal,memory)
+                context = p.context_text("private",text="晚饭做好了吗，现在在干什么")
+                assert meal["title"] in context, context
+                minutes = (p.engine.time(meal["end"])-now).total_seconds()/60
+                assert 10 <= minutes <= 120, minutes
+                now = p.engine.time(meal["end"])
+                p.engine.advance(now)
+                assert p.engine.state()["hunger"] < before, p.engine.state()
+                await p.continuity.reflect(meal["id"],now)
+                output = {"cooking":memory,"meal":meal,"hunger_after_cooking":before,"hunger_after_meal":p.engine.state()["hunger"],"meal_minutes":minutes,"chat_context":context,"meal_memory":p.store.all("activity_memory")[-1]}
             elif case == "settings":
                 reading(120,30)
                 p.config.books.autonomous_minutes=-1

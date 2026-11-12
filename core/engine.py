@@ -460,7 +460,7 @@ class LifeEngine:
     def _complete_simulation(self, plan: dict, now: datetime):
         score, reason = {
             "sleep": (1, "按作息睡眠"), "travel": (1, "日常出行"), "rest": (2, "日常休息"),
-            "meal": (2, "日常用餐"), "diary": (3, "写完日记"), "leisure": (3, "完成休闲活动"),
+            "cook": (2, "做好饭菜"), "meal": (2, "日常用餐"), "diary": (3, "写完日记"), "leisure": (3, "完成休闲活动"),
             "study": (3, "完成学习安排"), "work": (3, "完成工作安排"), "social": (4, "完成社交活动"),
         }[plan["kind"]]
         if plan["goal_id"]:

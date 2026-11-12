@@ -9,7 +9,7 @@ from maibot_sdk import API
 from ..core.models import GoalInput, PlanInput, PlanPatch, RoutineInput
 from ..integrations.usage import summary as usage_summary
 
-KIND = {"sleep": "睡眠", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "写日记"}
+KIND = {"sleep": "睡眠", "cook": "做饭", "meal": "用餐", "work": "工作", "study": "学习", "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "写日记"}
 STATUS = {"scheduled": "未开始", "active": "进行中", "completed": "已完成", "cancelled": "已取消", "paused": "已暂停", "awaiting_confirmation": "等待完成确认", "blocked": "需要调整"}
 SOURCE = {"reported": "用户陈述", "observed": "交互观测", "simulated": "角色模拟", "dream": "梦境"}
 FREQUENCY = {"daily": "按日", "weekly": "按周", "monthly": "按月"}

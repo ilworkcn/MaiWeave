@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, model_validator
 
-Kind = Literal["sleep", "meal", "work", "study", "leisure", "travel", "rest", "social", "diary"]
+Kind = Literal["sleep", "cook", "meal", "work", "study", "leisure", "travel", "rest", "social", "diary"]
 Source = Literal["reported", "observed", "simulated"]
 
 
@@ -20,7 +20,7 @@ class PlanInput(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     start: str
     end: str
-    kind: Kind = "leisure"
+    kind: Kind = Field(default="leisure", description="cook 表示备菜烹饪；meal 表示实际用餐，或明确包含用餐的做饭加吃饭。")
     location: str = ""
     motivation: str = ""
     participants: list[str] = Field(default_factory=list)
@@ -62,7 +62,7 @@ class ExperienceInput(BaseModel):
 class ActivityChoice(BaseModel):
     continuation_id: str = ""
     title: str = Field(min_length=1, max_length=160)
-    kind: Kind
+    kind: Kind = Field(description="cook 表示做饭，meal 表示吃饭；合并安排时明确包含吃饭并预留用餐时间。")
     minutes: int = Field(ge=10, le=120)
     location: str
     motivation: str
@@ -103,7 +103,7 @@ class PlanPatch(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     start: str | None = None
     end: str | None = None
-    kind: Kind | None = None
+    kind: Kind | None = Field(default=None, description="cook 表示备菜烹饪；meal 表示实际用餐，或明确包含用餐的做饭加吃饭。")
     location: str | None = None
     motivation: str | None = None
     flexible: bool | None = None
@@ -127,7 +127,7 @@ class RoutineInput(BaseModel):
     weekdays: list[int] = Field(default_factory=list, description="周一为0，周日为6")
     month_day: int = Field(default=1, ge=1, le=31)
     until: str = ""
-    kind: Kind = "leisure"
+    kind: Kind = Field(default="leisure", description="cook 表示备菜烹饪；meal 表示实际用餐，或明确包含用餐的做饭加吃饭。")
     location: str = ""
     participants: list[str] = Field(default_factory=list)
     simulation: bool = True

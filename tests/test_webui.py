@@ -223,12 +223,13 @@ async def test_planning_reason_survives_status_checks(plugin):
     state = plugin.engine.state()
     with plugin.store.db:
         plugin.store.put("state", {**state, "hunger": 90})
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": json.dumps({"title": "吃晚饭", "kind": "meal", "minutes": 25, "location": "住处", "motivation": "有些饿了"})}
     await plugin.plan_life(now)
     result = await plugin.ui_overview()
     decision, = result["planning_history"]
     assert decision["source"] == "身体需要 · 用餐"
     assert decision["reason"] == "有些饿了"
-    assert decision["minutes"] == 30
+    assert decision["minutes"] == 25
     plugin.engine.advance(now + timedelta(minutes=1))
     await plugin.plan_life(now + timedelta(minutes=1))
     waiting = await plugin.ui_overview()
