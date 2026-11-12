@@ -176,14 +176,14 @@ def test_mode_config_upgrade_keeps_saved_values(old_version):
     from maibot_sdk.config import rebuild_plugin_config_data
     instance = create_plugin()
     defaults = instance.get_default_config()
-    assert defaults["plugin"]["config_version"] == "0.11.4"
+    assert defaults["plugin"]["config_version"] == "0.11.5"
     previous = deepcopy(defaults)
     previous["plugin"]["config_version"] = old_version
     previous["proactive"].pop("mode")
     previous["proactive"].update(enabled=True, daily_limit=7, cooldown_minutes=45, session_ids=["chat-a"], share_threshold=6)
     previous["life"].update(timezone="Asia/Tokyo", interests=["画画"], autonomous=False)
     expected = deepcopy(previous)
-    expected["plugin"]["config_version"] = "0.11.4"
+    expected["plugin"]["config_version"] = "0.11.5"
     expected["proactive"]["mode"] = "自然交流"
     upgraded = rebuild_plugin_config_data(defaults, previous)
     instance.set_plugin_config(upgraded)
