@@ -129,7 +129,7 @@ class Probe(MaiBotPlugin):
                 with p.store.db:
                     p.store.delete("experience",event["id"])
                     p.store.delete("share_receipt","earlier-noodles")
-                p.engine.record_experience(ExperienceInput(summary=("今天终于把一直断线的旧收音机修好了，第一次完整听完那首惦记很久的歌，想分享这一刻" if case=="share_express" else "种了一周的薄荷今天终于长出第一对嫩叶，早上差点以为种不活了，半小时前看到新叶特别开心"),source="simulated",evidence="MaiWeave 实机专用测试生活场景",importance=9,occurred_at=(now-timedelta(minutes=30)).isoformat()),stream,now)
+                p.engine.record_experience(ExperienceInput(summary=("刚完成第一只软陶小鸟，原本捏歪的翅膀改成了展开的样子，出炉后竟然能稳稳站在窗台上，特别想分享这次意外的成功" if case=="share_express" else "今天第一次试着把楼下梧桐叶拓印到帆布袋上，叶脉比想象中清楚，刚洗掉多余颜料，想和对方聊聊亲手做成小东西的快乐"),source="simulated",evidence="MaiWeave 实机专用测试生活场景",importance=9,occurred_at=(now-timedelta(minutes=30)).isoformat()),stream,now)
                 await p.living.share(now)
                 row=p.store.all("share_receipt")[-1]
                 for _ in range(90):
@@ -142,6 +142,65 @@ class Probe(MaiBotPlugin):
                 if row["outcome"]=="实际已发送":
                     assert row.get("sent_text"),row
                 output={"mode":p.config.proactive.mode,"repeat":deferred["delivery"],"outcome":row["outcome"],"sent_text":row.get("sent_text",""),"models":[{"feature":x["feature"],"status":x["status"]} for x in p.store.all("model_usage")]}
+            elif case == "qzone":
+                output=await p.ctx.call_capability("api.call",api_name="adapter.snowluma.system.get_version_info",version="1",timeout_ms=15000,args={})
+            elif case == "services":
+                from maiweave_probe_target.core.models import GoalInput
+                stream="3a2048f0aa247f60f912da52c3a8ece6"
+                p.config.memory.enabled=True
+                now=datetime.now(now.tzinfo)
+                p.engine.advance(now)
+                marker="麦织实机验收-"+uuid4().hex[:8]
+                stages=[]
+                self.result.update(stages=stages, data_dir=str(folder))
+                event=p.engine.record_experience(ExperienceInput(summary=marker+"：已在 Edge 完成测试日程的新建和修改。",occurred_at=now.isoformat(),source="observed",evidence="本次浏览器实际操作结果",details={"用途":"插件验收测试"}),stream,now)
+                saved=await p.saved_experience(event)
+                assert saved["memory"]["status"]=="已保存",saved["memory"]
+                event=p.store.get("experience",event["id"])
+                fact=await p.memory.fact(event["memory_id"])
+                assert marker in str(fact),fact
+                stages.append({"step":"记忆创建与原文读取","claim_id":event["memory_id"],"status":"通过"})
+                event=p.engine.revise_experience(event["id"],{"日程结果":"已取消"},"","浏览器历史记录已显示测试日程取消",stream,now)
+                revised=await p.saved_experience(event)
+                if revised["memory"]["status"]=="待确认":
+                    await p.reviews.decide(revised["memory"]["id"],True)
+                else:
+                    assert revised["memory"]["status"]=="已保存",revised["memory"]
+                event=p.store.get("experience",event["id"])
+                fact=await p.memory.fact(event["memory_id"])
+                assert "已取消" in str(fact),fact
+                stages.append({"step":"记忆更新与读回","status":"通过"})
+                recalled=await p.memory.query(marker,stream)
+                assert marker in str(recalled), recalled
+                stages.append({"step":"原生记忆综合检索","status":"命中" if marker in str(recalled) else "未命中", "response_keys":list(recalled), "error":recalled.get("error"), "hits":len(recalled.get("hits", []))})
+                plan=p.books.schedule(book["id"],now.isoformat(),15,p.spatial,now)
+                now+=timedelta(seconds=1)
+                p.engine.advance(now)
+                await p.books.process(now)
+                note=p.store.get("book_note",plan["id"])
+                assert note["status"]=="等待活动结束",note
+                now+=timedelta(minutes=15)
+                p.engine.advance(now)
+                await p.books.process(now)
+                note=p.store.get("book_note",plan["id"])
+                assert note["status"]=="已完成",note
+                stages.append({"step":"实际模型阅读与进度保存","status":"通过","thoughts":note["thoughts"]})
+                goal=p.engine.create_goal(GoalInput(title="学会折两种简单纸书签",target_sessions=2),"",now)
+                outline=await p.continuity.outline(goal["id"],now)
+                assert sum(x["sessions"] for x in outline["steps"])==2
+                stages.append({"step":"实际模型目标分解","status":"通过"})
+                sleep=p.engine.create_plan(PlanInput(title="实机测试午睡",kind="sleep",start=now.isoformat(),end=(now+timedelta(hours=2)).isoformat()),"",now)
+                now+=timedelta(hours=2)
+                p.engine.advance(now)
+                dream=await p.dreams.generate(sleep["id"],now)
+                assert dream["status"]=="已生成",dream
+                stages.append({"step":"实际模型梦境生成","status":"通过","title":dream["title"]})
+                diary=await p.diary.write(now.date().isoformat(),now)
+                assert diary["status"]=="已生成",diary
+                stages.append({"step":"实际模型日记生成","status":"通过","characters":len(diary["content"])})
+                usage=p.store.all("model_usage")
+                assert usage and all(x["status"]=="成功" for x in usage),usage
+                output={"stages":stages,"data_dir":str(folder),"marker":marker,"model_calls":[{"feature":x["feature"],"model":x["model"],"tokens":x.get("total_tokens")} for x in usage]}
             elif case == "private_wake":
                 checks = []
                 for hour, mode in [(14,"zero"),(14,"ordinary"),(23,"ordinary"),(14,"group"),(14,"nap_open"),(23,"all_day"),(23,"wake_off"),(23,"keyword")]:
@@ -344,7 +403,7 @@ class Probe(MaiBotPlugin):
             self.result={"status":"通过","case":case,"result":output}
         except Exception as error:
             self.ctx.logger.exception("阅读与精力实机验证失败")
-            self.result={"status":"失败","case":case,"error":str(error)}
+            self.result={**self.result,"status":"失败","case":case,"error":str(error)}
         finally:
             self.active = None
             await p.on_unload()

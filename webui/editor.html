@@ -474,7 +474,7 @@ $('archiveBook').onclick=()=>run(async()=>{const b=shelf.books.find(x=>x.id===$(
 $('deleteBook').onclick=()=>{const b=shelf.books.find(x=>x.id===$('bookChoice').value);$('confirmDeleteBook').dataset.book=b.id;$('deleteBookText').textContent=`删除《${b.title}》的原文件和解析正文？已完成的阅读笔记和经历会保留。`;$('deleteBookConfirm').hidden=false};
 $('cancelDeleteBook').onclick=()=>{$('deleteBookConfirm').hidden=true};
 $('confirmDeleteBook').onclick=()=>run(async()=>{const r=await maibot.action('book_action',{action:'delete',book_id:$('confirmDeleteBook').dataset.book});$('deleteBookConfirm').hidden=true;notePage=0;await showBooks();$('bookStatus').textContent=r.status});
-$('scheduleBook').onclick=()=>run(async()=>{const p=await maibot.action('book_action',{action:'schedule',book_id:$('bookChoice').value,start:$('bookStart').value?new Date($('bookStart').value).toISOString():'',minutes:Number($('bookMinutes').value),location:$('bookLocation').value});$('bookStatus').textContent=`已安排：${p.title}，地点：${p.location}，${p.start.replace('T',' ').slice(0,19)} 开始。可在日程与作息中暂停、继续或取消。`;});
+$('scheduleBook').onclick=()=>run(async()=>{const p=await maibot.action('book_action',{action:'schedule',book_id:$('bookChoice').value,start:$('bookStart').value,minutes:Number($('bookMinutes').value),location:$('bookLocation').value});$('bookStatus').textContent=`已安排：${p.title}，地点：${p.location}，${p.start.replace('T',' ').slice(0,19)} 开始。可在日程与作息中暂停、继续或取消。`;});
 $('retryBook').onclick=()=>run(()=>tracked($('retryBook'),'书籍阅读',async show=>{const r=await maibot.action('book_action',{action:'retry',plan_id:$('retryBook').dataset.plan});const result=await waitOperation(r,show);await showBooks();return result}));
 
 async function showRetention(){

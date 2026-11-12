@@ -58,6 +58,8 @@ async def test_meal_reflection_reaches_share_and_receipt(plugin, mode):
     cfg.enabled, cfg.session_ids, cfg.mode = True, ["a"], mode
     cfg.start_hour = cfg.end_hour = 0
     plugin.config.life.schedule_enabled = False
+    with plugin.store.db:
+        plugin.store.put("state", {**plugin.engine.state(), "updated_at": now.isoformat(), "energy": 80, "hunger": 20})
     plan = plugin.engine.create_plan(PlanInput(title="炒蛋炒饭", kind="meal", start=now.isoformat(),
         end=(now+timedelta(minutes=15)).isoformat(), location="住处"),"a",now)
     plugin.engine.advance(plugin.now())

@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from .usage import generate
 
@@ -33,8 +33,8 @@ class DiaryPublisher:
         self.connection.update(status="检查中", error="", account="")
         try:
             response = await self.ctx.call_capability("api.call", api_name="adapter.snowluma.system.get_version_info", version="1", timeout_ms=15000, args={})
-            if response["status"] != "ok" or response["retcode"] != 0:
-                raise RuntimeError(response.get("message") or response.get("wording") or "读取 QQ 客户端信息失败")
+            if response.get("status") != "ok" or response.get("retcode") != 0:
+                raise RuntimeError(response.get("error") or response.get("message") or response.get("wording") or "读取 QQ 客户端信息失败")
             app = response["data"].get("app_name", "")
             if "snowluma" not in app.lower():
                 raise ValueError(f"当前客户端为 {app or '未知'}，日记发空间需要连接 SnowLuma")
@@ -119,9 +119,9 @@ class DiaryPublisher:
             sent = True
             result = await self.ctx.call_capability("api.call", api_name="adapter.snowluma.qzone.send_qzone_msg", version="1", timeout_ms=65000,
                                                     args={"params": {"content": row["content"], "ugc_right": visibility}})
-            if result["status"] != "ok" or result["retcode"] != 0:
+            if result.get("status") != "ok" or result.get("retcode") != 0:
                 sent = False
-                raise RuntimeError(result.get("message") or result.get("wording") or "空间发布失败")
+                raise RuntimeError(result.get("error") or result.get("message") or result.get("wording") or "空间发布失败")
             row.update(status="已发布", published_at=datetime.now(now.tzinfo).isoformat(),
                        tid=(result.get("data") or {}).get("tid", ""), account=self.connection["account"])
         except asyncio.CancelledError:
@@ -147,15 +147,18 @@ class DiaryPublisher:
     async def process(self, now):
         if self.config.diary.publish_mode != "日记完成后自动发布":
             return
-        day = now.date().isoformat()
-        diary = self.store.find("diary", day)
-        if not diary or diary["status"] != "已生成":
-            return
-        plan = self.store.find("plan", diary.get("plan_id", ""))
-        if not plan or plan["status"] != "completed":
-            return
-        old = self.store.find("diary_publication", day)
-        if old:
-            return
-        await self.prepare(day, now)
-        await self.publish(day, now)
+        for date in (now.date() - timedelta(days=1), now.date()):
+            day = date.isoformat()
+            diary = self.store.find("diary", day)
+            if not diary or diary["status"] != "已生成":
+                continue
+            plan = self.store.find("plan", diary.get("plan_id", ""))
+            if not plan or plan["status"] != "completed":
+                continue
+            # 昨晚开始、今天写完的日记，也在完成后发布。
+            if date != now.date() and self.engine.time(plan["end"]).astimezone(now.tzinfo).date() != now.date():
+                continue
+            if self.store.find("diary_publication", day):
+                continue
+            await self.prepare(day, now)
+            await self.publish(day, now)

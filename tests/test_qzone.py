@@ -100,7 +100,7 @@ async def test_wrong_client_is_shown_before_publishing(plugin):
     assert p.diary_publisher.connection['status']=='连接失败'
 
 
-@pytest.mark.parametrize('result,expected',[(TimeoutError('发送超时'),'待核对'),({'status':'failed','retcode':1,'message':'空间服务拒绝'},'发布失败')])
+@pytest.mark.parametrize('result,expected',[(TimeoutError('发送超时'),'待核对'),({'status':'failed','retcode':1,'message':'空间服务拒绝'},'发布失败'),({'success':False,'error':'对端未连接'},'发布失败')])
 async def test_failure_receipt_and_explicit_recovery(plugin,result,expected):
     p=plugin;now,day=prepare(p)
     async def call(name,**kwargs):
@@ -182,3 +182,31 @@ def test_publication_capability_declared():
     from pathlib import Path
     manifest=json.loads((Path(__file__).parents[1]/'_manifest.json').read_text(encoding='utf-8'))
     assert 'api.call' in manifest['capabilities']
+
+
+async def test_connection_shows_native_api_error(plugin):
+    plugin.ctx.call_capability = AsyncMock(return_value={"success": False, "error": "对端动作执行失败: action=get_version_info error=对端未连接"})
+    with pytest.raises(RuntimeError, match="对端未连接"):
+        await plugin.diary_publisher.check_connection()
+    assert plugin.diary_publisher.connection["status"] == "连接失败"
+    assert "对端未连接" in plugin.diary_publisher.connection["error"]
+
+
+async def test_diary_finished_after_midnight_is_published_once(plugin):
+    p = plugin
+    now = p.now().replace(hour=23, minute=59, second=0, microsecond=0)
+    p.now = lambda: now
+    with p.store.db:
+        p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat()})
+    now, day = prepare(p)
+    p.config.diary.publish_mode = "日记完成后自动发布"
+    plan = p.engine.create_plan(PlanInput(title="睡前日记", kind="diary", start=now.isoformat(),
+                               end=(now + timedelta(minutes=15)).isoformat()), "", now)
+    with p.store.db:
+        p.store.put("diary", {**p.store.get("diary", day), "plan_id": plan["id"]})
+    finished = now + timedelta(minutes=16)
+    p.engine.advance(finished)
+    await p.diary_publisher.process(finished)
+    await p.diary_publisher.process(finished + timedelta(minutes=1))
+    assert p.store.get("diary_publication", day)["status"] == "已发布"
+    assert p.ctx.call_capability.await_count == 3

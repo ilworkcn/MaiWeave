@@ -1,5 +1,5 @@
 """关心事项与近况、回执、清理的完整流程。"""
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -65,9 +65,16 @@ async def test_silence_retry_and_revision_ignores_old_receipt(plugin):
     assert p.ctx.maisaka.proactive.trigger.await_count == 2
 
 
-async def test_failure_waits_and_expiry_stops_retry(plugin):
+async def test_failure_waits_and_expiry_stops_retry(plugin, monkeypatch):
     p = plugin
     now = setup(p)
+
+    class TestClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now.astimezone(tz)
+
+    monkeypatch.setattr("maiweave.integrations.share_receipts.datetime", TestClock)
     p.config.proactive.mode = "主动表达"
     item = p.continuity.save_thread("问候", "今天聊聊", "private", now.isoformat(), now, expires_at=(now + timedelta(minutes=45)).isoformat())
     p.ctx.maisaka.reply.generate.return_value = {"success": False, "error": "模型请求失败"}

@@ -155,7 +155,25 @@ class NativeMemory:
 
     async def query(self, query: str, session: str) -> dict:
         params = urlencode({"query": query, "chat_id": session, "limit": 5})
-        return await asyncio.to_thread(self._request, "GET", "/query/aggregate?" + params)
+        result = await asyncio.to_thread(self._request, "GET", "/query/aggregate?" + params)
+        if not session or not query.strip():
+            return result
+        # 聚合检索覆盖段落和事件；独立写入的事实通过原生事实接口读取。
+        params = urlencode({"scope_type": "chat", "scope_id": session, "statuses": "active", "limit": 200})
+        facts = await asyncio.to_thread(self._request, "GET", "/facts?" + params)
+        words = query.casefold().split()
+        matches = [item for item in facts["items"]
+                   if all(word in item["value_text"].casefold() for word in words)][:5]
+        if not matches:
+            return result
+        hits = [{"content": item["value_text"][:1600], "type": "fact", "source": "fact",
+                 "claim_id": item["claim_id"], "metadata": {"chat_id": session}}
+                for item in matches]
+        hits.extend(hit for hit in result.get("hits", [])
+                    if hit.get("claim_id") not in {item["claim_id"] for item in matches})
+        hits = hits[:5]
+        return {**result, "hits": hits,
+                "summary": "\n".join(f"{index}. {hit['content']}" for index, hit in enumerate(hits, 1))}
 
     async def sync(self, experience: dict) -> dict:
         if experience["source"] == "simulated":

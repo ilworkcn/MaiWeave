@@ -57,7 +57,8 @@ async def test_host_memory_login_route_reuse_and_expiry(tmp_path, monkeypatch, h
     await memory.people()
     await memory.query('生日', 'chat-a')
     assert sum(c[1] == '/api/webui/auth/verify' for c in calls) == 1
-    assert calls[-1][1].startswith('/api/host/bots/bot-a/proxy/api/webui/memory/query/aggregate?')
+    assert calls[-2][1].startswith('/api/host/bots/bot-a/proxy/api/webui/memory/query/aggregate?')
+    assert calls[-1][1].startswith('/api/host/bots/bot-a/proxy/api/webui/memory/facts?')
     state['session'] = 2
     await memory.edit_person('person-a', '测试备注')
     assert state['session'] == 3

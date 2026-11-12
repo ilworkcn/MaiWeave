@@ -68,7 +68,8 @@ async def test_create_update_and_query_use_native_contract(server):
     assert requests[-1][0:2] == ("PATCH", "/api/webui/memory/facts/claim-123")
     assert "scope_id" not in requests[-1][3]
     await memory.query("昨天", "chat-a")
-    assert "chat_id=chat-a" in requests[-1][1]
+    assert "chat_id=chat-a" in requests[-2][1]
+    assert "scope_id=chat-a" in requests[-1][1]
 
 
 async def test_simulation_is_not_written_as_native_fact(server):
@@ -87,3 +88,39 @@ async def test_expired_session_is_reported(server):
     with pytest.raises(HTTPError) as error:
         await memory.query("昨天", "chat-a")
     assert error.value.code == 401
+
+async def test_query_includes_matching_current_chat_facts_with_bounded_results(monkeypatch):
+    memory = NativeMemory(MemoryConfig(enabled=True))
+    calls = []
+
+    def request(method, path, payload=None):
+        calls.append(path)
+        if '/query/aggregate?' in path:
+            return {"success": True, "summary": "旧摘要", "hits": [{"content": "旧摘要", "type": "paragraph"}]}
+        assert 'scope_type=chat' in path and 'scope_id=chat-a' in path
+        assert 'statuses=active' in path and 'limit=200' in path
+        return {"items": [{"claim_id": str(i), "value_text": "Edge 验收 已取消" + "正文" * 1000} for i in range(8)]
+                + [{"claim_id": "unrelated", "value_text": "只包含验收"}]}
+
+    monkeypatch.setattr(memory, '_request', request)
+    result = await memory.query('edge 已取消', 'chat-a')
+    assert len(result['hits']) == 5
+    assert all(hit['type'] == 'fact' and len(hit['content']) == 1600 for hit in result['hits'])
+    assert all(hit['metadata']['chat_id'] == 'chat-a' for hit in result['hits'])
+    assert '已取消' in result['summary']
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('query,session', [('关键词', ''), (' ', 'chat-a'), ('没有匹配的关键词', 'chat-a')])
+async def test_query_preserves_aggregate_when_no_matching_fact(monkeypatch, query, session):
+    memory = NativeMemory(MemoryConfig(enabled=True))
+    aggregate = {"success": True, "summary": "原生摘要", "hits": [{"content": "原生摘要"}]}
+    calls = []
+
+    def request(method, path, payload=None):
+        calls.append(path)
+        return aggregate if '/query/aggregate?' in path else {'items': [{'claim_id': 'a', 'value_text': '其他事实'}]}
+
+    monkeypatch.setattr(memory, '_request', request)
+    assert await memory.query(query, session) == aggregate
+    assert len(calls) == (2 if session and query.strip() else 1)
