@@ -142,6 +142,45 @@ class Probe(MaiBotPlugin):
                 if row["outcome"]=="实际已发送":
                     assert row.get("sent_text"),row
                 output={"mode":p.config.proactive.mode,"repeat":deferred["delivery"],"outcome":row["outcome"],"sent_text":row.get("sent_text",""),"models":[{"feature":x["feature"],"status":x["status"]} for x in p.store.all("model_usage")]}
+            elif case == "private_wake":
+                checks = []
+                for hour, mode in [(14,"zero"),(14,"ordinary"),(23,"ordinary"),(14,"group"),(14,"nap_open"),(23,"all_day"),(23,"wake_off"),(23,"keyword")]:
+                    with p.store.db:
+                        for plan in p.store.all("plan"):
+                            p.store.delete("plan",plan["id"])
+                        p.store.delete("runtime","awakening")
+                    now = now.replace(hour=hour,minute=0)
+                    p.config.life.schedule_enabled = mode != "all_day"
+                    p.config.life.wake_enabled = mode != "wake_off"
+                    p.config.life.nap_quiet = mode != "nap_open"
+                    p.config.life.private_wake_probability = 0 if mode in {"zero","keyword"} else 100
+                    p.config.life.wake_minutes = 1
+                    p.engine.create_plan(PlanInput(title="实机睡眠核验",kind="sleep",start=now.isoformat(),end=(now+timedelta(hours=2)).isoformat()),"",now)
+                    p.engine.advance(now)
+                    if mode == "keyword":
+                        profile = p.anniversaries.save_profile("实机测试人物","private","")
+                        with p.store.db:
+                            p.store.put("profile",{**profile,"intimacy":3,"intimacy_mode":"manual"})
+                    info = {"group_info":{"group_id":"probe"}} if mode == "group" else {}
+                    message = {"session_id":"private","message_info":info,"processed_plain_text":"陪陪我" if mode == "keyword" else "今天看到一只小猫"}
+                    await p.management_message(message)
+                    await p.management_message({**message,"processed_plain_text":message["processed_plain_text"]+"，想和你聊聊"})
+                    await p.planner_context(session_id="private",items=[])
+                    awake = p.living.awake_until(now)
+                    expected = mode in {"ordinary","keyword"}
+                    assert bool(awake) == expected, (hour,mode,awake)
+                    send = await p.sleep_before_send({"session_id":"private"})
+                    assert (send["action"]=="continue") == (expected or mode in {"all_day","nap_open"}), (mode,send)
+                    if mode == "ordinary":
+                        now += timedelta(seconds=30)
+                        await p.management_message(message)
+                        assert p.living.awake_until(now) > awake
+                        now = p.living.awake_until(now)
+                        assert p.living.quiet_sleep(now)
+                        p.living.apply_schedule(now)
+                        assert p.engine.current(now)["kind"] == "sleep"
+                    checks.append({"hour":hour,"mode":mode,"awake":bool(awake),"send":send["action"]})
+                output = {"checks":checks,"default":p.get_default_config()["life"]["private_wake_probability"]}
             elif case == "cooking":
                 now = now.replace(hour=18)
                 with p.store.db:

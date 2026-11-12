@@ -3,6 +3,7 @@
 import json
 import re
 import hashlib
+import random
 from uuid import uuid4
 from collections import deque
 from datetime import datetime, timedelta
@@ -118,14 +119,14 @@ class Living:
             if plan["autonomous"] and plan["kind"] == "sleep" and plan["status"] in {"scheduled", "active", "paused", "blocked"}:
                 self.spatial.transition(plan["id"], "cancel", plan["session_id"], now)
 
-    def wake(self, session, now, reason, user_id=""):
+    def wake(self, session, now, reason, user_id="", *, require_intimacy=True):
         config = self.config.life
         if not (config.enabled and config.schedule_enabled and config.wake_enabled):
             return False
         current = self.engine.current(now)
         if not self.sleeping(now) and not self.awake_until(now):
             return False
-        if self.intimacy(session, user_id) < 3:
+        if require_intimacy and self.intimacy(session, user_id) < 3:
             return False
         previous = self.engine.store.find("runtime", "awakening") or {}
         if current and current["kind"] == "sleep":
@@ -138,6 +139,15 @@ class Living:
                                              "reason": reason, "session_id": session, "user_id": user_id, "person_id": self.person_key(session, user_id)})
         self.ctx.logger.info("MaiWeave 已醒来，留出 %s 分钟聊天", minutes)
         return True
+
+    def wake_for_private_turn(self, session, now, user_id=""):
+        """每轮普通私聊按配置概率唤醒，沿用清醒和续睡状态。"""
+        config = self.config.life
+        if not config.wake_enabled or not config.private_wake_probability or not self.quiet_sleep(now):
+            return False
+        if random.random() * 100 < config.private_wake_probability:
+            return self.wake(session, now, "收到私聊消息，醒来聊一会儿", user_id, require_intimacy=False)
+        return False
 
     def wake_for_message(self, text, session, now, user_id=""):
         config = self.config.life
@@ -155,7 +165,7 @@ class Living:
                 self.resume_sleep(now)
                 return True
             if text.strip():
-                return self.wake(session, now, "正在继续聊天", user_id)
+                return self.wake(session, now, "正在继续聊天", user_id, require_intimacy=False)
         for clause in re.split(r"[。！？；\n]", text.casefold()):
             for word in config.wake_keywords:
                 word = word.strip().casefold()

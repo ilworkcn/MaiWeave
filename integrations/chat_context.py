@@ -74,6 +74,7 @@ class ChatContext:
         self.topics = {}
         self.messages = {}
         self.speakers = {}
+        self.wake_candidates = {}
         self.recent = deque(maxlen=10)
 
     async def identify(self, session):

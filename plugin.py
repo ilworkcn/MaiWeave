@@ -70,7 +70,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("life", "life", "生活开关", "控制生活推进与自主活动。", ["enabled", "autonomous"]),
             ("profile", "life", "角色设定", "时区已有默认值，背景和兴趣按需补充。", ["timezone", "interests", "background"]),
             ("sleep", "life", "日常作息", "关闭作息可全天候交流；开启后按 24 小时制安排睡眠。", ["schedule_enabled", "nap_quiet", "sleep_hour", "wake_hour"]),
-            ("wake", "life", "睡眠唤醒", "设置能唤醒角色的词语和醒来后留给聊天的时间。", ["wake_enabled", "wake_minutes", "wake_keywords"]),
+            ("wake", "life", "睡眠唤醒", "设置私聊唤醒概率、唤醒词语和醒来后留给聊天的时间。", ["wake_enabled", "private_wake_probability", "wake_minutes", "wake_keywords"]),
             ("planning", "life", "更新与规划", "设置生活推进和自主规划的检查间隔。", ["tick_seconds", "planning_interval_minutes"]),
             ("weather", "world", "实时天气", "填写城市，查看当地天气和预报。", ["weather_enabled", "city", "country_code"]),
             ("explore", "world", "自主见闻", "安排时间了解感兴趣的事，再把发现带回生活。", ["explore_enabled", "explore_topics", "explore_daily_limit", "explore_interval_minutes"]),
@@ -325,6 +325,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         # MaiBot 会在请求末尾追加提醒，话题采用接收事件中的用户消息。
         text = self.chat_context.messages.get(session, text)
         await self.chat_context.identify(session)
+        wake_user = self.chat_context.wake_candidates.pop(session, None)
+        if wake_user is not None and self.chat_context.kinds.get(session) == "private":
+            self.living.wake_for_private_turn(session, self.now(), wake_user)
         self.chat_context.topics[session] = text
         book_id = self.books.mentioned_book(text)
         if book_id:
@@ -554,8 +557,13 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                                             message.get("processed_plain_text") or "", self.now())
                 self.presence.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),
                                       message.get("processed_plain_text") or "", self.now())
-            self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now(),
+            self.chat_context.wake_candidates.pop(message["session_id"], None)
+            handled_wake = self.living.wake_for_message(message.get("processed_plain_text") or "", message["session_id"], self.now(),
                                          message.get("message_info", {}).get("user_info", {}).get("user_id", ""))
+            text = (message.get("processed_plain_text") or "").strip()
+            if (not handled_wake and self.chat_context.kinds[message["session_id"]] == "private" and text and not text.startswith("/")
+                    and self.config.life.private_wake_probability and self.living.quiet_sleep(self.now())):
+                self.chat_context.wake_candidates[message["session_id"]] = self.chat_context.speakers[message["session_id"]]
             return {"action": "continue"}
         # 接收 Hook 早于会话创建；先打开原生会话，首次使用指令也能收到回复。
         info = message["message_info"]
