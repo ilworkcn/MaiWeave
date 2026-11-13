@@ -94,7 +94,7 @@ class Living:
         if end <= now:
             return
         self.spatial.schedule(PlanInput(title="继续睡觉", kind="sleep", start=now.isoformat(), end=end.isoformat(),
-                                       location=wake["sleep_location"]), "", now, autonomous=True)
+                                       location=wake["sleep_location"]), "", now, autonomous=True, sleep_deadline=wake.get("sleep_deadline", ""))
 
     def check_influence(self, session, user, plans):
         level = self.intimacy(session, user)
@@ -107,17 +107,88 @@ class Living:
         record = self.engine.store.find("runtime", "awakening")
         return self.engine.time(record["until"]) if record and self.engine.time(record["until"]) > now else None
 
+    def sleep_window(self, at):
+        """返回该时刻所在或即将开始的作息窗口。"""
+        cfg = self.config.life
+        start = at.replace(hour=cfg.sleep_hour, minute=0, second=0, microsecond=0)
+        if cfg.sleep_hour >= cfg.wake_hour and at.hour < cfg.wake_hour:
+            start -= timedelta(days=1)
+        end = start.replace(hour=cfg.wake_hour)
+        if end <= start:
+            end += timedelta(days=1)
+        if end <= at:
+            start += timedelta(days=1)
+            end += timedelta(days=1)
+        return start, end
+
+    def sync_sleep_schedule(self, now):
+        """作息修改后调整自动睡眠，并整理旧版本积累的夜间安排。"""
+        store, engine = self.engine.store, self.engine
+        hours = [self.config.life.sleep_hour, self.config.life.wake_hour]
+        previous = store.find("runtime", "sleep_hours")
+        changed = previous is not None and previous["hours"] != hours
+        plans = [p for p in store.all("plan") if p["autonomous"] and p["kind"] == "sleep"
+                 and p["status"] in {"scheduled", "active", "paused", "blocked"}
+                 and (p.get("sleep_deadline") or p["motivation"] in {"按习惯休息，恢复精力", "回到住处后按作息休息"})]
+        seen = set()
+        with store.db:
+            for plan in sorted(plans, key=lambda p: (p["status"] != "active", p["created_at"])):
+                start, end = self.sleep_window(engine.time(plan["created_at"]))
+                deadline = end if changed or not plan.get("sleep_deadline") else engine.time(plan["sleep_deadline"])
+                duplicate = deadline.isoformat() in seen
+                if duplicate or deadline <= now or (plan["status"] == "active" and changed and not start <= now < end):
+                    engine.transition(plan["id"], "cancel", plan["session_id"], now)
+                    continue
+                seen.add(deadline.isoformat())
+                plan["sleep_deadline"] = deadline.isoformat()
+                if changed:
+                    plan["changes"].append({"at": now.isoformat(), "action": "调整作息", "reason": "按新的入睡和起床时间安排"})
+                    stop = deadline
+                    if plan["status"] == "active":
+                        fixed = sorted((x for x in store.all("plan") if not x.get("activity_id") and x["id"] != plan["id"]
+                                        and x["status"] in {"scheduled", "active"} and not x.get("flexible", x["autonomous"])
+                                        and engine.time(x["start"]) > now), key=lambda x: engine.time(x["start"]))
+                        if fixed:
+                            onward = self.spatial.route(plan["location"], fixed[0]["location"])["minutes"] if fixed[0]["location"] else 0
+                            stop = min(stop, engine.time(fixed[0]["start"]) - timedelta(minutes=onward))
+                        if stop <= now:
+                            engine.transition(plan["id"], "cancel", plan["session_id"], now)
+                            continue
+                    plan["end"] = stop.isoformat()
+                    if plan["status"] != "active":
+                        plan.update(start=max(now, start).isoformat(), status="scheduled")
+                store.put("plan", plan)
+            if changed:
+                store.delete("runtime", "sleep_skip")
+                awakening = store.find("runtime", "awakening")
+                if awakening and awakening.get("sleep_deadline"):
+                    start, end = self.sleep_window(now)
+                    if start <= now < end:
+                        awakening.update(sleep_end=end.isoformat(), sleep_deadline=end.isoformat())
+                        store.put("runtime", awakening)
+                    else:
+                        store.delete("runtime", "awakening")
+            store.put("runtime", {"id": "sleep_hours", "hours": hours})
+        if plans or changed:
+            self.spatial.reconcile(now)
+
     def apply_schedule(self, now):
         """切换全天候模式时撤销自主睡眠，保留用户明确安排的日程。"""
         if not self.config.life.enabled:
             return
         if self.config.life.schedule_enabled:
+            self.engine.advance(now)
+            self.sync_sleep_schedule(now)
             self.resume_sleep(now)
             return
         self.engine.advance(now)
         for plan in self.engine.store.all("plan"):
             if plan["autonomous"] and plan["kind"] == "sleep" and plan["status"] in {"scheduled", "active", "paused", "blocked"}:
-                self.spatial.transition(plan["id"], "cancel", plan["session_id"], now)
+                self.engine.transition(plan["id"], "cancel", plan["session_id"], now)
+        with self.engine.store.db:
+            self.engine.store.delete("runtime", "awakening")
+            self.engine.store.delete("runtime", "sleep_skip")
+        self.spatial.reconcile(now)
 
     def wake(self, session, now, reason, user_id="", *, require_intimacy=True):
         config = self.config.life
@@ -130,11 +201,12 @@ class Living:
             return False
         previous = self.engine.store.find("runtime", "awakening") or {}
         if current and current["kind"] == "sleep":
-            previous = {"sleep_end": current["end"], "sleep_location": current["location"]}
+            previous = {"sleep_end": current["end"], "sleep_location": current["location"], "sleep_deadline": current.get("sleep_deadline", "")}
             self.engine.advance(now)
             self.spatial.transition(current["id"], "cancel", current["session_id"], now)
         minutes = config.wake_minutes * (1 + self.intimacy(session, user_id) / 3)
         with self.engine.store.db:
+            self.engine.store.delete("runtime", "sleep_skip")
             self.engine.store.put("runtime", {**previous, "id": "awakening", "until": (now + timedelta(minutes=minutes)).isoformat(),
                                              "reason": reason, "session_id": session, "user_id": user_id, "person_id": self.person_key(session, user_id)})
         self.ctx.logger.info("MaiWeave 已醒来，留出 %s 分钟聊天", minutes)
@@ -323,6 +395,15 @@ class Living:
         current = engine.current(now)
         if current:
             return f"正在{current['title']}，预计 {engine.time(current['end']):%H:%M} 结束"
+        if config.schedule_enabled and in_hours(now.hour, config.sleep_hour, config.wake_hour):
+            skipped = engine.store.find("runtime", "sleep_skip")
+            if skipped and engine.time(skipped["until"]) > now:
+                return "本次夜间睡眠已取消"
+            pending_sleep = next((p for p in engine.store.all("plan") if p.get("sleep_deadline")
+                                  and p["status"] in {"scheduled", "paused", "blocked"}
+                                  and engine.time(p["sleep_deadline"]) > now), None)
+            if pending_sleep:
+                return "已有夜间睡眠安排，等待出行或前序活动结束"
         busy = engine.store.find("runtime", "busy")
         if busy and engine.time(busy["until"]) > now:
             return f"临时有事，预计 {engine.time(busy['until']):%H:%M} 结束"
@@ -483,10 +564,12 @@ class Living:
         if source == "睡前收尾" and self.bedtime(now) and (self.bedtime(now) - now).total_seconds() / 60 <= travel_minutes:
             title, kind, motivation = "睡觉", "sleep", "回到住处后按作息休息"
             minutes = free - travel_minutes
+        sleep_deadline = ""
         if kind == "sleep":
             wake = now.replace(hour=config.wake_hour, minute=0, second=0, microsecond=0)
             if wake <= now:
                 wake += timedelta(days=1)
+            sleep_deadline = wake.isoformat()
             minutes = min(minutes, int((wake - now).total_seconds() / 60) - travel_minutes)
         bedtime = self.bedtime(now)
         if bedtime and kind != "sleep":
@@ -499,6 +582,13 @@ class Living:
                 source, book_id, goal_id, goal_step_id, continuation_id = "睡前收尾", "", "", "", ""
                 travel_minutes = self.spatial.route(state["location"], home)["minutes"]
                 minutes = min(free - travel_minutes, max(1, int((bedtime - now).total_seconds() / 60) - travel_minutes))
+        upcoming = sorted((p for p in engine.store.all("plan") if not p.get("activity_id")
+                           and p["status"] in {"scheduled", "active"} and engine.time(p["start"]) > now),
+                          key=lambda p: engine.time(p["start"]))
+        if upcoming:
+            next_plan = upcoming[0]
+            onward = self.spatial.route(location or state["location"], next_plan["location"])["minutes"] if next_plan["location"] else 0
+            minutes = min(minutes, int((engine.time(next_plan["start"]) - now).total_seconds() / 60) - travel_minutes - onward)
         if minutes < 1:
             return "预留出行时间后，剩余空档不足"
         start = now + timedelta(minutes=travel_minutes)
@@ -511,7 +601,7 @@ class Living:
         value = PlanInput(title=title, book_id=book_id, start=start.isoformat(), end=(start + timedelta(minutes=minutes)).isoformat(),
                           kind=kind, location=location, motivation=motivation, goal_id=goal_id, goal_step_id=goal_step_id,
                           continuation_id=continuation_id, research_query=research_query, research_freshness=research_freshness)
-        plan = self.spatial.schedule(value, session, now, autonomous=True)
+        plan = self.spatial.schedule(value, session, now, autonomous=True, sleep_deadline=sleep_deadline)
         with engine.store.db:
             plan["decision"] = {"at": now.strftime("%m-%d %H:%M"), "source": source, "title": title,
                                 "place": plan["location"], "minutes": minutes, "reason": motivation, "balance": self.activity_balance(now)}

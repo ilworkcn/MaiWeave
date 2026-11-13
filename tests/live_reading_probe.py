@@ -97,6 +97,54 @@ class Probe(MaiBotPlugin):
             p.now = lambda: now
             with p.store.db:
                 p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 20, "energy": 80})
+            if case == "sleep_schedule":
+                now = now.replace(hour=1, minute=30)
+                p.config.life.autonomous = True
+                p.config.life.schedule_enabled = True
+                p.config.life.sleep_hour, p.config.life.wake_hour = 1, 8
+                with p.store.db:
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "location": "卧室"})
+                fixed = p.spatial.schedule(PlanInput(title="实机核验固定睡眠", kind="sleep", location="卧室",
+                    start=now.replace(hour=2, minute=0).isoformat(), end=now.replace(hour=7, minute=0).isoformat()), "", now)
+                p.living.apply_schedule(now)
+                await p.living.choose_activity(now)
+                night = next(x for x in p.store.all("plan") if x.get("sleep_deadline"))
+                assert p.engine.time(night["start"]).strftime("%H:%M") == "01:31"
+                assert p.engine.time(night["end"]).strftime("%H:%M") == "01:59"
+                for minute in range(1, 6):
+                    at = now + timedelta(minutes=minute)
+                    p.living.apply_schedule(at)
+                    await p.living.choose_activity(at)
+                assert len([x for x in p.store.all("plan") if x["kind"] == "sleep"]) == 2
+                now += timedelta(minutes=6)
+                p.engine.advance(now)
+                assert p.living.quiet_sleep(now)
+                assert p.living.wake("private", now, "实机唤醒核验", require_intimacy=False)
+                p.config.life.wake_hour = 9
+                p.living.apply_schedule(now)
+                assert p.engine.time(p.store.get("runtime", "awakening")["sleep_end"]).hour == 9
+                p.config.life.schedule_enabled = False
+                p.living.apply_schedule(now)
+                assert not p.living.quiet_sleep(now)
+                assert p.store.get("plan", fixed["id"])["status"] == "scheduled"
+                p.config.life.schedule_enabled = True
+                p.living.apply_schedule(now)
+                assert p.store.find("runtime", "awakening") is None
+                nap_at = now.replace(hour=13, minute=0)
+                nap = p.engine.create_plan(PlanInput(title="实机午睡", kind="sleep", start=nap_at.isoformat(),
+                    end=(nap_at + timedelta(minutes=30)).isoformat()), "", now)
+                now = nap_at + timedelta(minutes=1)
+                p.engine.advance(now)
+                assert p.living.quiet_sleep(now)
+                p.config.life.nap_quiet = False
+                assert not p.living.quiet_sleep(now)
+                await p.ui_plan_action(nap["id"], "cancel")
+                assert (await p.ui_plan_action(nap["id"], "delete"))["deleted"]
+                self.result = {"status": "通过", "case": case, "result": {
+                    "重复生成": "连续五轮仍为两条睡眠", "自主睡眠": "01:31–01:59，保留往返路程",
+                    "修改起床": "临时唤醒记录同步到09:00", "全天候": "保留手动固定安排，清除临时唤醒",
+                    "午睡": "静默开关生效", "取消删除": "通过"}}
+                return
             book = await p.ui_book_upload("begin", filename="实机验证.md", title="实机验证书")
             raw = "# 午后\n阳光照在书桌上，窗外传来鸟鸣。".encode()
             await p.ui_book_upload("append", upload_id=book["id"], content=base64.b64encode(raw).decode())

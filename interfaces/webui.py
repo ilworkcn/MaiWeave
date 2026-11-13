@@ -225,7 +225,7 @@ class WebUI:
         if category == "profile":
             rows = [{**row, "effective_intimacy": self.living.intimacy(row["session_id"], row["user_id"])} for row in rows]
         if category == "plan":
-            rows = [row for row in rows if row["status"] in {"scheduled", "active", "paused", "blocked"}]
+            rows = [row for row in rows if not row.get("activity_id") and row["status"] in {"scheduled", "active", "paused", "blocked", "awaiting_confirmation", "cancelled"}]
         if query.strip():
             rows = [row for row in rows if query.casefold() in json.dumps(row, ensure_ascii=False).casefold()]
         if record_id:
@@ -477,11 +477,20 @@ class WebUI:
             plans = [p for p in plans if self.engine.time(p["end"]) >= after]
         plans = sorted(plans, key=lambda p: self.engine.time(p["start"]), reverse=True)
         rules = [r for r in self.store.all("routine") if not session_id or self.engine.visible(r, session_id)]
+        sleep_rules = []
+        cfg = self.config.life
+        for rule in rules:
+            if not cfg.schedule_enabled or rule["status"] != "active" or rule["kind"] != "sleep":
+                continue
+            minutes = int(rule["start_time"][:2]) * 60 + int(rule["start_time"][3:5])
+            duration = ((cfg.wake_hour - cfg.sleep_hour) % 24 or 24) * 60
+            if minutes != cfg.sleep_hour * 60 or rule["duration_minutes"] != duration:
+                sleep_rules.append({"title": rule["title"], "reason": f"这条睡眠规则从 {rule['start_time']} 开始，持续 {rule['duration_minutes']} 分钟；日常作息为 {cfg.sleep_hour:02d}:00–{cfg.wake_hour:02d}:00。该规则按单独设置执行，可在重复日程中修改或停止。"})
         return page_tables({"plans": [plan_row(p) for p in plans],
                 "rules": [{**r, "frequency_label": FREQUENCY[r["frequency"]], "status_label": STATUS[r["status"]],
                            "weekdays_label": "、".join(list(WEEKDAYS)[d] for d in r["weekdays"]), "exceptions_label": "、".join(r["exceptions"]),
                            "kind_label": KIND[r["kind"]]} for r in rules], "issues": self.store.all("routine_issue")[::-1],
-                "schedule_issues": self.store.all("schedule_issue"), "notices": self.store.all("schedule_notice"), "adjustments": self.store.all("adjustment")[::-1]}, page, ['plans', 'rules', 'issues', 'schedule_issues', 'notices', 'adjustments'])
+                "schedule_issues": self.store.all("schedule_issue") + sleep_rules, "notices": self.store.all("schedule_notice"), "adjustments": self.store.all("adjustment")[::-1]}, page, ['plans', 'rules', 'issues', 'schedule_issues', 'notices', 'adjustments'])
 
     @API("ui_create_plan", description="新增生活安排")
     async def ui_create_plan(self, title: str, start: str, end: str, kind: str = "leisure", location: str = "", session_id: str = "", participants: str = "", simulation: bool = True, flexible: bool = False) -> dict:
@@ -491,11 +500,27 @@ class WebUI:
                           participants=[v.strip() for v in participants.split(",") if v.strip()], simulation=simulation, flexible=flexible)
         return self.spatial.schedule(value, session_id, self.now())
 
-    @API("ui_plan_action", description="取消、暂停或恢复所选日程")
+    @API("ui_plan_action", description="取消、暂停、恢复或删除已取消的日程")
     async def ui_plan_action(self, plan_id: str, action: str) -> dict:
         self.require_life()
         self.engine.advance(self.now())
         plan = self.store.get("plan", plan_id)
+        if action == "delete":
+            if plan["status"] != "cancelled":
+                raise ValueError("请先取消日程，再删除记录")
+            ids = {plan_id, *(p["id"] for p in self.store.all("plan") if p.get("activity_id") == plan_id)}
+            with self.store.db:
+                for key in ids:
+                    note = self.store.find("book_note", key)
+                    if note:
+                        note["plan_status"] = "cancelled"
+                        self.store.put("book_note", note)
+                    for category in ("plan", "schedule_issue", "schedule_notice", "reflection", "research_task"):
+                        self.store.delete(category, key)
+                for row in self.store.all("adjustment"):
+                    if row["plan_id"] in ids:
+                        self.store.delete("adjustment", row["id"])
+            return {"id": plan_id, "deleted": True}
         return list_row(self.spatial.transition(plan_id, action, plan["session_id"], self.now()))
 
     @API("ui_update_plan", description="修改所选日程")

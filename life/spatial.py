@@ -130,14 +130,26 @@ class Spatial:
                 minutes = route["minutes"] if plan["kind"] != "travel" else 0
                 earliest = available + timedelta(minutes=minutes)
                 proposed = max(start, earliest)
+                deadline = engine.time(plan["sleep_deadline"]) if plan.get("sleep_deadline") else None
+                if deadline:
+                    duration = min(duration, deadline - proposed)
+                    if duration.total_seconds() <= 0:
+                        engine.transition(plan["id"], "cancel", plan["session_id"], now)
+                        continue
                 if plan.get("flexible", plan["autonomous"]):
                     fixed = next((p for p in pending if not p.get("flexible", p["autonomous"])), None)
                     if fixed:
                         onward = self.route(plan["location"] or origin, fixed["location"])["minutes"] if fixed["location"] else 0
                         if proposed + duration + timedelta(minutes=onward) > engine.time(fixed["start"]):
-                            plan.update(start=engine.time(fixed["end"]).isoformat(), end=(engine.time(fixed["end"]) + duration).isoformat())
-                            pending.append(plan)
-                            continue
+                            if deadline:
+                                duration = engine.time(fixed["start"]) - timedelta(minutes=onward) - proposed
+                                if duration.total_seconds() <= 0:
+                                    engine.transition(plan["id"], "cancel", plan["session_id"], now)
+                                    continue
+                            else:
+                                plan.update(start=engine.time(fixed["end"]).isoformat(), end=(engine.time(fixed["end"]) + duration).isoformat())
+                                pending.append(plan)
+                                continue
                     if proposed != start:
                         plan["changes"].append({"at": now.isoformat(), "action": "自动顺延", "before": plan["start"], "reason": "前序活动与出行耗时变化"})
                         start, end = proposed, proposed + duration
@@ -147,6 +159,8 @@ class Spatial:
                     if duration.total_seconds() < route["minutes"] * 60:
                         raise ValueError(f"路线改变后需要 {route['minutes']} 分钟，请调整出行结束时间")
                     plan["route"] = route
+                if deadline:
+                    end = start + duration
                 plan.update(start=start.isoformat(), end=end.isoformat(), status="scheduled")
                 plan.pop("blocking_reason", None)
                 if minutes:
@@ -200,6 +214,9 @@ class Spatial:
             result = plan
         else:
             result = self.engine.transition(plan_id, action, session, now)
+        if action == "cancel" and plan.get("sleep_deadline"):
+            with self.engine.store.db:
+                self.engine.store.put("runtime", {"id": "sleep_skip", "until": plan["sleep_deadline"]})
         if action == "cancel" and plan["kind"] == "sleep" and self.engine.time(plan["start"]) <= now:
             # 手动结束当前睡眠时，同时结束这次唤醒留下的续睡安排。
             with self.engine.store.db:
@@ -276,7 +293,7 @@ class Spatial:
         self.reconcile(now)
         return self.engine.store.get("plan", plan_id)
 
-    def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False, user_id=None) -> dict:
+    def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False, user_id=None, sleep_deadline: str = "") -> dict:
         """地点变化时，在活动前显式安排出行时间。"""
         if self.engine.time(value.end) <= self.engine.time(value.start):
             raise ValueError("结束时间必须晚于开始时间")
@@ -331,6 +348,10 @@ class Spatial:
             self.engine._check_interval(travel_start, start)
         value = value.model_copy(update={"location": target["name"]})
         plan = self.engine.create_plan(value, session, now, autonomous)
+        if sleep_deadline:
+            plan["sleep_deadline"] = sleep_deadline
+            with self.engine.store.db:
+                self.engine.store.put("plan", plan)
         if route["minutes"]:
             travel = self.engine.create_plan(PlanInput(title=f"前往{target['name']}", kind="travel", start=travel_start.isoformat(),
                                                       end=start.isoformat(), location=target["name"], motivation=f"为{value.title}出行"), session, now, autonomous)

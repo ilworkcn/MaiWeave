@@ -36,7 +36,22 @@
           }
         }
       },
-      "actions": {}
+      "actions": {
+        "plan_action": {
+          "api": "ui_plan_action",
+          "version": "1",
+          "parameters": {
+            "plan_id": {
+              "type": "string",
+              "required": true
+            },
+            "action": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
     },
     {
       "id": "schedule",

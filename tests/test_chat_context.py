@@ -130,7 +130,7 @@ async def test_config_upgrade_preserves_choices(plugin):
     upgraded = rebuild_plugin_config_data(defaults, old)
     assert upgraded['context'] == defaults['context']
     assert upgraded['proactive']['daily_limit'] == 9
-    assert upgraded['plugin']['config_version'] == '0.11.5'
+    assert upgraded['plugin']['config_version'] == '0.11.6'
     upgraded['context']['group_mode'] = '丰富'
     assert rebuild_plugin_config_data(defaults, upgraded)['context']['group_mode'] == '丰富'
 
