@@ -17,7 +17,7 @@ async def test_feature_override_and_default(plugin, feature, key):
     rows = plugin.store.all("model_usage")
     assert [row["task"] for row in rows] == ["planner", "replyer"]
     assert all(row["feature"] == feature and row["model"] == "实际模型" for row in rows)
-    other = next(name for name in MODEL_FEATURES if name != feature)
+    other = next(name for name, setting in MODEL_FEATURES.items() if setting != key)
     await generate(plugin.ctx, plugin.store, plugin.config, other, "测试")
     assert plugin.ctx.llm.generate.call_args.kwargs["task_name"] == "planner"
 

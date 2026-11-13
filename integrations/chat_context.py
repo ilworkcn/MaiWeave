@@ -17,7 +17,7 @@ GUIDE = (
     "跨地点用 maiweave_space 查路线，目标填 goal_step_id；梦境说梦见，资讯带出处。\n"
 )
 
-LABELS = {"pending_changes": "资料确认", "person_states": "人物近况", "shared_topics": "分享接话",
+LABELS = {"chat_arrangements": "聊天约定", "pending_changes": "资料确认", "person_states": "人物近况", "shared_topics": "分享接话",
           "plans": "日程", "schedule_issues": "日程调整", "schedule_notices": "日程通知",
           "bookshelf": "阅读笔记", "profiles": "人物资料", "relationships": "人物关系",
           "anniversaries": "纪念日", "continuity": "生活接续", "goals": "目标",
@@ -148,6 +148,8 @@ class ChatContext:
                 shelf["books"] = [b for b in shelf["books"] if b["id"] == book_id]
             if shelf["books"] or shelf["notes"]:
                 add("bookshelf", shelf, reading_topic)
+        if cfg.schedule:
+            add("chat_arrangements", p.chat_schedule.context(now, session), True)
         if cfg.schedule and (schedule_topic or mode != "精简"):
             add("plans", [{k: r[k] for k in ("id", "title", "kind", "start", "end", "status", "location", "book_id", "goal_step_id")}
                           for r in engine.plans(session) if r["id"] != current.get("id") and r["status"] in {"scheduled", "active", "paused", "awaiting_confirmation", "blocked"}], schedule_topic)

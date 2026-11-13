@@ -20,6 +20,7 @@ from .integrations.memory import NativeMemory
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
 from .integrations.chat_context import ChatContext
+from .integrations.chat_schedule import ChatSchedule
 from .core.retention import Retention
 from .integrations.share_receipts import planner_task, output_summary
 from .integrations.world import World
@@ -164,6 +165,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.books = Books(self.engine, self.ctx, self.config, self.ctx.paths.data_dir)
         self.chat_books = {}
         self.chat_context = ChatContext(self)
+        self.chat_schedule = ChatSchedule(self)
         self.diary = Diary(self.engine, self.ctx, self.config)
         self.diary_publisher = DiaryPublisher(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
@@ -257,6 +259,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             await self.diary.arrange(now, self.spatial)
 
     async def plan_life(self, now):
+        await self.chat_schedule.process(now)
         self.planning_status = "正在选择下一项活动"
         self.planning_status = await self.living.choose_activity(now)
 
@@ -302,6 +305,13 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         person_id = await self.ctx.person.get_id(platform=platform, user_id=str(user_id))
         with self.store.db:
             self.store.put("identity", {"id": key, "session_id": session, "user_id": str(user_id), "person_id": person_id})
+
+    @HookHandler("send_service.after_send")
+    async def schedule_after_send(self, message: dict, sent: bool, storage_message: bool = True, **kwargs):
+        if self.config.life.enabled and sent and storage_message:
+            user = message.get("message_info", {}).get("user_info", {}).get("user_id", "")
+            self.chat_schedule.mark(message["session_id"], self.now(), bot_id=user)
+        return {"action": "continue"}
 
     @HookHandler("send_service.before_send")
     async def sleep_before_send(self, message: dict, storage_message: bool = True, **kwargs):
@@ -553,6 +563,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             self.chat_context.messages[message["session_id"]] = message.get("processed_plain_text") or ""
             await self.identify_person(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""), message.get("platform", ""))
             if self.config.life.enabled:
+                if not (message.get("processed_plain_text") or "").strip().startswith("/"):
+                    self.chat_schedule.mark(message["session_id"], self.now(), self.chat_context.speakers[message["session_id"]])
                 self.living.receipts.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),
                                             message.get("processed_plain_text") or "", self.now())
                 self.presence.receive(message["session_id"], message.get("message_info", {}).get("user_info", {}).get("user_id", ""),

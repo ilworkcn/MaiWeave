@@ -36,6 +36,13 @@ class Continuity:
             "continuations": [r for r in store.all("activity_memory") if self.engine.visible(r, session)][-12:],
         }
 
+    def chat_arrangements(self, now):
+        """自主安排共用角色约定，聊天详情仍按来源聊天流展示。"""
+        rows = [r for r in self.engine.store.all("chat_arrangement") if r.get("type") == "chat_schedule"
+                and r["status"] == "active" and self.engine.time(r["expires_at"]) > now]
+        return [{k: r[k] for k in ("title", "starts_at", "expires_at", "blocked_kinds")}
+                for r in sorted(rows, key=lambda r: r["starts_at"])[:12]]
+
     async def process(self, now):
         """每轮处理少量新记录；模型请求按重试规则执行，结果保存在页面。"""
         store = self.engine.store

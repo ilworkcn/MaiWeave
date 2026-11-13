@@ -117,6 +117,28 @@ class PlanPatch(BaseModel):
         return self
 
 
+class ChatPlanUpdate(BaseModel):
+    plan_id: str
+    patch: PlanPatch
+
+
+class ChatArrangement(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    start: str
+    end: str
+    evidence: str = Field(min_length=1, max_length=400)
+    source: Literal["reported", "observed"] = "reported"
+    speaker_id: str = ""
+    blocked_kinds: list[Kind] = Field(default_factory=list)
+    record_id: str = ""
+    plan_updates: list[ChatPlanUpdate] = Field(default_factory=list)
+    cancel_plan_ids: list[str] = Field(default_factory=list)
+
+
+class ChatArrangements(BaseModel):
+    arrangements: list[ChatArrangement] = Field(default_factory=list, max_length=8)
+
+
 class RoutineInput(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     frequency: Literal["daily", "weekly", "monthly"] = "weekly"

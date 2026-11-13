@@ -185,6 +185,7 @@ class RetentionConfig(PluginConfigBase):
 
 MODEL_FEATURES = {
     "自主活动": "activity",
+    "聊天安排": "activity",
     "日记安排": "diary_schedule",
     "习惯归类": "habits",
     "活动结果": "outcomes",

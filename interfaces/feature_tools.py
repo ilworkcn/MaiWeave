@@ -2,7 +2,7 @@
 
 from maibot_sdk import Tool
 
-from ..core.models import RoutineInput
+from ..core.models import RoutineInput, ChatArrangement
 
 
 def parameters(properties, required):
@@ -10,6 +10,11 @@ def parameters(properties, required):
 
 
 class FeatureTools:
+    @Tool("maiweave_chat_arrangement", description="保存聊天中已确定的角色本人临时安排，如调休、请假。填写适用时间、原话依据，调休blocked_kinds填work；更新同一事项传record_id，取消限制时填空blocked_kinds。cancel_plan_ids用于取消已有日程；plan_updates按plan_id和patch改期，沿用日程与出行逻辑。用户自己的作息使用maiweave_person_state。成功后再向用户确认安排。", parameters=parameters({"arrangement": ChatArrangement.model_json_schema()}, ["arrangement"]))
+    async def chat_arrangement(self, arrangement: dict, **kwargs):
+        self.require_life()
+        return self.chat_schedule.save(ChatArrangement.model_validate(arrangement), kwargs["stream_id"], kwargs.get("user_id", ""), self.now())
+
     @Tool("maiweave_books", description="list按page分页查看书目，notes按book_id与page查询已读笔记；page从0开始。select选择下次读物；switch立即换读并沿用剩余时间，chapters分页查看章节，seek从chapter指定的章节读起，skip跳过当前章；chapter从0开始。用户要求换书或跳章时调用对应操作。schedule安排阅读日程，location可指定已有地点，start留空时先出行再阅读。", parameters=parameters({
         "action": {"type": "string", "enum": ["list", "notes", "select", "schedule", "switch", "chapters", "seek", "skip"]}, "book_id": {"type": "string"},
         "location": {"type": "string", "description": "阅读地点名称，留空使用当前地点"},

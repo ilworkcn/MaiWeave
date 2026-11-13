@@ -97,7 +97,56 @@ class Probe(MaiBotPlugin):
             p.now = lambda: now
             with p.store.db:
                 p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 20, "energy": 80})
-            if case == "sleep_schedule":
+            if case == "chat_statement":
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                result = await p.ctx.maisaka.reply.generate(stream,
+                    "这是本地聊天室的生活日程接续验证。用角色第一人称简短告诉对方：我11月16日12点到18点调休，下午不上班。日期和时段保持完整。",
+                    format_instruction="只输出一句角色实际说出的确定安排。", timeout_ms=95000)
+                assert result["success"], result
+                sent = await p.ctx.send.text(result["text"], stream, storage_message=True, sync_to_maisaka_history=True, return_details=True)
+                assert sent["sent"], sent
+                self.result = {"status": "通过", "case": case, "result": {"text": result["text"], "delivery": sent}}
+                return
+            if case == "chat_schedule":
+                from maiweave_probe_target.core.models import ChatArrangement, RoutineInput
+                from maiweave_probe_target.integrations.usage import generate
+                from maiweave_probe_target.core.models import ChatArrangements
+                now = now.replace(hour=9)
+                with p.store.db:
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "location": "住处"})
+                p.spatial.save_place("办公室", False, "实机核验地点")
+                p.spatial.save_route("住处", "办公室", 20, "步行")
+                rule = p.rhythm.save(RoutineInput(title="下午上班", frequency="daily", anchor_date=now.date().isoformat(),
+                    start_time="14:00", duration_minutes=120, kind="work", location="办公室"), "probe-chat", now)
+                p.rhythm.materialize(now)
+                today = next(x for x in p.store.all("plan") if x.get("routine_date") == now.date().isoformat())
+                prompt = ("提取角色已确定的临时安排，输出JSON对象arrangements数组，每项title、start、end（带时区ISO）、"
+                          "evidence、source、blocked_kinds、record_id、cancel_plan_ids。用户自己的请假填空数组。"
+                          f"现在{now.isoformat()}。用户：你下午上班吗？角色实际回复：今天下午调休，12点到18点休息。"
+                          "source为observed，blocked_kinds为work，record_id空字符串，cancel_plan_ids空数组。")
+                result = await generate(p.ctx, p.store, p.config, "聊天安排", prompt, ChatArrangements)
+                assert result.arrangements
+                for value in result.arrangements:
+                    p.chat_schedule.save(value, "probe-chat", "reader", now)
+                assert p.store.get("plan", today["id"])["status"] == "cancelled"
+                assert p.store.get("plan", today["travel_id"])["status"] == "cancelled"
+                p.rhythm.materialize(now)
+                p.chat_schedule.reconcile(now)
+                assert any(x["status"] == "scheduled" and x.get("routine_date") == (now + timedelta(days=1)).date().isoformat() for x in p.store.all("plan"))
+                p.config.life.autonomous = True
+                now = now.replace(hour=13)
+                await p.living.choose_activity(now)
+                autonomous = [x for x in p.store.all("plan") if x["autonomous"]]
+                assert autonomous and all(x["kind"] != "work" for x in autonomous)
+                assert p.chat_schedule.active(now, "other-chat") == []
+                assert not p.chat_schedule.active(now.replace(hour=18))
+                output = {"arrangements": p.chat_schedule.context(now), "activity": autonomous,
+                          "cancelled_trip": p.store.get("plan", today["travel_id"])["status"],
+                          "routine_status": p.store.get("routine", rule["id"])["status"],
+                          "model_usage": p.store.all("model_usage")}
+                self.result = {"status": "通过", "case": case, "result": output}
+                return
+            elif case == "sleep_schedule":
                 now = now.replace(hour=1, minute=30)
                 p.config.life.autonomous = True
                 p.config.life.schedule_enabled = True

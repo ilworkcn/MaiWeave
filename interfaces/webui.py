@@ -490,7 +490,7 @@ class WebUI:
                 "rules": [{**r, "frequency_label": FREQUENCY[r["frequency"]], "status_label": STATUS[r["status"]],
                            "weekdays_label": "、".join(list(WEEKDAYS)[d] for d in r["weekdays"]), "exceptions_label": "、".join(r["exceptions"]),
                            "kind_label": KIND[r["kind"]]} for r in rules], "issues": self.store.all("routine_issue")[::-1],
-                "schedule_issues": self.store.all("schedule_issue") + sleep_rules, "notices": self.store.all("schedule_notice"), "adjustments": self.store.all("adjustment")[::-1]}, page, ['plans', 'rules', 'issues', 'schedule_issues', 'notices', 'adjustments'])
+                "schedule_issues": self.store.all("schedule_issue") + sleep_rules, "notices": self.store.all("schedule_notice") + [{"id": r["id"], "title": r["title"], "at": r["updated_at"], "reason": f"{display_time(r['starts_at'])} 至 {display_time(r['expires_at'])}：{r['reason']}"} for r in self.chat_schedule.active(self.now(), session_id or None)], "adjustments": self.store.all("adjustment")[::-1]}, page, ['plans', 'rules', 'issues', 'schedule_issues', 'notices', 'adjustments'])
 
     @API("ui_create_plan", description="新增生活安排")
     async def ui_create_plan(self, title: str, start: str, end: str, kind: str = "leisure", location: str = "", session_id: str = "", participants: str = "", simulation: bool = True, flexible: bool = False) -> dict:

@@ -86,6 +86,7 @@ class Retention:
         for category, label, field, days, count in (
             ("model_usage", "模型调用明细", "at", cfg.usage_days, cfg.usage_count),
             ("emotion", "情绪变化", "at", cfg.log_days, cfg.log_count),
+            ("chat_arrangement", "聊天约定", "expires_at", cfg.log_days, cfg.log_count),
             ("effect", "情绪影响", "expires_at", cfg.log_days, cfg.log_count),
             ("thread", "已结束跟进", "resolved_at", cfg.log_days, cfg.log_count),
             ("place_search", "地点搜索缓存", "searched_at", cfg.world_days, cfg.world_count),
@@ -93,7 +94,7 @@ class Retention:
             rows = store.all(category)
             if category == "thread":
                 rows = [r for r in rows if r["status"] in {"resolved", "expired"}]
-            protected = {r["id"] for r in rows if category == "effect" and r["status"] == "active"}
+            protected = {r["id"] for r in rows if (category == "effect" and r["status"] == "active") or (category == "chat_arrangement" and r["status"] == "active" and self.time(r["expires_at"]) > now)}
             delete[category] = select(rows, days, count, field, protected)
             summary.append(dict(category=category, label=label, total=len(rows), days=days,
                                 limit=count, protected=len(protected), remove=len(delete[category])))

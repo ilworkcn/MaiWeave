@@ -418,6 +418,7 @@ class Living:
             "goals": engine.store.all("goal"), "interests": config.interests,
             "continuations": [(r["id"], r["updated_at"]) for r in engine.store.all("activity_memory")],
             "weather": self.world.context(now)["weather"],
+            "chat_arrangements": self.continuity.chat_arrangements(now),
         }, ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         previous = engine.store.find("runtime", "planning")
         if previous and previous.get("signature") == signature and (now - engine.time(previous["at"])).total_seconds() < config.planning_interval_minutes * 60:
@@ -503,6 +504,7 @@ class Living:
                 f"上次用餐结束：{last_meal}。过去两小时已读书 {reading_minutes} 分钟。到饭点可以安排做饭、用餐。"
                 f"人格：{json.dumps(personality, ensure_ascii=False)}；补充背景：{config.background}；"
                 f"兴趣：{config.interests}；状态：{json.dumps(state, ensure_ascii=False)}；"
+                f"聊天中确定的角色安排：{json.dumps(self.continuity.chat_arrangements(now), ensure_ascii=False)}；有效时段内按约定选择活动，blocked_kinds列出的类别留到该时段结束后。"
                 f"目标：{json.dumps(goals, ensure_ascii=False)}；最近经历：{json.dumps(recent, ensure_ascii=False)}"
                 f"；持续影响、偏好和接续内容：{json.dumps(self.continuity.context('', now), ensure_ascii=False)}"
                 "location 填已有地点名称；想去的新场所用 place_query 填简短稳定的地点搜索词，location 可留空。"
@@ -524,6 +526,13 @@ class Living:
                 "根据仍在有效期内的天气选择活动，恶劣天气优先在室内休息或活动。"
             )
             def validate_activity(choice):
+                travel = self.spatial.route(state["location"], choice.location)["minutes"] if choice.location else 0
+                start = now + timedelta(minutes=travel)
+                end = start + timedelta(minutes=min(choice.minutes, free))
+                for row in engine.store.all("chat_arrangement"):
+                    if (row["status"] == "active" and choice.kind in row["blocked_kinds"]
+                            and engine.time(row["starts_at"]) < end and engine.time(row["expires_at"]) > start):
+                        raise ValueError(f"请按聊天中确定的安排选择其他活动：{row['title']}，到 {row['expires_at']} 结束")
                 if self.is_reading(choice.model_dump()) and not reading["available_minutes"]:
                     raise ValueError("这会儿留给其他日常活动，请重新选择，book_id 填空字符串")
                 if choice.research_query and (not exploration["ready"] or choice.book_id or choice.kind not in {"study", "leisure"}):
