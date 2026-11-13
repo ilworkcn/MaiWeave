@@ -8,7 +8,9 @@
 
 **给 MaiBot 一套自己的生活，让你的聊天也能改变它的一天。**
 
-自主安排日程 · 聊天改变计划 · 真实天气与地点 · 读书写日记 · 日记发空间
+随着相处积累熟悉、信任与亲近，麦麦会记住你的近况、生日和彼此的约定，结合你们的关系主动问候、关心后续。它也会安排作息、读书、出门，带着经历回来聊天，你的一句邀约也能改变它的日程。
+
+自主安排日程 · 亲密关系与主动关心 · 聊天改变计划 · 真实天气与地点 · 读书写日记 · 日记发空间
 
 [![Release](https://img.shields.io/github/v/release/ilworkcn/MaiWeave?label=Release&color=7ba989)](https://github.com/ilworkcn/MaiWeave/releases)
 [![MaiBot](https://img.shields.io/badge/MaiBot-1.3.19–1.4.x-7ba989)](https://docs.maibot.chat/)
