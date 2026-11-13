@@ -1,6 +1,6 @@
 <div align="center">
 
-![MaiWeave：聊天之外，也有自己的生活](https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/banner.png)
+<img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/banner.png" width="800" alt="MaiWeave：让麦麦有自己的生活，也让你参与其中">
 
 <img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/icon.png" width="128" alt="MaiWeave 插件图标">
 
