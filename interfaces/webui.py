@@ -415,7 +415,11 @@ class WebUI:
         diaries = sorted(self.store.all("diary", omit=("material",)), key=lambda r: r["day"], reverse=True)
         diary = next((r for r in diaries if r["status"] == "已生成"), None)
         events = sorted(self.store.all("experience", omit=("history",)), key=lambda r: r["occurred_at"], reverse=True)[:4]
-        data.pop("history")
+        history = data.pop("history")
+        baseline = next((r for r in history if now - timedelta(hours=2) <= self.engine.time(r["at"]) < now), None)
+        data["recent_changes"] = ({"since": baseline["at"],
+            **{key: round(data["state"][key]) - round(baseline[key]) for key in ("energy", "mood")}}
+            if baseline else None)
         data.update(now=now.isoformat(timespec="seconds"), day=start.date().isoformat(), day_offset=day_offset,
             current=brief(current) if current else None, upcoming=brief(upcoming) if upcoming else None,
             timeline=[{**brief(plan),

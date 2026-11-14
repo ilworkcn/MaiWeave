@@ -256,3 +256,35 @@ def test_nested_details_and_pagination_buttons(script):
     result = subprocess.run([node, str(Path(__file__).with_name(script))],
                             capture_output=True, text=True, encoding="utf-8")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("hours", [0, 15])
+async def test_recent_changes_use_original_history_across_midnight(plugin, hours):
+    now = plugin.now().replace(hour=hours, minute=30, second=0, microsecond=0)
+    plugin.now = lambda: now
+    with plugin.store.db:
+        for row in plugin.store.all("state_history"):
+            plugin.store.delete("state_history", row["id"])
+        plugin.store.put("state", {**plugin.engine.state(), "energy": 71.6, "mood": -2.3})
+        for minutes, energy, mood in [(130, 99, 99), (110, 83.8, -10.1), (10, 73, -3), (-10, 0, 0)]:
+            plugin.store.put("state_history", {"id": str(minutes), "at": (now-timedelta(minutes=minutes)).isoformat(), "energy": energy, "mood": mood})
+    before = plugin.store.all("state_history")
+    for day in (-1, 0, 1):
+        data = await plugin.ui_dashboard(day)
+        assert data["recent_changes"] == {"since": (now-timedelta(minutes=110)).isoformat(), "energy": -12, "mood": 8}
+    assert plugin.store.all("state_history") == before
+
+
+async def test_recent_changes_wait_for_a_recent_record(plugin):
+    now = plugin.now()
+    plugin.now = lambda: now
+    with plugin.store.db:
+        for row in plugin.store.all("state_history"):
+            plugin.store.delete("state_history", row["id"])
+        plugin.store.put("state_history", {"id": "old", "at": (now-timedelta(days=1)).isoformat(), "energy": 50, "mood": 0})
+    assert (await plugin.ui_dashboard())["recent_changes"] is None
+    with plugin.store.db:
+        plugin.store.put("state_history", {"id": "recent", "at": (now-timedelta(minutes=10)).isoformat(),
+            "energy": plugin.engine.state()["energy"], "mood": plugin.engine.state()["mood"]})
+    changes = (await plugin.ui_dashboard())["recent_changes"]
+    assert changes["energy"] == changes["mood"] == 0
