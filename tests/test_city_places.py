@@ -196,3 +196,20 @@ async def test_empty_sources_and_empty_selection_have_distinct_details(plugin):
     await plugin.world.discover_places(plugin.spatial, plugin.now(), force=True, activity="公园")
     assert '模型未从资料中选出' in plugin.world.place_status()['detail']
     assert '搜索返回 1 条资料，收录 0 处地点' in plugin.world.place_status()['detail']
+
+
+@pytest.mark.parametrize("activity", ["", "   "])
+async def test_webui_empty_place_request_searches_everyday_venues(plugin, activity):
+    import asyncio
+    from datetime import timedelta
+    from maiweave.core.models import PlanInput
+    plugin.config.world.search_enabled = plugin.config.world.places_enabled = True
+    now = plugin.now()
+    plugin.engine.create_plan(PlanInput(title="刷牙洗脸，做好睡前洗漱", kind="rest",
+        start=now.isoformat(), end=(now + timedelta(minutes=10)).isoformat()), "", now)
+    plugin.ctx.web = SimpleNamespace(search=AsyncMock(return_value={"results": []}))
+    await plugin.ui_discover_places(activity)
+    await asyncio.gather(*plugin.jobs)
+    query = plugin.ctx.web.search.call_args.kwargs["query"]
+    assert "公园、书店、咖啡馆" in query
+    assert "刷牙" not in query

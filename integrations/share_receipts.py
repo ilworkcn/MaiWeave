@@ -84,7 +84,7 @@ class ShareReceipts:
         values = (intent, json.dumps(person, ensure_ascii=False),
                   json.dumps(recipient.get("当前聊天相关记忆", []), ensure_ascii=False), json.dumps(history, ensure_ascii=False))
         prompt = guide + "".join(label + value[:size] for label, value, size in zip(labels, values, sizes))
-        return await generate(self.ctx, self.store, config, "分享判断", prompt, ShareDecision)
+        return await generate(self.ctx, self.store, config, "分享判断", prompt, ShareDecision, max_chars=budget)
 
     async def express(self, session, intent, row, now):
         """通过原生 Replyer 生成分享，发送回执用于结算额度。"""

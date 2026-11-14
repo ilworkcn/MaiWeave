@@ -12,6 +12,8 @@ from test_memory import server
 async def test_native_person_binding_and_conversation_share_record(plugin):
     plugin.ctx.llm.generate.return_value = {"success": True, "response": '{"conflicts":[],"level":1,"relationship":"朋友","reason":"测试关系"}'}
     plugin.memory.people = AsyncMock(return_value={"items": [{"person_id": "p1", "person_name": "小明", "profile_text": "喜欢读书", "manual_override": {"override_text": "住在上海"}}]})
+    row = plugin.memory.people.return_value["items"][0]
+    plugin.memory.person_profile = AsyncMock(return_value={**row, "manual_override_text": row.get("manual_override", {}).get("override_text", "")})
     plugin.ctx.person = SimpleNamespace(get_value=AsyncMock(return_value="123"))
     plugin.memory.edit_person = AsyncMock(return_value={"success": True})
     person = await plugin.ui_save_profile("", "chat-a", person_id="p1")
@@ -41,3 +43,12 @@ async def test_native_person_http_contract(server):
     assert requests[-1][0:2] == ("POST", "/api/webui/memory/profiles/override")
     assert requests[-1][3]["person_id"] == "p1"
     assert requests[-1][3]["override_text"] == "喜欢摄影"
+
+
+async def test_person_editor_reads_current_profile_and_manual_note(plugin):
+    plugin.memory.people = AsyncMock(return_value={"items":[{"person_id":"p1", "profile_text":"旧画像"}]})
+    plugin.memory.person_profile = AsyncMock(return_value={"success":True, "person_id":"p1", "person_name":"小明", "profile_text":"现在喜欢观鸟", "manual_override_text":"周末喜欢散步"})
+    result = await plugin.ui_memory_person("p1")
+    assert result["profile_text"] == "现在喜欢观鸟"
+    assert result["override_text"] == "周末喜欢散步"
+    plugin.memory.people.assert_not_awaited()

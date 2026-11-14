@@ -60,6 +60,8 @@ async def test_first_spoken_birthday_reads_native_person_before_save(plugin):
     plugin.ctx.chat = SimpleNamespace(get_all_streams=AsyncMock(return_value=[{"stream_id":"a", "platform":"qq"}]))
     plugin.ctx.person = SimpleNamespace(get_id=AsyncMock(return_value="person-a"), get_value=AsyncMock(return_value="u"))
     plugin.memory.people = AsyncMock(return_value={"items":[{"person_id":"person-a", "person_name":"小明", "profile_text":"生日为八月三日，角色的恋人"}]})
+    row = plugin.memory.people.return_value["items"][0]
+    plugin.memory.person_profile = AsyncMock(return_value={**row, "manual_override_text": row.get("manual_override", {}).get("override_text", "")})
     decision(plugin, ["原生画像生日为八月三日"], 3)
     response = await plugin.personal("save_date", month=8, day=5, stream_id="a", user_id="u")
     pending = response["content"]

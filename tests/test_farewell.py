@@ -135,3 +135,15 @@ async def test_readonly_status_during_farewell(plugin):
     assert proactive["decision"] == "defer" and proactive["reason"] == "farewell"
     assert proactive["until"] == (now + timedelta(minutes=5)).isoformat()
     assert list(plugin.store.db.iterdump()) == before
+
+
+async def test_expression_selection_during_reply_keeps_farewell_awake(plugin):
+    now = prepare(plugin)
+    await plugin.planner_receipt("private", calls("reply"))
+    selector = [{"item_type": "AssistantMessageItem", "parts": [{"type":"text", "text":'{"selected_ids":[]}'}]}]
+    await plugin.planner_receipt("private", selector)
+    assert plugin.living.farewell(now)
+    assert await plugin.sleep_before_send({"session_id":"private"}) == {"action":"continue"}
+    plugin.ctx.db.get.return_value = {"tool_name":"reply", "tool_data":'{"success":true}'}
+    await plugin.living.refresh_farewell(now)
+    assert plugin.living.quiet_sleep(now)

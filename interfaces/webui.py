@@ -261,6 +261,7 @@ class WebUI:
     async def ui_discover_places(self, activity: str = "", force: bool = False) -> dict:
         if not self.config.world.places_enabled:
             raise ValueError("请在天气与见闻配置中开启按城市自动搜索生活地点")
+        activity = activity.strip() or "适合日常休闲的公园、书店、咖啡馆"
         return self.start_job("搜索城市地点", self.world.discover_places(self.spatial, self.now(), force=force, activity=activity))
 
     @API("ui_memory_people", description="搜索原生记忆人物画像")
@@ -271,14 +272,10 @@ class WebUI:
 
     @API("ui_memory_person", description="读取选中的原生人物画像")
     async def ui_memory_person(self, person_id: str) -> dict:
-        result = await self.memory.people(person_id=person_id)
-        row = next((item for item in result["items"] if item["person_id"] == person_id), None)
-        if row is None:
-            raise ValueError("请在原生人物画像中选择已有的人物")
-        override = row.get("manual_override") or ""
-        return {"person_id": person_id, "name": row.get("person_name") or row.get("user_nickname") or person_id,
+        row = await self.memory.person_profile(person_id)
+        return {"person_id": person_id, "name": row.get("person_name") or person_id,
                 "profile_text": row.get("profile_text", ""),
-                "override_text": (override.get("override_text") or override.get("text", "")) if isinstance(override, dict) else override}
+                "override_text": row.get("manual_override_text", "")}
 
     async def ui_edit_memory_person(self, person_id: str, text: str) -> dict:
         await self.ui_memory_person(person_id)

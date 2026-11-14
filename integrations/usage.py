@@ -39,7 +39,7 @@ async def _once(ctx, store, config, feature, prompt):
             store.put("model_usage", record)
 
 
-async def generate(ctx, store, config, feature, prompt, model=None, validate=None):
+async def generate(ctx, store, config, feature, prompt, model=None, validate=None, *, max_chars=0):
     for attempt in range(3):
         try:
             result = await _once(ctx, store, config, feature, prompt)
@@ -61,7 +61,12 @@ async def generate(ctx, store, config, feature, prompt, model=None, validate=Non
                 raise
             ctx.logger.warning("%s第%s次调用失败，将重试：%s", feature, attempt + 1, error)
             if isinstance(error, ValueError):
-                prompt += "\n请重新输出，修正上次结果的问题：" + str(error)
+                correction = "\n请重新输出，修正上次结果的问题：" + str(error)
+                if max_chars:
+                    correction = correction[:300]
+                    prompt = prompt[:max_chars - len(correction)] + correction
+                else:
+                    prompt += correction
             await asyncio.sleep(2 ** attempt)
 
 

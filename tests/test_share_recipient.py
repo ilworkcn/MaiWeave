@@ -152,3 +152,11 @@ async def test_memory_recovery_keeps_unsent_experience(plugin, monkeypatch, erro
     await plugin.living.share(now)
     assert plugin.store.all("share_receipt")[0]["outcome"] == "实际已发送"
     assert len(plugin.store.get("sharing", "chat-a")["experience_ids"]) == 1
+
+
+async def test_retry_keeps_share_prompt_inside_budget(plugin):
+    plugin.config.context.private_chars = 1200
+    plugin.ctx.llm.generate.side_effect = [{"success": True, "response": "格式有误"}, {"success": True, "response": '{"send":true,"reason":"新发现"}'}]
+    await plugin.living.receipts.decide("chat-a", "分享经历" * 2000, plugin.now(), plugin.config, {"场景":"私聊", "原生人物画像":"喜欢观鸟" * 2000, "当前聊天相关记忆":["观鸟" * 1000]})
+    assert len(plugin.ctx.llm.generate.await_args_list) == 2
+    assert all(len(call.args[0]) <= 1200 for call in plugin.ctx.llm.generate.await_args_list)

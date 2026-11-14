@@ -159,7 +159,7 @@ class Probe(MaiBotPlugin):
                     raise AssertionError({"阶段": "等待真实回复", "模型输出": self.planner_outputs[start:]})
                 seed = "我已经醒啦，现在也空下来了。你刚才拓印的梧桐叶帆布袋做好了吗？我特别想知道叶脉印得清不清楚，等晾好了一定主动告诉我呀，我在这儿等你的成品消息。"
                 if case.startswith("recipient_"):
-                    seed = ("我喜欢观鸟，尤其想看喜鹊搭窝。我刚空下来，你散步时见到喜鹊会先留意什么？遇到有意思的新发现记得告诉我。" if case == "recipient_natural" else "我喜欢观鸟，刚想起麻雀也会洗澡。你觉得看它们洗澡时最有意思的是什么？以后碰到这样的新鲜事也告诉我吧。")
+                    seed = ("我喜欢观鸟，下午想去河边看看白鹭。你觉得应该留意它们什么动作？你今天遇到新的白鹭见闻就告诉我，我很想听。" if case == "recipient_natural" else "我喜欢观鸟，最近对翠鸟突然扎进水里的动作很好奇。你观察到过什么细节？碰到新的翠鸟见闻记得告诉我。")
                 initial = await self.ctx.call_capability("internal_chat.send", text=seed)
                 assert initial["message_id"]
                 await wait_reply(0)
@@ -177,7 +177,7 @@ class Probe(MaiBotPlugin):
                             break
                         await asyncio.sleep(2)
                     assert native_interest, {"阶段": "原生兴趣写回", "事实": facts}
-                    topic = ("刚在楼下散步时发现一只喜鹊把细树枝叼到树杈上，试了两次才放稳，第一次近距离看到搭窝的过程，很想告诉喜欢观鸟的朋友" if case == "recipient_natural" else "刚在公园看见两只小麻雀轮流跳进浅水洼洗澡，先扑腾翅膀再跳到石头上抖水，一只洗完另一只才进去，第一次留意到这样的轮流洗澡")
+                    topic = ("刚在河边看到一只白鹭先用脚轻轻搅动浅水，再歪头盯着水面，等了一会儿突然啄起一条小鱼，第一次注意到它捕鱼前会先搅水" if case == "recipient_natural" else "刚在河边看见翠鸟从低枝上扎进水里，回来时嘴里叼着小鱼，它先把鱼在树枝上拍了两下，再调转鱼头吞下去，第一次看到它捕到鱼之后的细节")
                 event = p.engine.record_experience(ExperienceInput(summary=topic, source="simulated", evidence="实机测试生活场景", importance=9, occurred_at=p.now().isoformat()), stream, p.now())
                 recipient = await p.living.share_recipient(stream, topic)
                 if case.startswith("recipient_"):
@@ -395,6 +395,7 @@ class Probe(MaiBotPlugin):
                     start=now.isoformat(), end=(now + timedelta(hours=2)).isoformat()), "", now)
                 p.engine.advance(now)
                 assert p.living.wake(stream, now, "实机告别测试", "owner", require_intimacy=False)
+                self.planner_outputs = []
                 self.active = p
                 self.deliveries = []
                 result = await self.ctx.call_capability("internal_chat.send", text="晚安，去睡吧。跟我说声晚安，再单独一句叮嘱我早点休息就好。")
@@ -413,7 +414,7 @@ class Probe(MaiBotPlugin):
                 records = []
                 for call_id, name in observed.items():
                     record = await p.ctx.db.get("ToolRecord", filters={"session_id": stream, "tool_id": call_id}, single_result=True)
-                    assert record, name
+                    assert record, {"tool": name, "call_id": call_id, "outputs": self.planner_outputs, "deliveries": self.deliveries, "awakening": p.store.find("runtime", "awakening")}
                     data = json.loads(record["tool_data"])
                     records.append({"name": name, "success": data["success"], "error": data.get("error_message"),
                                     "send_results": data.get("metadata", {}).get("send_results", [])})

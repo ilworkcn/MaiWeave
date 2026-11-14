@@ -134,7 +134,7 @@ class Living:
             return
         calls = {item["tool_call"]["call_id"]: item["tool_call"]["func_name"] for item in items
                  if item.get("item_type") == "FunctionCallItem"}
-        if not calls:
+        if not calls and not row.get("farewell_calls"):
             self.finish_farewell(now)
         elif any(name in {"reply", "send_emoji", "stop", "wait"} for name in calls.values()):
             with self.engine.store.db:

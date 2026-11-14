@@ -40,6 +40,8 @@ async def test_cancelled_first_birthday_creates_no_profile(plugin):
 
 async def test_native_edit_waits_and_updates_relationship(plugin):
     plugin.memory.people=AsyncMock(return_value={"items":[{"person_id":"p","person_name":"小明","profile_text":"朋友"}]})
+    row = plugin.memory.people.return_value["items"][0]
+    plugin.memory.person_profile = AsyncMock(return_value={**row, "manual_override_text": row.get("manual_override", {}).get("override_text", "")})
     plugin.memory.edit_person=AsyncMock(return_value={"success":True})
     person=plugin.anniversaries.save_profile("小明","a","u",person_id="p")
     decision(plugin,["关系从朋友改为恋人"],3)
@@ -106,6 +108,8 @@ async def test_ui_review_returns_before_model_finishes(plugin):
 async def test_auto_profile_reviews_native_identity_and_infers_relationship(plugin):
     plugin.ctx.person = SimpleNamespace(get_value=AsyncMock(return_value='u'))
     plugin.memory.people = AsyncMock(return_value={"items": [{"person_id": "p", "person_name": "小明", "profile_text": "当前恋人"}]})
+    row = plugin.memory.people.return_value["items"][0]
+    plugin.memory.person_profile = AsyncMock(return_value={**row, "manual_override_text": row.get("manual_override", {}).get("override_text", "")})
     decision(plugin, level=3)
     result = await plugin.reviews.submit("profile", {"person_id": "p", "session_id": "a", "name": "",
         "intimacy_mode": "auto", "intimacy": 0, "relationship": "普通关系"})
@@ -133,6 +137,8 @@ async def test_reload_finishes_interrupted_review_progress(plugin):
 
 async def test_profile_delete_preserves_native_person(plugin):
     plugin.memory.people = AsyncMock(return_value={"items": [{"person_id": "p", "person_name": "小明", "profile_text": "喜欢阅读"}]})
+    row = plugin.memory.people.return_value["items"][0]
+    plugin.memory.person_profile = AsyncMock(return_value={**row, "manual_override_text": row.get("manual_override", {}).get("override_text", "")})
     plugin.memory.edit_person = AsyncMock()
     profile = plugin.anniversaries.save_profile("小明", "a", "u", person_id="p")
     birthday = plugin.anniversaries.save_date(profile["id"], "生日", "solar", 8, 3)
