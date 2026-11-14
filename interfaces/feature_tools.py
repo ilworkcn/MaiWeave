@@ -6,7 +6,13 @@ from ..core.models import RoutineInput, ChatArrangement
 
 
 def parameters(properties, required):
-    return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
+    """将模型定义放到工具参数根层，供嵌套字段的引用使用。"""
+    definitions = {name: definition for value in properties.values() for name, definition in value.get("$defs", {}).items()}
+    fields = {name: {key: value for key, value in field.items() if key != "$defs"} for name, field in properties.items()}
+    result = {"type": "object", "properties": fields, "required": required, "additionalProperties": False}
+    if definitions:
+        result["$defs"] = definitions
+    return result
 
 
 class FeatureTools:

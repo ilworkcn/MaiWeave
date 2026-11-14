@@ -30,15 +30,11 @@ from .life.dreams import Dreams
 from .life.books import Books
 from .life.diary import Diary
 from .integrations.qzone import DiaryPublisher
-from .interfaces.feature_tools import FeatureTools
+from .interfaces.feature_tools import FeatureTools, parameters as schema
 from .interfaces.webui import WebUI
 from .life.continuity import Continuity
 from .life.anniversaries import Anniversaries
 from .interfaces.review import Reviews
-
-
-def schema(properties: dict, required: list[str]) -> dict:
-    return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
 
 
 def text_field(description: str) -> dict:

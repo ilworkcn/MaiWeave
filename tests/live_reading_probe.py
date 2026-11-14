@@ -97,6 +97,47 @@ class Probe(MaiBotPlugin):
             p.now = lambda: now
             with p.store.db:
                 p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 20, "energy": 80})
+            if case == "tool_schema":
+                import json
+                # 安装临时核验插件时附上实际模型返回的工具参数。
+                payloads = json.loads(Path(__file__).with_name("tool_calls.json").read_text("utf-8"))
+                now = datetime(2026, 11, 14, 9, tzinfo=now.tzinfo)
+
+                p.spatial.save_route("住处", "公园", 20, "步行")
+                output = []
+                for model, arguments in payloads.items():
+                    with p.store.db:
+                        for category in ("plan", "chat_arrangement"):
+                            for row in p.store.all(category):
+                                p.store.delete(category, row["id"])
+                        p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "location": "住处"})
+                    row = p.spatial.schedule(PlanInput(title="去公园散步", kind="leisure", location="公园",
+                        start="2026-11-15T14:00:00+08:00", end="2026-11-15T15:00:00+08:00"), "probe-chat", now, user_id="reader")
+                    # 使用模型请求中提供的日程编号创建对应的测试记录。
+                    original = row["id"]
+                    with p.store.db:
+                        p.store.delete("plan", original)
+                        p.store.put("plan", {**row, "id": "issue14-plan"})
+                        for trip in p.store.all("plan"):
+                            if trip.get("activity_id") == original:
+                                p.store.put("plan", {**trip, "activity_id": "issue14-plan"})
+                    try:
+                        await p.chat_arrangement(**arguments, stream_id="other-chat", user_id="reader")
+                    except ValueError as error:
+                        assert "当前聊天流" in str(error), str(error)
+                    else:
+                        raise AssertionError("跨聊天修改应被归属校验拒绝")
+                    await p.chat_arrangement(**arguments, stream_id="probe-chat", user_id="reader")
+                    changed = p.store.get("plan", "issue14-plan")
+                    assert p.engine.time(changed["start"]).hour == 16, changed
+                    trip = p.store.get("plan", changed["travel_id"])
+                    assert p.engine.time(trip["end"]) == p.engine.time(changed["start"]), trip
+                    result = await p.change_plan("issue14-plan", "cancel", stream_id="probe-chat", user_id="reader")
+                    assert p.store.get("plan", "issue14-plan")["status"] == "cancelled", result
+                    assert p.store.get("plan", trip["id"])["status"] == "cancelled"
+                    output.append({"model": model, "start": changed["start"], "trip_end": trip["end"], "ownership": "通过", "cancel": "通过"})
+                self.result = {"status": "通过", "case": case, "result": output}
+                return
             if case == "chat_statement":
                 stream = "3a2048f0aa247f60f912da52c3a8ece6"
                 result = await p.ctx.maisaka.reply.generate(stream,
