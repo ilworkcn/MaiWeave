@@ -1,6 +1,6 @@
 [project]
 name = "maiweave"
-version = "0.11.7"
+version = "0.11.8"
 description = "随着相处积累熟悉、信任与亲近，让麦麦有自己的生活，也让你参与其中：聊天改变日程，阅读与见闻带回对话，日记化作 QQ 空间随笔"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
