@@ -124,3 +124,13 @@ async def test_query_preserves_aggregate_when_no_matching_fact(monkeypatch, quer
     monkeypatch.setattr(memory, '_request', request)
     assert await memory.query(query, session) == aggregate
     assert len(calls) == (2 if session and query.strip() else 1)
+
+
+async def test_person_profile_uses_native_detail_endpoint(server):
+    url, requests = server
+    memory = NativeMemory(MemoryConfig(enabled=True, base_url=url, session_cookie="test-session"))
+    result = await memory.person_profile("qq:alice")
+    assert result["success"]
+    method, path, cookie, payload = requests[-1]
+    assert method == "GET" and path.endswith("/profiles/qq%3Aalice/evidence?limit=1")
+    assert cookie == "maibot_session=test-session" and payload is None

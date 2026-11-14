@@ -153,8 +153,8 @@ class ContextConfig(PluginConfigBase):
 
     group_mode: int = setting("群聊信息量", default=1, ge=1, le=3, description="1 精简：当前状态与相关话题；2 均衡：补充近期生活；3 丰富：带入更多细节。实际长度受字符上限约束。", json_schema_extra={"ui_type": "slider", "step": 1})
     private_mode: int = setting("私聊信息量", default=2, ge=1, le=3, description="1 精简：当前状态与相关话题；2 均衡：补充近期生活；3 丰富：带入更多细节。实际长度受字符上限约束。", json_schema_extra={"ui_type": "slider", "step": 1})
-    group_chars: int = setting("群聊注入上限（字符）", default=2400, ge=1200, le=20000, description="每次群聊的 Planner 判断或回复，最多自动带入多少字符的 MaiWeave 规则与生活信息（含标点、字段名）。只控制本插件自动注入部分；MaiBot 人设、聊天历史和工具查询结果另计。字符数与 Token 数不同。调低更省上下文，调高能带入更多细节；已有记录照常保存，需要时可通过工具查询。")
-    private_chars: int = setting("私聊注入上限（字符）", default=4800, ge=1200, le=20000, description="每次私聊的 Planner 判断或回复，最多自动带入多少字符的 MaiWeave 规则与生活信息（含标点、字段名）。只控制本插件自动注入部分；MaiBot 人设、聊天历史和工具查询结果另计。字符数与 Token 数不同。调低更省上下文，调高能带入更多细节；已有记录照常保存，需要时可通过工具查询。")
+    group_chars: int = setting("群聊注入上限（字符）", default=2400, ge=1200, le=20000, description="每次群聊的 Planner 判断或回复，最多自动带入多少字符的 MaiWeave 规则与生活信息（含标点、字段名）。分享判断的输入也使用此上限。只控制本插件自动注入与分享判断；MaiBot 人设、聊天历史和工具查询结果另计。字符数与 Token 数不同。调低更省上下文，调高能带入更多细节；已有记录照常保存，需要时可通过工具查询。")
+    private_chars: int = setting("私聊注入上限（字符）", default=4800, ge=1200, le=20000, description="每次私聊的 Planner 判断或回复，最多自动带入多少字符的 MaiWeave 规则与生活信息（含标点、字段名）。分享判断的输入也使用此上限。只控制本插件自动注入与分享判断；MaiBot 人设、聊天历史和工具查询结果另计。字符数与 Token 数不同。调低更省上下文，调高能带入更多细节；已有记录照常保存，需要时可通过工具查询。")
     schedule: bool = setting("带入日程", default=True, description="带入后续安排和日程变动；当前活动与睡眠状态始终保留。")
     people: bool = setting("带入人物与纪念日", default=True, description="带入当前聊天人物的近况、关系、生活备注和近期纪念日。")
     reading: bool = setting("带入阅读笔记", default=True, description="点名书籍时优先带入对应笔记，更多内容可通过书架工具查询。")

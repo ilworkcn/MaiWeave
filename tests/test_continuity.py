@@ -19,7 +19,7 @@ def continuity(x):
 
 
 def living(x):
-    return Living(x.engine, x.ctx, x.cfg, x.spatial, x.rhythm, x.world, continuity(x))
+    return Living(x.engine, x.ctx, x.cfg, x.spatial, x.rhythm, x.world, continuity(x), None)
 
 
 def result(**values):
@@ -62,6 +62,7 @@ async def test_share_waits_only_for_enabled_activity_results(life, outcomes_enab
     x = life
     x.ctx.maisaka = plugin.ctx.maisaka
     x.ctx.db = plugin.ctx.db
+    x.ctx.chat = plugin.ctx.chat
     async def reply(prompt, **kwargs):
         if prompt.startswith("判断这次生活经历"):
             return {"success": True, "response": json.dumps({"send": True, "reason": "这次有新内容"})}

@@ -146,6 +146,13 @@ class NativeMemory:
         params = urlencode({"person_keyword": query, "person_id": person_id, "limit": 50})
         return await asyncio.to_thread(self._request, "GET", "/profiles/search?" + params)
 
+    async def person_profile(self, person_id: str) -> dict:
+        """读取原生画像详情，由宿主处理画像更新与人工补充。"""
+        result = await asyncio.to_thread(self._request, "GET", "/profiles/" + quote(person_id, safe="") + "/evidence?limit=1")
+        if not result["success"]:
+            raise RuntimeError(result.get("error") or "原生人物画像读取失败")
+        return result
+
     async def edit_person(self, person_id: str, text: str) -> dict:
         return await asyncio.to_thread(self._request, "POST", "/profiles/override", {
             "person_id": person_id, "override_text": text, "updated_by": "ilworkcn.maiweave", "source": "webui"})

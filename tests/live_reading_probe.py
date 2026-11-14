@@ -37,7 +37,7 @@ class Probe(MaiBotPlugin):
         if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
             result = await self.active.planner_context(**kwargs)
             # 隔离数据的接话工具沿用生产实现，使用独立工具名定位测试实例。
-            if self.result.get("case") == "natural_delivery":
+            if self.result.get("case") in {"natural_delivery", "recipient_natural", "recipient_express"}:
                 for item in result.get("modified_kwargs", {}).get("items", []):
                     if item.get("meta", {}).get("item_id") == "maiweave-life-context":
                         for part in item.get("parts", []):
@@ -131,7 +131,7 @@ class Probe(MaiBotPlugin):
             p.now = lambda: now
             with p.store.db:
                 p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 20, "energy": 80})
-            if case == "natural_delivery":
+            if case in {"natural_delivery", "recipient_natural", "recipient_express"}:
                 import json
                 stream = "3a2048f0aa247f60f912da52c3a8ece6"
                 p.now = lambda: datetime.now(now.tzinfo)
@@ -140,7 +140,8 @@ class Probe(MaiBotPlugin):
                 self.deliveries = []
                 self.planner_outputs = []
                 p.config.proactive.enabled = True
-                p.config.proactive.mode = "自然交流"
+                p.config.proactive.mode = "主动表达" if case == "recipient_express" else "自然交流"
+                p.config.memory.enabled = case.startswith("recipient_")
                 p.config.proactive.session_ids = [stream]
                 p.config.proactive.start_hour = p.config.proactive.end_hour = 0
                 p.config.proactive.daily_limit = 4
@@ -156,16 +157,36 @@ class Probe(MaiBotPlugin):
                             if receipt and json.loads(receipt["tool_data"])["success"]:
                                 return receipt
                     raise AssertionError({"阶段": "等待真实回复", "模型输出": self.planner_outputs[start:]})
-                initial = await self.ctx.call_capability("internal_chat.send", text="我已经醒啦，现在也空下来了。你刚才拓印的梧桐叶帆布袋做好了吗？我特别想知道叶脉印得清不清楚，等晾好了一定主动告诉我呀，我在这儿等你的成品消息。")
+                seed = "我已经醒啦，现在也空下来了。你刚才拓印的梧桐叶帆布袋做好了吗？我特别想知道叶脉印得清不清楚，等晾好了一定主动告诉我呀，我在这儿等你的成品消息。"
+                if case.startswith("recipient_"):
+                    seed = ("我喜欢观鸟，尤其想看喜鹊搭窝。我刚空下来，你散步时见到喜鹊会先留意什么？遇到有意思的新发现记得告诉我。" if case == "recipient_natural" else "我喜欢观鸟，刚想起麻雀也会洗澡。你觉得看它们洗澡时最有意思的是什么？以后碰到这样的新鲜事也告诉我吧。")
+                initial = await self.ctx.call_capability("internal_chat.send", text=seed)
                 assert initial["message_id"]
                 await wait_reply(0)
                 await asyncio.sleep(3)
-                event = p.engine.record_experience(ExperienceInput(summary="刚才拓印的梧桐叶帆布袋已经晾干了，细叶脉清清楚楚，原本糊成一团的叶柄补成了小鸟，成品比试印时好看，终于可以告诉一直等着看成果的朋友了", source="simulated", evidence="实机测试生活场景", importance=9, occurred_at=p.now().isoformat()), stream, p.now())
+                native_interest = {}
+                topic = "刚才拓印的梧桐叶帆布袋已经晾干了，细叶脉清清楚楚，原本糊成一团的叶柄补成了小鸟，成品比试印时好看，终于可以告诉一直等着看成果的朋友了"
+                if case.startswith("recipient_"):
+                    from urllib.parse import urlencode
+                    person = await p.ctx.person.get_id(platform="internal", user_id="owner")
+                    self.result.update(stage="等待原生兴趣写回")
+                    for _ in range(60):
+                        facts = await asyncio.to_thread(p.memory._request, "GET", "/facts?" + urlencode({"scope_type": "person", "scope_id": person, "statuses": "active", "limit": 100}))
+                        native_interest = next((row for row in facts["items"] if "观鸟" in row["value_text"] and row.get("profile_section") == "stable_facts"), {})
+                        if native_interest:
+                            break
+                        await asyncio.sleep(2)
+                    assert native_interest, {"阶段": "原生兴趣写回", "事实": facts}
+                    topic = ("刚在楼下散步时发现一只喜鹊把细树枝叼到树杈上，试了两次才放稳，第一次近距离看到搭窝的过程，很想告诉喜欢观鸟的朋友" if case == "recipient_natural" else "刚在公园看见两只小麻雀轮流跳进浅水洼洗澡，先扑腾翅膀再跳到石头上抖水，一只洗完另一只才进去，第一次留意到这样的轮流洗澡")
+                event = p.engine.record_experience(ExperienceInput(summary=topic, source="simulated", evidence="实机测试生活场景", importance=9, occurred_at=p.now().isoformat()), stream, p.now())
+                recipient = await p.living.share_recipient(stream, topic)
+                if case.startswith("recipient_"):
+                    assert "观鸟" in recipient.get("原生人物画像", ""), recipient
                 assert p.living.share_summary(p.now())[0]["sent"] == 0
                 await p.living.share(p.now())
                 row, = p.store.all("share_receipt")
                 accepted_count = p.living.share_summary(p.now())[0]["sent"]
-                assert accepted_count == 0, row
+                assert accepted_count == (1 if case == "recipient_express" else 0), row
                 self.result.update(stage="等待主动发送", receipt=row)
                 for _ in range(120):
                     await asyncio.sleep(2)
@@ -189,6 +210,8 @@ class Probe(MaiBotPlugin):
                 start = len(self.planner_outputs)
                 self.result.update(stage="接续真实聊天", receipt=row)
                 answer = "哇，叶柄还能改成小鸟！这个补救太可爱了。你说叶脉现在清清楚楚，是不是晾干以后颜色比湿的时候淡一点？我下次也想试试这种帆布袋。"
+                if case.startswith("recipient_"):
+                    answer = "这就是我喜欢听的观鸟小事！你刚说的这个动作也太有意思了，它们后来又做什么了？我也想下次散步时留意看看。"
                 incoming = await self.ctx.call_capability("internal_chat.send", text=answer)
                 assert incoming["message_id"]
                 reply = await wait_reply(start)
@@ -213,7 +236,7 @@ class Probe(MaiBotPlugin):
                 self.result = {"status": "通过", "case": case, "result": {"receipt": row, "accepted_count": accepted_count,
                     "sent_count": p.living.share_summary(p.now())[0]["sent"], "cooldown": cooldown, "continuation": continuation,
                     "context_chars": len(context), "context_budget": p.config.context.private_chars,
-                    "reply_texts": texts, "reply_record": data, "deliveries": self.deliveries}}
+                    "reply_texts": texts, "native_interest": native_interest, "recipient": recipient, "mode": p.config.proactive.mode, "reply_record": data, "deliveries": self.deliveries}}
                 return
             if case == "business":
                 from datetime import date

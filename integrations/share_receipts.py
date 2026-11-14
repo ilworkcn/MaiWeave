@@ -61,15 +61,29 @@ class ShareReceipts:
         return [{"时间": item["timestamp"], "人物": item["user_nickname"],
                  "内容": item["processed_plain_text"][:500]} for item in reversed(history or [])]
 
-    async def decide(self, session, intent, now, config):
-        prompt = (
+    async def decide(self, session, intent, now, config, recipient=None):
+        recipient = recipient or {"场景": "私聊"}
+        guide = (
             "判断这次生活经历是否值得现在主动告诉对方，输出JSON：send（布尔值）、reason（简短中文原因）。"
-            "结合最近实际说过的话、对方回应和本次内容判断新意。不同经历ID也可能在说同一件事。"
-            "已经说过的煮面、吃饭等日常内容，只有相似过程且没有新进展时send=false；"
-            "对方尚未回应时给话题留出空间。有具体新发现、明显变化或对方关心的进展时可以发送。"
-            "重要度用于候选排序，是否发送仍根据实际内容判断。"
-            + intent + "\n最近聊天：" + json.dumps(await self.recent_chat(session), ensure_ascii=False)
+            "结合人物画像中的明确兴趣、关系和当前聊天判断话题是否适合这个对象。亲近的人可以分享日常小事；"
+            "普通朋友有共同兴趣或明确关心的进展也适合联系。兴趣未知时参考当前对话。"
+            "明确期待的后续优先于笼统兴趣；偶尔提起的话题按当次交流理解。画像中的近期互动、推测和稳定兴趣分别理解。"
+            "群聊按本群话题判断。有效亲密度沿用插件关系计算，0普通、1熟悉、2亲近、3亲密；本聊天互动描述当前聊天的积累。"
+            "关系手动设置作为用户偏好，原生画像提供人物资料。"
+            "结合实际分享与回应判断新意，相似的煮面、吃饭过程没有新进展时send=false。"
+            "对方尚未回应时留出空间；重要度用于候选排序。reason说明与本次对象有关的发送或等待缘由。"
         )
+        budget = config.context.group_chars if recipient["场景"] == "群聊" else config.context.private_chars
+        labels = ("\n本次分享：", "\n接收对象：", "\n相关记忆：", "\n最近聊天：")
+        available = budget - len(guide) - sum(map(len, labels))
+        # 四段资料共用现有场景预算，最近消息从新到旧排列。
+        sizes = (available * 2 // 5, available // 4, available * 3 // 20)
+        sizes = (*sizes, available - sum(sizes))
+        history = list(reversed(await self.recent_chat(session)))
+        person = {key: value for key, value in recipient.items() if key != "当前聊天相关记忆"}
+        values = (intent, json.dumps(person, ensure_ascii=False),
+                  json.dumps(recipient.get("当前聊天相关记忆", []), ensure_ascii=False), json.dumps(history, ensure_ascii=False))
+        prompt = guide + "".join(label + value[:size] for label, value, size in zip(labels, values, sizes))
         return await generate(self.ctx, self.store, config, "分享判断", prompt, ShareDecision)
 
     async def express(self, session, intent, row, now):

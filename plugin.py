@@ -166,7 +166,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         self.diary_publisher = DiaryPublisher(self.engine, self.ctx, self.config)
         self.memory = NativeMemory(self.config.memory)
         self.continuity = Continuity(self.engine, self.ctx, self.config)
-        self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity)
+        self.living = Living(self.engine, self.ctx, self.config, self.spatial, self.rhythm, self.world, self.continuity, self.memory)
         self.spatial.check_influence = self.living.check_influence
         self.presence = self.living.presence
         self.living.apply_schedule(self.now())

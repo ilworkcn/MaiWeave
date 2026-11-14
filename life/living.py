@@ -23,11 +23,12 @@ def in_hours(hour: int, start: int, end: int) -> bool:
 
 
 class Living:
-    def __init__(self, engine: LifeEngine, context, config: MaiWeaveConfig, spatial, rhythm, world, continuity):
+    def __init__(self, engine: LifeEngine, context, config: MaiWeaveConfig, spatial, rhythm, world, continuity, memory):
         self.engine = engine
         self.ctx = context
         self.config = config
         self.spatial, self.rhythm, self.world = spatial, rhythm, world
+        self.memory = memory
         self.continuity = continuity
         self.share_decisions = deque(maxlen=10)
         self.receipts = ShareReceipts(engine.store, context)
@@ -38,8 +39,8 @@ class Living:
         identity = self.engine.store.find("identity", f"{session}:{user}")
         return identity["person_id"] if identity else ""
 
-    def intimacy(self, session, user):
-        identity = self.person_key(session, user)
+    def intimacy(self, session, user, *, person_id=""):
+        identity = person_id or self.person_key(session, user)
         profiles = [p for p in self.engine.store.all("profile") if
                     (identity and p.get("person_id") == identity) or
                     ((not identity or not p.get("person_id")) and p["session_id"] == session and p["user_id"] == user)]
@@ -774,6 +775,33 @@ class Living:
                            "last": latest.get("delivery") or latest.get("reason") or "等待首次判断"})
         return result
 
+    async def share_recipient(self, session, topic):
+        """按接收聊天流读取人物画像和相关记忆，供本次分享判断使用。"""
+        streams = await self.ctx.chat.get_all_streams(platform="all_platforms")
+        stream = next((item for item in streams if item["stream_id"] == session), {})
+        group = bool(stream.get("group_id") or stream.get("is_group_session"))
+        result = {"场景": "群聊" if group else "私聊"}
+        user = stream.get("user_id", "")
+        if not group and user:
+            person = await self.ctx.person.get_id(platform=stream["platform"], user_id=user)
+            result["称呼"] = stream.get("user_nickname", "")
+            profiles = [row for row in self.engine.store.all("profile") if (person and row.get("person_id") == person)
+                        or ((not person or not row.get("person_id")) and row["session_id"] == session and row.get("user_id") == user)]
+            profile = next((row for row in profiles if row.get("intimacy_mode") == "manual"), profiles[0] if profiles else {})
+            result["关系设置"] = {key: profile[key] for key in ("intimacy_mode", "intimacy", "relationship") if key in profile}
+            relation = self.engine.relationship(session, user)
+            result["有效亲密度"] = self.intimacy(session, user, person_id=person)
+            result["本聊天互动"] = {key: relation[key] for key in ("familiarity", "trust", "closeness")}
+            if self.config.memory.enabled:
+                native = await self.memory.person_profile(person)
+                result["原生人物画像"] = native.get("profile_text") or "兴趣与关系资料尚未记录"
+        if self.config.memory.enabled:
+            recalled = await self.memory.query(topic[:200], session)
+            if not recalled.get("success", True):
+                raise RuntimeError(recalled.get("error") or "原生记忆检索失败")
+            result["当前聊天相关记忆"] = [hit.get("content", "")[:400] for hit in recalled.get("hits", [])[:2]]
+        return result
+
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine
         self.continuity.expire_threads(now)
@@ -912,7 +940,13 @@ class Living:
                 row.update(greeting_key=greeting["key"], greeting_kind=greeting["kind"],
                            greeting_until=greeting["until"], score="作息问候，按近期互动与关系判断")
             if not notices:
-                decision = await self.receipts.decide(session, intent, now, self.config)
+                try:
+                    recipient = await self.share_recipient(session, event["summary"])
+                except (OSError, RuntimeError, ValueError) as error:
+                    record("读取失败", f"分享对象资料读取失败：{error}", session, score)
+                    self.ctx.logger.exception("主动分享对象资料读取失败：%s", session)
+                    continue
+                decision = await self.receipts.decide(session, intent, now, self.config, recipient)
                 row["share_reason"] = decision.reason
                 if not decision.send:
                     record("稍后再聊", decision.reason, session, score)
