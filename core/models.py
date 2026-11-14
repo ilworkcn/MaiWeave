@@ -199,4 +199,5 @@ class GoalOutline(BaseModel):
 class ShareDecision(BaseModel):
     """结合已发送内容判断这次经历是否值得主动提起。"""
     send: bool
+    candidate: int = Field(default=1, ge=1, le=3, description="所选候选的序号，单条候选为1")
     reason: str = Field(min_length=1, max_length=300)

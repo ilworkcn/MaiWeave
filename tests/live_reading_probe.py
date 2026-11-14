@@ -37,7 +37,7 @@ class Probe(MaiBotPlugin):
         if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
             result = await self.active.planner_context(**kwargs)
             # 隔离数据的接话工具沿用生产实现，使用独立工具名定位测试实例。
-            if self.result.get("case") in {"natural_delivery", "recipient_natural", "recipient_express"}:
+            if self.result.get("case") in {"natural_delivery", "recipient_natural", "recipient_express", "choices_natural", "choices_express"}:
                 for item in result.get("modified_kwargs", {}).get("items", []):
                     if item.get("meta", {}).get("item_id") == "maiweave-life-context":
                         for part in item.get("parts", []):
@@ -131,7 +131,7 @@ class Probe(MaiBotPlugin):
             p.now = lambda: now
             with p.store.db:
                 p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 20, "energy": 80})
-            if case in {"natural_delivery", "recipient_natural", "recipient_express"}:
+            if case in {"natural_delivery", "recipient_natural", "recipient_express", "choices_natural", "choices_express"}:
                 import json
                 stream = "3a2048f0aa247f60f912da52c3a8ece6"
                 p.now = lambda: datetime.now(now.tzinfo)
@@ -140,8 +140,8 @@ class Probe(MaiBotPlugin):
                 self.deliveries = []
                 self.planner_outputs = []
                 p.config.proactive.enabled = True
-                p.config.proactive.mode = "主动表达" if case == "recipient_express" else "自然交流"
-                p.config.memory.enabled = case.startswith("recipient_")
+                p.config.proactive.mode = "主动表达" if case.endswith("_express") else "自然交流"
+                p.config.memory.enabled = case.startswith(("recipient_", "choices_"))
                 p.config.proactive.session_ids = [stream]
                 p.config.proactive.start_hour = p.config.proactive.end_hour = 0
                 p.config.proactive.daily_limit = 4
@@ -159,7 +159,17 @@ class Probe(MaiBotPlugin):
                     raise AssertionError({"阶段": "等待真实回复", "模型输出": self.planner_outputs[start:]})
                 seed = "我已经醒啦，现在也空下来了。你刚才拓印的梧桐叶帆布袋做好了吗？我特别想知道叶脉印得清不清楚，等晾好了一定主动告诉我呀，我在这儿等你的成品消息。"
                 if case.startswith("recipient_"):
-                    seed = ("我喜欢观鸟，下午想去河边看看白鹭。你觉得应该留意它们什么动作？你今天遇到新的白鹭见闻就告诉我，我很想听。" if case == "recipient_natural" else "我喜欢观鸟，最近对翠鸟突然扎进水里的动作很好奇。你观察到过什么细节？碰到新的翠鸟见闻记得告诉我。")
+                    seed = ("我喜欢观鸟，这次想留意白鹭落地时翅膀和脚怎么配合。你如果观察到落地的细节就主动告诉我，我想对照着看。" if case == "recipient_natural" else "我喜欢观鸟，最近对翠鸟突然扎进水里的动作很好奇。你观察到过什么细节？碰到新的翠鸟见闻记得告诉我。")
+                if case.startswith("choices_"):
+                    card_title = "白鹭涉水观察卡" if case == "choices_natural" else "翠鸟梳羽观察卡"
+                    card_lines = (["下水前会不会先探一下水深？", "迈步时脚趾有没有张开？", "停下来时身体朝向哪里？"]
+                                  if case == "choices_natural" else ["梳理前会不会先抖动羽毛？", "先梳翅膀还是胸前的羽毛？", "梳理结束后有没有伸展翅膀？"])
+                    seed = (f"我现在醒着，也有空聊。之后生活记录里如果有《{card_title}》的新进展，记得主动告诉我。"
+                            "现在卡片还没有做好，先记住我想看成品就好。")
+                    person = await p.ctx.person.get_id(platform="internal", user_id="owner")
+                    profile = p.anniversaries.save_profile("实机选题接话测试", stream, "owner", person_id=person)
+                    with p.store.db:
+                        p.store.put("profile", {**profile,"intimacy_mode":"manual","intimacy":2})
                 initial = await self.ctx.call_capability("internal_chat.send", text=seed)
                 assert initial["message_id"]
                 await wait_reply(0)
@@ -177,16 +187,32 @@ class Probe(MaiBotPlugin):
                             break
                         await asyncio.sleep(2)
                     assert native_interest, {"阶段": "原生兴趣写回", "事实": facts}
-                    topic = ("刚在河边看到一只白鹭先用脚轻轻搅动浅水，再歪头盯着水面，等了一会儿突然啄起一条小鱼，第一次注意到它捕鱼前会先搅水" if case == "recipient_natural" else "刚在河边看见翠鸟从低枝上扎进水里，回来时嘴里叼着小鱼，它先把鱼在树枝上拍了两下，再调转鱼头吞下去，第一次看到它捕到鱼之后的细节")
-                event = p.engine.record_experience(ExperienceInput(summary=topic, source="simulated", evidence="实机测试生活场景", importance=9, occurred_at=p.now().isoformat()), stream, p.now())
+                    topic = ("刚在河岸看到白鹭落到一块窄石头上，落脚前先垂下双腿、张开脚趾，两脚碰到石面后翅膀还撑着稳了一下，站稳才慢慢收起；这次留意的是落地动作" if case == "recipient_natural" else "刚在河边看见翠鸟从低枝上扎进水里，回来时嘴里叼着小鱼，它先把鱼在树枝上拍了两下，再调转鱼头吞下去，第一次看到它捕到鱼之后的细节")
+                details = {}
+                if case.startswith("choices_"):
+                    card = folder / (card_title + ".txt")
+                    card.write_text("\n".join(card_lines), encoding="utf-8")
+                    assert card.read_text("utf-8").splitlines() == card_lines
+                    topic = f"整理好了《{card_title}》，把三个观察问题排成小卡片，第二条是“{card_lines[1]}”"
+                    details = {"卡片内容":card.read_text("utf-8"), "感受":"三个问题摆在一起，之后对照着看更清楚了"}
+                    for title, score in (("创建了本轮核验目录",7),("把本轮文件清单整理到记录里",5)):
+                        p.engine.record_experience(ExperienceInput(summary=title, source="observed", evidence="本次实际文件操作",
+                            importance=score, occurred_at=p.now().isoformat()), stream, p.now())
+                event = p.engine.record_experience(ExperienceInput(summary=topic, details=details,
+                    source="observed" if case.startswith("choices_") else "simulated",
+                    evidence="本次实际写入并读回观察卡文件" if case.startswith("choices_") else "实机测试生活场景",
+                    importance=3 if case.startswith("choices_") else 9, occurred_at=p.now().isoformat()), stream, p.now())
                 recipient = await p.living.share_recipient(stream, topic)
                 if case.startswith("recipient_"):
                     assert "观鸟" in recipient.get("原生人物画像", ""), recipient
+                if case.startswith("choices_"):
+                    candidates = p.living.share_candidates(p.store.all("experience"), stream, p.now(), recipient)
+                    assert len(candidates) == 3 and candidates[2]["id"] == event["id"]
                 assert p.living.share_summary(p.now())[0]["sent"] == 0
                 await p.living.share(p.now())
                 row, = p.store.all("share_receipt")
                 accepted_count = p.living.share_summary(p.now())[0]["sent"]
-                assert accepted_count == (1 if case == "recipient_express" else 0), row
+                assert accepted_count == (1 if case.endswith("_express") else 0), row
                 self.result.update(stage="等待主动发送", receipt=row)
                 for _ in range(120):
                     await asyncio.sleep(2)
@@ -196,6 +222,11 @@ class Probe(MaiBotPlugin):
                         break
                 assert row["outcome"] == "实际已发送", {"receipt": row, "outputs": self.planner_outputs}
                 assert row.get("sent_text") and row.get("sent_at"), row
+                if case.startswith("choices_"):
+                    assert row["experience_id"] == event["id"], row
+                    assert card_title in row["sent_text"], row
+                    if case.endswith("_express"):
+                        assert p.store.get("sharing", stream)["experience_ids"] == [event["id"]]
                 p.living.settle_shares()
                 for _ in range(3):
                     await p.living.receipts.refresh(p.now())
@@ -204,7 +235,7 @@ class Probe(MaiBotPlugin):
                 await p.living.share(p.now())
                 cooldown = dict(p.living.share_decisions[0])
                 assert "下次可请求时间" in cooldown["reason"], cooldown
-                context = p.context_text(stream, text="帆布袋上的叶脉")
+                context = p.context_text(stream, text=card_title if case.startswith("choices_") else "刚才的观鸟见闻" if case.startswith("recipient_") else "帆布袋上的叶脉")
                 assert row["id"] in context and "shared_topics" in context
                 assert len(context) <= p.config.context.private_chars
                 start = len(self.planner_outputs)
@@ -212,6 +243,8 @@ class Probe(MaiBotPlugin):
                 answer = "哇，叶柄还能改成小鸟！这个补救太可爱了。你说叶脉现在清清楚楚，是不是晾干以后颜色比湿的时候淡一点？我下次也想试试这种帆布袋。"
                 if case.startswith("recipient_"):
                     answer = "这就是我喜欢听的观鸟小事！你刚说的这个动作也太有意思了，它们后来又做什么了？我也想下次散步时留意看看。"
+                if case.startswith("choices_"):
+                    answer = f"这张《{card_title}》正好是我想要的，第二条问题是什么来着？我想接着用这张卡片。"
                 incoming = await self.ctx.call_capability("internal_chat.send", text=answer)
                 assert incoming["message_id"]
                 reply = await wait_reply(start)
@@ -233,6 +266,8 @@ class Probe(MaiBotPlugin):
                 for message_id in ids:
                     message = await p.ctx.db.get("Messages", filters={"session_id": stream, "message_id": message_id}, single_result=True)
                     texts.append(message["processed_plain_text"])
+                if case.startswith("choices_"):
+                    assert card_lines[1][:4] in "".join(texts), {"expected":card_lines[1],"reply":texts}
                 self.result = {"status": "通过", "case": case, "result": {"receipt": row, "accepted_count": accepted_count,
                     "sent_count": p.living.share_summary(p.now())[0]["sent"], "cooldown": cooldown, "continuation": continuation,
                     "context_chars": len(context), "context_budget": p.config.context.private_chars,
@@ -343,6 +378,32 @@ class Probe(MaiBotPlugin):
                 checks.append("cancel_trip_stops_movement")
                 self.result = {"status":"通过", "case":case, "result":{"checks":checks}}
                 return
+            if case == "relationship_choices":
+                p.config.memory.enabled = True
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                now = datetime.now(now.tzinfo)
+                topic = "整理观鸟笔记时，把白鹭落地的翼脚配合单独记在页边，觉得下次查资料更有方向了"
+                audience = await p.living.share_recipient(stream, "观鸟 白鹭")
+                assert "观鸟" in audience.get("原生人物画像", "")
+                common = p.engine.record_experience(ExperienceInput(summary="把桌边的两根充电线理顺了", details={"感受":"桌面清爽了"}, source="simulated",
+                    importance=5, evidence="实机隔离生活场景", occurred_at=now.isoformat()), stream, now)
+                daily = p.engine.record_experience(ExperienceInput(summary=topic, details={"感受":"整理自己的笔记留下了一点小满足"}, source="simulated",
+                    importance=3, evidence="实机隔离生活场景", occurred_at=now.isoformat()), stream, now)
+                checks = []
+                for level in (0, 2):
+                    recipient = {**audience, "有效亲密度":level, "关系设置":{"intimacy_mode":"manual", "intimacy":level}}
+                    candidates = p.living.share_candidates([common, daily], stream, now, recipient)
+                    assert (daily in candidates) == (level == 2)
+                    for mode in ("自然交流", "主动表达"):
+                        p.config.proactive.mode = mode
+                        choice = await p.living.receipts.decide(stream, [row["summary"]+"。这是角色生活中的整理感受。" for row in candidates], now, p.config, recipient)
+                        assert not choice.send or choice.candidate <= len(candidates)
+                        checks.append({"mode":mode,"level":level,"candidates":[row["summary"] for row in candidates],
+                            "decision":choice.model_dump(),"selected":candidates[choice.candidate-1]["summary"] if choice.send else "等待"})
+                assert not p.store.all("share_receipt")
+                self.result = {"status":"通过","case":case,"result":{"checks":checks,"profile_chars":len(audience["原生人物画像"]),
+                    "memory_hits":len(audience.get("当前聊天相关记忆",[])),"model_calls":p.store.count("model_usage")}}
+                return
             if case == "weather_network":
                 import socket
                 import ssl
@@ -443,8 +504,10 @@ class Probe(MaiBotPlugin):
                 now = datetime.now(now.tzinfo).replace(hour=14)
                 await p.identify_person(stream, "owner", "internal")
                 person = p.living.person_key(stream, "owner")
-                p.anniversaries.save_profile("测试接收人", stream, "owner", person_id=person)
-                p.engine.record_experience(ExperienceInput(summary="实机交流判定核验", importance=6, source="simulated", evidence="测试数据", occurred_at=now.isoformat()), stream, now)
+                profile = p.anniversaries.save_profile("测试接收人", stream, "owner", person_id=person)
+                with p.store.db:
+                    p.store.put("profile", {**profile, "intimacy_mode": "manual", "intimacy": 2})
+                p.engine.record_experience(ExperienceInput(summary="实机交流判定核验", details={"感受": "想分享今天的小进展"}, importance=3, source="simulated", evidence="测试数据", occurred_at=now.isoformat()), stream, now)
                 checks = []
                 for mode in ("自然交流", "主动表达"):
                     for gate in ("关闭", "时段", "额度", "冷却", "睡眠", "学习", "忙碌人物", "低精力", "告别"):

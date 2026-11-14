@@ -82,7 +82,7 @@ async def test_both_modes_use_recipient(plugin, monkeypatch, mode):
 async def test_large_recipient_respects_budget(plugin, budget, kind):
     setattr(plugin.config.context, "group_chars" if kind == "群聊" else "private_chars", budget)
     plugin.ctx.db.get.return_value = [{"timestamp": plugin.now().isoformat(), "user_nickname": "甲", "processed_plain_text": "近期聊天" * 200} for _ in range(10)]
-    await plugin.living.receipts.decide("chat-a", "生活经历" * 2000, plugin.now(), plugin.config, {"场景": kind, "原生人物画像": "人物兴趣" * 3000, "当前聊天相关记忆": ["共同话题" * 1000]})
+    await plugin.living.receipts.decide("chat-a", ["生活经历" * 2000], plugin.now(), plugin.config, {"场景": kind, "原生人物画像": "人物兴趣" * 3000, "当前聊天相关记忆": ["共同话题" * 1000]})
     prompt = plugin.ctx.llm.generate.await_args.args[0]
     assert len(prompt) <= budget
     assert "生活经历" in prompt and "人物兴趣" in prompt and "近期聊天" in prompt and "共同话题" in prompt
@@ -157,6 +157,6 @@ async def test_memory_recovery_keeps_unsent_experience(plugin, monkeypatch, erro
 async def test_retry_keeps_share_prompt_inside_budget(plugin):
     plugin.config.context.private_chars = 1200
     plugin.ctx.llm.generate.side_effect = [{"success": True, "response": "格式有误"}, {"success": True, "response": '{"send":true,"reason":"新发现"}'}]
-    await plugin.living.receipts.decide("chat-a", "分享经历" * 2000, plugin.now(), plugin.config, {"场景":"私聊", "原生人物画像":"喜欢观鸟" * 2000, "当前聊天相关记忆":["观鸟" * 1000]})
+    await plugin.living.receipts.decide("chat-a", ["分享经历" * 2000], plugin.now(), plugin.config, {"场景":"私聊", "原生人物画像":"喜欢观鸟" * 2000, "当前聊天相关记忆":["观鸟" * 1000]})
     assert len(plugin.ctx.llm.generate.await_args_list) == 2
     assert all(len(call.args[0]) <= 1200 for call in plugin.ctx.llm.generate.await_args_list)

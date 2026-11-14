@@ -697,9 +697,16 @@ class Living:
             "leisure": "休闲", "travel": "出行", "rest": "休息", "social": "社交", "diary": "日记",
         }[plan["kind"]]
 
-    def select_share(self, available, session, now):
+    def select_share(self, available, session, now, *, close=False):
         """重要经历优先，日常话题参考本聊天流最近一天实际分享的类别。"""
-        eligible = [e for e in available if e["importance"] >= self.config.proactive.share_threshold]
+        eligible = []
+        for event in available:
+            plan = self.engine.store.find("plan", event.get("plan_id", ""))
+            everyday = (close and event["importance"] >= 3 and bool(event["details"])
+                        and (not plan or plan["kind"] not in {"travel", "sleep", "diary"})
+                        and (not plan or event["summary"] != "完成了" + plan.get("title", "")))
+            if event["importance"] >= self.config.proactive.share_threshold or everyday:
+                eligible.append(event)
         counts = {}
         for row in self.engine.store.all("share_receipt"):
             activity = row.get("share_activity")
@@ -717,8 +724,20 @@ class Living:
             return event, f"优先选择近24小时向本聊天流较少分享且有接话的活动：{activity}，重复权重{counts.get(activity, 0)}；尚待回应的话题留出更多间隔"
         return None, ""
 
+    def share_candidates(self, available, session, now, recipient):
+        """沿用重要度和话题轮换，亲近私聊补充有细节的日常经历。"""
+        close = recipient["场景"] == "私聊" and recipient.get("有效亲密度", 0) >= 2
+        pool, candidates = list(available), []
+        for _ in range(3):
+            event, _ = self.select_share(pool, session, now, close=close)
+            if event is None:
+                break
+            candidates.append(event)
+            pool.remove(event)
+        return candidates
+
     def share_ready(self, record_id, session, now):
-        rows = [r for r in self.engine.store.all("share_receipt") if r["session"] == session and r.get("record_id") == record_id]
+        rows = [r for r in self.engine.store.all("share_receipt") if r["session"] == session and (r.get("record_id") == record_id or record_id in r.get("candidate_ids", []))]
         if any(r.get("sent_at") or r["outcome"] in {"MaiBot 已受理", "生成中"} for r in rows):
             return False
         return not rows or now >= max(self.engine.time(r.get("finished_at") or r["created"]) for r in rows) + timedelta(minutes=self.config.proactive.retry_minutes)
@@ -795,12 +814,15 @@ class Living:
             if self.config.memory.enabled:
                 native = await self.memory.person_profile(person)
                 result["原生人物画像"] = native.get("profile_text") or "兴趣与关系资料尚未记录"
-        if self.config.memory.enabled:
-            recalled = await self.memory.query(topic[:200], session)
-            if not recalled.get("success", True):
-                raise RuntimeError(recalled.get("error") or "原生记忆检索失败")
-            result["当前聊天相关记忆"] = [hit.get("content", "")[:400] for hit in recalled.get("hits", [])[:2]]
+        if self.config.memory.enabled and topic:
+            result["当前聊天相关记忆"] = await self.share_memories(session, topic)
         return result
+
+    async def share_memories(self, session, topic):
+        recalled = await self.memory.query(topic[:200], session)
+        if not recalled.get("success", True):
+            raise RuntimeError(recalled.get("error") or "原生记忆检索失败")
+        return [hit.get("content", "")[:400] for hit in recalled.get("hits", [])[:2]]
 
     async def share(self, now: datetime):
         config, engine = self.config.proactive, self.engine
@@ -901,25 +923,47 @@ class Living:
                 notices.append(("greeting:" + greeting["key"], greeting["intent"], None))
             else:
                 greeting = None
+            candidates, recipient = [], None
+            if ordinary_hours and not notices and available:
+                try:
+                    recipient = await self.share_recipient(session, "")
+                    candidates = self.share_candidates(available, session, now, recipient)
+                    if candidates and self.config.memory.enabled:
+                        recipient["当前聊天相关记忆"] = await self.share_memories(session, "；".join(item["summary"][:60] for item in candidates))
+                except (OSError, RuntimeError, ValueError) as error:
+                    record("读取失败", f"分享对象资料读取失败：{error}", session, score)
+                    self.ctx.logger.exception("主动分享对象资料读取失败：%s", session)
+                    continue
+                event = candidates[0] if candidates else None
             if not notices and not event:
                 reason = f"精力较低，先歇一会儿，{len(resting_events)} 条日常分享稍后再聊" if resting_events else f"没有待发提醒。{screening}"
                 if best:
                     reason += "，剩余经历的最高分低于门槛"
                 record("跳过", reason, session, score)
                 continue
-            intent = notices[0][1] if notices else (
-                "分享本次选定的一件生活经历。"
-                "从角色自己的视角分享这次经历，给对方自由接话的空间。"
-                f"值得分享的原因={event['score_reason']}；经历来源={event['source']}；内容={event['summary']}；细节={json.dumps(event['details'], ensure_ascii=False)}"
-            )
-            intent += (f"当前时间={now.isoformat()}；当前活动={current['title'] if current else '空闲'}。"
-                       + (f"本次经历发生时间={event['occurred_at']}。" if not notices else "")
-                       + "已结束的经历按过去的事情表达；此刻在做什么以当前活动为准。一次围绕选定的一件事说。")
-            if tired:
-                intent += "现在有些累，表达简短自然，重要的事照常说清楚。"
-            intent += (f"\n接收人物的有效近况：{json.dumps(presence, ensure_ascii=False)}。"
-                       f"最近实际分享与回应：{json.dumps(self.receipts.context(session, now), ensure_ascii=False)}。"
-                       "已经接话的主题顺着回应继续；尚待回应的主题留出空间，有新进展时再自然提起。")
+            def sharing_intent(item):
+                text = ("分享本次选定的一件生活经历。从角色自己的视角分享，给对方自由接话的空间。"
+                        f"值得分享的原因={item['score_reason']}；经历来源={item['source']}；内容={item['summary']}；"
+                        f"本次经历发生时间={item['occurred_at']}；细节={json.dumps(item['details'], ensure_ascii=False)}")
+                return text + context
+
+            context = (f"当前时间={now.isoformat()}；当前活动={current['title'] if current else '空闲'}。"
+                       "已结束的经历按过去的事情表达；此刻在做什么以当前活动为准。一次围绕选定的一件事说。"
+                       + ("现在有些累，表达简短自然。" if tired else "")
+                       + f"接收人物近况：{json.dumps(presence, ensure_ascii=False)}；"
+                       + f"最近实际分享与回应：{json.dumps(self.receipts.context(session, now), ensure_ascii=False)}。")
+            decision = None
+            if notices:
+                intent = notices[0][1] + context
+            else:
+                choices = [f"本次经历发生时间={item['occurred_at']}；来源={item['source']}；内容={item['summary']}；"
+                           f"细节={json.dumps(item['details'], ensure_ascii=False)}" for item in candidates]
+                decision = await self.receipts.decide(session, choices, now, self.config, recipient)
+                event = candidates[decision.candidate - 1] if decision.send else candidates[0]
+                intent = sharing_intent(event)
+                score = f"《{event['summary'][:48]}》{event['importance']}/10 分，门槛 {threshold} 分。{event['score_reason']}"
+                selection_reason = (f"从{len(candidates)}条候选中选择{self.share_activity(event)}。{decision.reason}"
+                                    if decision.send else f"本轮{len(candidates)}条候选暂缓分享。{decision.reason}")
             record_id = notices[0][0] if notices else event["id"]
             topic = "经历分享"
             if notices:
@@ -940,19 +984,14 @@ class Living:
                 row.update(greeting_key=greeting["key"], greeting_kind=greeting["kind"],
                            greeting_until=greeting["until"], score="作息问候，按近期互动与关系判断")
             if not notices:
-                try:
-                    recipient = await self.share_recipient(session, event["summary"])
-                except (OSError, RuntimeError, ValueError) as error:
-                    record("读取失败", f"分享对象资料读取失败：{error}", session, score)
-                    self.ctx.logger.exception("主动分享对象资料读取失败：%s", session)
-                    continue
-                decision = await self.receipts.decide(session, intent, now, self.config, recipient)
                 row["share_reason"] = decision.reason
                 if not decision.send:
+                    row["topic"] = "；".join(item["summary"][:100] for item in candidates)
                     record("稍后再聊", decision.reason, session, score)
                     with engine.store.db:
                         engine.store.put("share_receipt", {**row, "id": "deferred:" + uuid4().hex,
                             "created": now.isoformat(), "finished_at": now.isoformat(), "calls": {},
+                            "candidate_ids": [item["id"] for item in candidates],
                             "outcome": "稍后再聊", "delivery": decision.reason})
                     continue
             if config.mode == "主动表达":
