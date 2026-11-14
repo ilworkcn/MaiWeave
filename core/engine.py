@@ -108,11 +108,13 @@ class LifeEngine:
                 if start < self.time(plan["end"]) and end > self.time(plan["start"]):
                     raise ValueError("这段时间已有安排，请选择其他时间或先调整原安排")
 
-    def create_plan(self, value: PlanInput, session: str, now: datetime, autonomous: bool = False) -> dict:
+    def validate_plan(self, value: PlanInput, session: str, now: datetime):
+        """创建与让出时间前共用的日程条件检查。"""
         start, end = self.time(value.start), self.time(value.end)
         if start < now - timedelta(minutes=1):
             raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
-        self._check_interval(start, end)
+        if end <= start:
+            raise ValueError("结束时间必须晚于开始时间")
         if value.research_query and (value.book_id or not value.simulation or value.participants or value.kind not in {"study", "leisure"}):
             raise ValueError("联网了解使用角色独自进行的学习或休闲日程")
         if value.book_id:
@@ -133,6 +135,11 @@ class LifeEngine:
                     raise ValueError("关联分阶段目标时，请填写当前未完成阶段的 goal_step_id")
         if value.continuation_id:
             self.owned("activity_memory", value.continuation_id, session)
+
+    def create_plan(self, value: PlanInput, session: str, now: datetime, autonomous: bool = False) -> dict:
+        self.validate_plan(value, session, now)
+        start, end = self.time(value.start), self.time(value.end)
+        self._check_interval(start, end)
         plan = {**value.model_dump(), "id": uid(), "session_id": session,
                 "start": start.isoformat(), "end": end.isoformat(), "status": "scheduled",
                 "autonomous": autonomous, "flexible": value.flexible or autonomous,
@@ -183,8 +190,9 @@ class LifeEngine:
             if action == "cancel" and plan.get("travel_id"):
                 travel = self.store.get("plan", plan["travel_id"])
                 if travel["status"] in ACTIVE | {"paused"}:
-                    travel["status"] = "cancelled"
-                    self.store.put("plan", travel)
+                    self.transition(travel["id"], "cancel", travel["session_id"], now)
+            if plan["kind"] == "travel" and previous == "active" and action in {"cancel", "pause"}:
+                self.store.put("state", {**self.state(), "journey": None})
         return plan
 
     def plans(self, session: str, start: str = "", end: str = "") -> list[dict]:

@@ -49,7 +49,7 @@ class ChatSchedule:
         projected = [{**r, **(updates[r["id"]].model_dump(exclude_unset=True) if r["id"] in updates else {})}
                      for r in p.store.all("plan")]
         targets += [r for r in projected if p.engine.visible(r, session)
-                    and r["kind"] in value.blocked_kinds and r["status"] in ACTIVE
+                    and r["kind"] in value.blocked_kinds and r["status"] in ACTIVE | {"paused", "blocked"}
                     and p.engine.time(r["start"]) < end and p.engine.time(r["end"]) > start]
         if value.source == "reported":
             p.living.check_influence(session, user, targets + updating)
@@ -63,7 +63,7 @@ class ChatSchedule:
             for change in value.plan_updates:
                 p.spatial.change(change.plan_id, change.patch, session, now)
             for target in {r["id"]: r for r in targets}.values():
-                if target["status"] in ACTIVE:
+                if target["status"] in ACTIVE | {"paused", "blocked"}:
                     p.spatial.transition(target["id"], "cancel", session, now)
             p.store.put("chat_arrangement", record)
         return record
@@ -74,7 +74,7 @@ class ChatSchedule:
         for row in self.active(now):
             start, end = p.engine.time(row["starts_at"]), p.engine.time(row["expires_at"])
             for plan in p.store.all("plan"):
-                if (plan["status"] in ACTIVE and plan["kind"] in row["blocked_kinds"]
+                if (plan["status"] in ACTIVE | {"paused", "blocked"} and plan["kind"] in row["blocked_kinds"]
                         and p.engine.visible(plan, row["session_id"])
                         and p.engine.time(plan["start"]) < end and p.engine.time(plan["end"]) > start):
                     if row["source"] == "reported":
@@ -112,7 +112,7 @@ class ChatSchedule:
             digest = hashlib.sha256(json.dumps(messages, ensure_ascii=False).encode()).hexdigest()
             if messages and digest != row["checked"]:
                 plans = [{k: r[k] for k in ("id", "title", "kind", "start", "end")}
-                         for r in p.engine.plans(session) if r["status"] in ACTIVE and not r.get("activity_id")][:20]
+                         for r in p.engine.plans(session) if r["status"] in ACTIVE | {"paused", "blocked"} and not r.get("activity_id")][:20]
                 prompt = (
                     "提取聊天中已经确定、会影响角色本人日程的临时安排，输出JSON对象arrangements数组。"
                     "结合双方发言判断事情属于谁；用户自己的调休、请假记录在用户近况，arrangements填空数组。"

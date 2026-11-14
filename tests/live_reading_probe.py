@@ -275,6 +275,74 @@ class Probe(MaiBotPlugin):
                 self.result = {"status": "通过", "case": case, "result": {"calendar": "公历与农历通过", "habits": "多日期活动学习通过",
                     "readonly_api": "跨插件调用与只读检查通过", "review": checked["status"], "operation": "完成", "retention": "预览清理及页面读回通过"}}
                 return
+            if case == "schedule_edges":
+                from maiweave_probe_target.core.models import RoutineInput, ChatArrangement
+                now = now.replace(hour=9, minute=40)
+                p.now = lambda: now
+                p.config.rhythm.horizon_days = 1
+                checks = []
+                for action in ("cancel", "skip", "edit", "rename", "leave"):
+                    with p.store.db:
+                        for category in ("plan", "routine", "occurrence", "schedule_issue", "routine_issue", "chat_arrangement"):
+                            for record in p.store.all(category):
+                                p.store.delete(category, record["id"])
+                        p.store.put("state", {**p.engine.state(), "location":"住处", "updated_at":now.isoformat()})
+                    p.spatial.save_route("street", "park", 12, "步行")
+                    value = RoutineInput(title="公园活动", frequency="daily", anchor_date=now.date().isoformat(),
+                        start_time="10:00", duration_minutes=30, location="公园", kind="work" if action == "leave" else "leisure")
+                    rule = p.rhythm.save(value, "internal-audit", now)
+                    p.rhythm.materialize(now)
+                    plan = next(x for x in p.store.all("plan") if x.get("routine_id") == rule["id"])
+                    p.spatial.save_route("street", "park", 40, "步行")
+                    p.spatial.reconcile(now)
+                    assert p.store.get("plan", plan["id"])["status"] == "blocked"
+                    if action == "cancel":
+                        await p.ui_routine_action(rule["id"], "cancel")
+                    elif action == "skip":
+                        await p.ui_routine_action(rule["id"], "skip", now.date().isoformat())
+                    elif action == "edit":
+                        await p.ui_save_routine(title=value.title, anchor_date=value.anchor_date, start_time="11:00",
+                            duration_minutes=30, frequency="daily", location="公园", rule_id=rule["id"])
+                    elif action == "rename":
+                        await p.ui_save_place("湖畔公园", True, "核验地点改名", "park")
+                    else:
+                        p.chat_schedule.save(ChatArrangement(title="上午调休", start=now.isoformat(),
+                            end=now.replace(hour=12,minute=0).isoformat(), evidence="今天上午调休", source="observed",
+                            speaker_id="bot", blocked_kinds=["work"]), "internal-audit", "owner", now)
+                    p.spatial.save_route("street", "park", 12, "步行")
+                    p.spatial.reconcile(now)
+                    result = p.store.get("plan", plan["id"])
+                    assert result["status"] == ("scheduled" if action == "rename" else "cancelled"), result
+                    if action == "rename":
+                        assert result["location"] == "湖畔公园"
+                        p.spatial.save_place("公园", True, "核验地点", "park")
+                    checks.append(action)
+                with p.store.db:
+                    for row in p.store.all("plan"):
+                        p.store.delete("plan", row["id"])
+                    p.store.put("book", {"id":"archived", "archived":True})
+                old = p.spatial.schedule(PlanInput(title="整理书桌", start=now.isoformat(),
+                    end=(now+timedelta(minutes=30)).isoformat()), "", now, autonomous=True)
+                try:
+                    p.spatial.schedule(PlanInput(title="读书", book_id="archived", start=now.isoformat(),
+                        end=(now+timedelta(minutes=15)).isoformat()), "", now)
+                except ValueError as error:
+                    assert "归档" in str(error)
+                else:
+                    raise AssertionError("已归档书籍仍可创建阅读")
+                assert p.store.get("plan", old["id"]) == old
+                checks.append("failed_creation_keeps_schedule")
+                p.spatial.transition(old["id"], "cancel", "", now)
+                trip = p.spatial.move("公园", "", now)
+                at = now + timedelta(minutes=5)
+                p.engine.advance(at)
+                assert p.engine.state()["journey"]["next"]
+                p.now = lambda: at
+                await p.ui_plan_action(trip["id"], "cancel")
+                assert p.engine.state()["journey"] is None
+                checks.append("cancel_trip_stops_movement")
+                self.result = {"status":"通过", "case":case, "result":{"checks":checks}}
+                return
             if case in {"world", "world_weather", "world_search"}:
                 now = datetime.now(now.tzinfo)
                 p.config.world.weather_enabled = True

@@ -73,3 +73,72 @@ async def test_fatigue_replaces_reading_with_rest(plugin):
     plugin.engine.advance(now+timedelta(minutes=31));await plugin.books.process(now+timedelta(minutes=31))
     assert plugin.store.get('book',book['id'])['read_characters']==0
     assert plugin.store.all('book_note')==[]
+
+
+@pytest.mark.parametrize("action", ["cancel", "skip", "edit"])
+@pytest.mark.parametrize("delay", [0, 30])
+async def test_blocked_routine_occurrence_stays_cancelled(plugin, action, delay):
+    from maiweave.core.models import RoutineInput
+    now = plugin.now().replace(hour=9, minute=40, second=0, microsecond=0)
+    plugin.config.rhythm.horizon_days = 1
+    value = RoutineInput(title="公园散步", anchor_date=now.date().isoformat(), start_time="10:00",
+                         frequency="daily", duration_minutes=30, location="公园")
+    rule = plugin.rhythm.save(value, "private", now)
+    plugin.rhythm.materialize(now)
+    plan = next(p for p in plugin.store.all("plan") if p.get("routine_id") == rule["id"])
+    plugin.spatial.save_route("street", "park", 40, "步行")
+    plugin.spatial.reconcile(now)
+    assert plugin.store.get("plan", plan["id"])["status"] == "blocked"
+    now += timedelta(minutes=delay)
+    if action == "cancel":
+        plugin.rhythm.cancel(rule["id"], "private", now)
+    elif action == "skip":
+        plugin.rhythm.skip(rule["id"], now.date().isoformat(), "private", now)
+    else:
+        plugin.rhythm.save(value.model_copy(update={"start_time": "11:00"}), "private", now, rule["id"])
+    plugin.spatial.save_route("street", "park", 12, "步行")
+    plugin.spatial.reconcile(now)
+    plugin.rhythm.materialize(now)
+    assert plugin.store.get("plan", plan["id"])["status"] == "cancelled"
+    assert plugin.store.find("schedule_issue", plan["id"]) is None
+
+
+async def test_renaming_place_updates_blocked_plan(plugin):
+    now = plugin.now().replace(hour=9, minute=40, second=0, microsecond=0)
+    plan = plugin.spatial.schedule(PlanInput(title="公园散步", location="公园",
+        start=now.replace(hour=10, minute=0).isoformat(), end=now.replace(hour=10, minute=30).isoformat()), "private", now)
+    plugin.spatial.save_route("street", "park", 40, "步行")
+    plugin.spatial.reconcile(now)
+    assert plugin.store.get("plan", plan["id"])["status"] == "blocked"
+    plugin.spatial.save_place("湖畔公园", True, "散步地点", "park")
+    plugin.spatial.save_route("street", "park", 12, "步行")
+    plugin.spatial.reconcile(now)
+    updated = plugin.store.get("plan", plan["id"])
+    assert updated["location"] == "湖畔公园"
+    assert updated["status"] == "scheduled"
+
+
+async def test_invalid_reading_plan_keeps_existing_activity(plugin):
+    now = plugin.now()
+    book = await upload(plugin)
+    plugin.books.manage("archive", book["id"])
+    old = plugin.spatial.schedule(PlanInput(title="整理书桌", start=now.isoformat(),
+        end=(now + timedelta(minutes=30)).isoformat()), "", now, autonomous=True)
+    with pytest.raises(ValueError, match="归档"):
+        plugin.spatial.schedule(PlanInput(title="阅读", book_id=book["id"], start=now.isoformat(),
+            end=(now + timedelta(minutes=15)).isoformat()), "", now)
+    assert plugin.store.get("plan", old["id"]) == old
+
+
+@pytest.mark.parametrize("target", ["activity", "travel"])
+async def test_cancelling_trip_clears_movement_display(plugin, target):
+    now = plugin.now().replace(hour=9, minute=40, second=0, microsecond=0)
+    with plugin.store.db:
+        plugin.store.put("state", {**plugin.engine.state(), "updated_at": now.isoformat(), "location": "住处"})
+    plan = plugin.spatial.schedule(PlanInput(title="公园散步", location="公园",
+        start=now.replace(hour=10, minute=0).isoformat(), end=now.replace(hour=10, minute=30).isoformat()), "private", now)
+    at = now + timedelta(minutes=10)
+    plugin.engine.advance(at)
+    assert plugin.engine.state()["journey"]["next"]
+    plugin.spatial.transition(plan["id"] if target == "activity" else plan["travel_id"], "cancel", "private", at)
+    assert plugin.engine.state()["journey"] is None

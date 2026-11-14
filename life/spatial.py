@@ -51,7 +51,7 @@ class Spatial:
                     self.engine.store.put("state", state)
                 for category in ("plan", "routine", "habit"):
                     for item in self.engine.store.all(category):
-                        if category == "plan" and item["status"] not in ACTIVE | {"paused"}:
+                        if category == "plan" and item["status"] not in ACTIVE | {"paused", "blocked"}:
                             continue
                         if item.get("location") == old["name"]:
                             item["location"] = name
@@ -295,10 +295,7 @@ class Spatial:
 
     def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False, user_id=None, sleep_deadline: str = "") -> dict:
         """地点变化时，在活动前显式安排出行时间。"""
-        if self.engine.time(value.end) <= self.engine.time(value.start):
-            raise ValueError("结束时间必须晚于开始时间")
-        if self.engine.time(value.start) < now - timedelta(minutes=1):
-            raise ValueError("过去的事情请记录为经历；新计划请选择当前或未来的时间")
+        self.engine.validate_plan(value, session, now)
         if user_id is not None:
             start, end = self.engine.time(value.start), self.engine.time(value.end)
             if value.location and value.kind != "travel":
@@ -307,14 +304,6 @@ class Spatial:
             overlaps = [p for p in self.engine.store.all("plan") if p["status"] in ACTIVE
                         and self.engine.time(p["start"]) < end and self.engine.time(p["end"]) > start]
             self.check_influence(session, user_id, overlaps)
-        if value.goal_id:
-            goal = self.engine.owned("goal", value.goal_id, session)
-            if goal["status"] != "active":
-                raise ValueError("该目标已结束")
-            if goal.get("steps"):
-                step = next((s for s in goal["steps"] if s["status"] != "completed"), None)
-                if not step or step["id"] != value.goal_step_id:
-                    raise ValueError("请填写当前未完成阶段的 goal_step_id")
         if value.kind == "travel":
             route = self.route(self.projected_location(self.engine.time(value.start), now), value.location)
             if (self.engine.time(value.end) - self.engine.time(value.start)).total_seconds() < route["minutes"] * 60:

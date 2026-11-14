@@ -49,14 +49,9 @@ class Rhythm:
             if issue["routine_id"] == rule_id:
                 self.engine.store.delete("routine_issue", issue["id"])
         for plan in self.engine.store.all("plan"):
-            if plan.get("routine_id") == rule_id and plan["status"] == "scheduled" and self.engine.time(plan["start"]) >= now:
-                plan["status"] = "cancelled"
-                self.engine.store.put("plan", plan)
-                if plan.get("travel_id"):
-                    travel = self.engine.store.get("plan", plan["travel_id"])
-                    if travel["status"] == "scheduled":
-                        travel["status"] = "cancelled"
-                        self.engine.store.put("plan", travel)
+            if (plan.get("routine_id") == rule_id and plan["status"] in {"scheduled", "blocked"}
+                    and (plan["status"] == "blocked" or self.engine.time(plan["start"]) >= now)):
+                self.engine.transition(plan["id"], "cancel", plan["session_id"], now)
 
     def cancel(self, rule_id: str, session: str, now) -> dict:
         rule = self.engine.owned("routine", rule_id, session)
@@ -75,7 +70,7 @@ class Rhythm:
         with self.engine.store.db:
             self.engine.store.put("routine", rule)
             for plan in self.engine.store.all("plan"):
-                if plan.get("routine_id") == rule_id and plan.get("routine_date") == on_date and plan["status"] in ACTIVE:
+                if plan.get("routine_id") == rule_id and plan.get("routine_date") == on_date and plan["status"] in ACTIVE | {"paused", "blocked"}:
                     self.engine.transition(plan["id"], "cancel", session, now)
         self.spatial.reconcile(now)
         return rule

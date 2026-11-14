@@ -137,3 +137,26 @@ async def test_reported_leave_keeps_existing_relationship_rule(plugin, monkeypat
         plugin.chat_schedule.save(value, "chat-a", "user", now)
     assert plugin.store.get("plan", plan["id"])["status"] == "scheduled"
     assert not plugin.store.all("chat_arrangement")
+
+
+@pytest.mark.parametrize("status", ["blocked", "paused"])
+@pytest.mark.parametrize("entry", ["explicit", "kind", "reconcile"])
+async def test_leave_includes_pending_work(plugin, monkeypatch, status, entry):
+    now = moment(plugin, monkeypatch)
+    plan = plugin.engine.create_plan(PlanInput(title="下午上班", kind="work",
+        start=now.replace(hour=14).isoformat(), end=now.replace(hour=16).isoformat()), "chat-a", now)
+    plan["status"] = status
+    with plugin.store.db:
+        plugin.store.put("plan", plan)
+    value = holiday(now, cancel_plan_ids=[plan["id"]] if entry == "explicit" else [])
+    if entry == "explicit":
+        value.blocked_kinds = []
+    if entry == "reconcile":
+        with plugin.store.db:
+            plugin.store.put("chat_arrangement", {"id":"leave", "type":"chat_schedule", "status":"active",
+                "session_id":"chat-a", "source":"observed", "starts_at":value.start,
+                "expires_at":value.end, "blocked_kinds":["work"]})
+        plugin.chat_schedule.reconcile(now)
+    else:
+        plugin.chat_schedule.save(value, "chat-a", "user", now)
+    assert plugin.store.get("plan", plan["id"])["status"] == "cancelled"
