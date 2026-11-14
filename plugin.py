@@ -206,6 +206,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     async def tick(self):
         now = self.now()
+        await self.living.refresh_farewell(now)
         self.living.apply_schedule(now)
         for name, job in [("跟进到期", self.continuity.expire_threads), ("数据清理", self.retention.daily), ("生活推进", self.engine.advance), ("重复日程", self.rhythm.materialize), ("连续出行", self.spatial.reconcile), ("习惯学习", self.rhythm.learn), ("生活调整", self.living.adjust)]:
             try:
@@ -311,8 +312,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     @HookHandler("send_service.before_send")
     async def sleep_before_send(self, message: dict, storage_message: bool = True, **kwargs):
-        if storage_message and self.living.quiet_sleep(self.now()):
-            self.ctx.logger.info("MaiWeave 正在睡眠，本次聊天发言已暂停：%s", message["session_id"])
+        if storage_message and self.living.quiet_sleep(self.now(), message["session_id"]):
+            self.ctx.logger.info("MaiWeave 按当前作息暂停本次聊天发言：%s", message["session_id"])
             return {"action": "abort"}
         return {"action": "continue"}
 
@@ -351,6 +352,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @HookHandler("maisaka.planner.after_response")
     async def planner_receipt(self, session_id: str, output_items: list, **kwargs):
         self.living.receipts.observe(session_id, output_items)
+        self.living.observe_farewell(session_id, output_items, self.now())
         if not any(item.get("item_type") == "FunctionCallItem" for item in output_items):
             self.ctx.logger.info("MaiWeave Planner 响应 [%s]：%s；睡眠静默=%s",
                                  session_id, output_summary(output_items), self.living.quiet_sleep(self.now()))

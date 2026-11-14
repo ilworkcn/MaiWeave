@@ -67,9 +67,8 @@ class Greetings:
         if any(row.get("greeting_key") == key and (row.get("sent_at") or row["outcome"] in {"MaiBot 已受理", "生成中"}) for row in receipts):
             return None
         words = "早安|早上好" if window["kind"] == "早安" else "晚安"
-        if any(self.engine.time(m["timestamp"]).date() == now.date()
-               and now - self.engine.time(m["timestamp"]) < timedelta(hours=3)
-               and re.search(rf"^(?:{words})(?:[，。！!～~\s]|$)|[，。！!\s](?:{words})[。！!～~\s]*$", (m.get("processed_plain_text") or "").strip()) for m in recent):
+        if any(now - self.engine.time(m["timestamp"]) < timedelta(hours=3)
+               and re.search(rf"(?:^|[，。！!？?～~\s])(?:{words})[啦呀啊哦哟喔喽咯]?(?=$|[，。！!？?～~\s])", (m.get("processed_plain_text") or "").strip()) for m in recent):
             return None
         previous = sorted((row for row in receipts if row.get("greeting_kind") == window["kind"]
                            and row["session"] == session and row.get("sent_at")), key=lambda row: row["sent_at"], reverse=True)[:3]

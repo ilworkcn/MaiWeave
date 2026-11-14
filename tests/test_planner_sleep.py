@@ -76,6 +76,8 @@ async def test_cancel_resumed_sleep_releases_original_activity(plugin):
     assert plugin.living.wake_for_message("陪陪我", "private", now, "u")
     later = now + timedelta(minutes=2)
     assert plugin.living.wake_for_message("先聊到这里，晚安", "group", later, "u")
+    assert plugin.living.farewell(later)
+    plugin.living.observe_farewell("group", [], later)
     resumed = plugin.engine.current(later)
     assert resumed["kind"] == "sleep"
     plugin.spatial.transition(resumed["id"], "cancel", resumed["session_id"], later)

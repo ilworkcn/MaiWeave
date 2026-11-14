@@ -24,6 +24,8 @@ async def test_same_person_wakes_continues_and_says_goodnight(plugin,start,end):
     assert plugin.living.awake_until(now+timedelta(minutes=30)) == now+timedelta(minutes=150)
     assert "私聊备注" not in plugin.context_text("group")
     assert plugin.living.wake_for_message("先聊到这里，晚安",end,now+timedelta(minutes=40),"u")
+    assert plugin.living.farewell(now+timedelta(minutes=40))
+    plugin.living.observe_farewell(end, [], now+timedelta(minutes=40))
     assert plugin.living.sleeping(now+timedelta(minutes=40))
     assert plugin.engine.current(now+timedelta(minutes=40))["kind"] == "sleep"
 

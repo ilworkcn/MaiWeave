@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from maibot_sdk import API, HookHandler, MaiBotPlugin
+from maibot_sdk import API, HookHandler, MaiBotPlugin, Tool
 
 
 class Probe(MaiBotPlugin):
@@ -25,11 +25,24 @@ class Probe(MaiBotPlugin):
         self.result = {}
         self.task = None
         self.active = None
+        self.deliveries = []
+        self.planner_outputs = []
+
+    @Tool("maiweave_probe_share_followup", description="关联本次实机核验分享后的用户回应；调用原插件的接话逻辑。", parameters={"type": "object", "properties": {"receipt_id": {"type": "string"}, "summary": {"type": "string"}, "status": {"type": "string", "enum": ["answered", "closed"]}}, "required": ["receipt_id", "summary", "status"]})
+    async def probe_share_followup(self, receipt_id: str, summary: str, status: str, **kwargs):
+        return self.active.living.receipts.respond(receipt_id, kwargs["stream_id"], kwargs["user_id"], summary, status, self.active.now())
 
     @HookHandler("maisaka.planner.before_request")
     async def planner_context(self, **kwargs):
         if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
             result = await self.active.planner_context(**kwargs)
+            # 隔离数据的接话工具沿用生产实现，使用独立工具名定位测试实例。
+            if self.result.get("case") == "natural_delivery":
+                for item in result.get("modified_kwargs", {}).get("items", []):
+                    if item.get("meta", {}).get("item_id") == "maiweave-life-context":
+                        for part in item.get("parts", []):
+                            if "text" in part:
+                                part["text"] = part["text"].replace("maiweave_share_followup", "maiweave_probe_share_followup")
             # 临时插件的主动任务使用临时插件 ID，回执仍取宿主返回的任务编号。
             for item in reversed(kwargs["items"]):
                 text = "".join(part.get("text", "") for part in item.get("parts", []))
@@ -43,6 +56,7 @@ class Probe(MaiBotPlugin):
     @HookHandler("maisaka.planner.after_response")
     async def planner_receipt(self, **kwargs):
         if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            self.planner_outputs.append(kwargs["output_items"])
             return await self.active.planner_receipt(**kwargs)
         return {"action": "continue"}
 
@@ -50,6 +64,26 @@ class Probe(MaiBotPlugin):
     async def reply_context(self, **kwargs):
         if self.active and kwargs.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
             return await self.active.reply_context(**kwargs)
+        return {"action": "continue"}
+
+    @HookHandler("chat.receive.after_process")
+    async def farewell_receive(self, message: dict, **kwargs):
+        if self.active and message.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            return await self.active.management_message(message, **kwargs)
+        return {"action": "continue"}
+
+    @HookHandler("send_service.before_send")
+    async def farewell_before_send(self, message: dict, storage_message: bool = True, **kwargs):
+        if self.active and message.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            result = await self.active.sleep_before_send(message, storage_message=storage_message)
+            self.deliveries.append({"stage": "before", "action": result["action"]})
+            return result
+        return {"action": "continue"}
+
+    @HookHandler("send_service.after_send")
+    async def farewell_after_send(self, message: dict, sent: bool, **kwargs):
+        if self.active and message.get("session_id") == "3a2048f0aa247f60f912da52c3a8ece6":
+            self.deliveries.append({"stage": "after", "sent": sent})
         return {"action": "continue"}
 
     async def on_unload(self):
@@ -97,6 +131,276 @@ class Probe(MaiBotPlugin):
             p.now = lambda: now
             with p.store.db:
                 p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "hunger": 20, "energy": 80})
+            if case == "natural_delivery":
+                import json
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                p.now = lambda: datetime.now(now.tzinfo)
+                now = p.now()
+                self.active = p
+                self.deliveries = []
+                self.planner_outputs = []
+                p.config.proactive.enabled = True
+                p.config.proactive.mode = "自然交流"
+                p.config.proactive.session_ids = [stream]
+                p.config.proactive.start_hour = p.config.proactive.end_hour = 0
+                p.config.proactive.daily_limit = 4
+                with p.store.db:
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "energy": 80, "hunger": 20})
+                async def wait_reply(start):
+                    for _ in range(120):
+                        await asyncio.sleep(2)
+                        calls = [item["tool_call"] for output in self.planner_outputs[start:] for item in output
+                                 if item.get("item_type") == "FunctionCallItem" and item["tool_call"]["func_name"] == "reply"]
+                        for call in calls:
+                            receipt = await p.ctx.db.get("ToolRecord", filters={"session_id": stream, "tool_id": call["call_id"]}, single_result=True)
+                            if receipt and json.loads(receipt["tool_data"])["success"]:
+                                return receipt
+                    raise AssertionError({"阶段": "等待真实回复", "模型输出": self.planner_outputs[start:]})
+                initial = await self.ctx.call_capability("internal_chat.send", text="我已经醒啦，现在也空下来了。你刚才拓印的梧桐叶帆布袋做好了吗？我特别想知道叶脉印得清不清楚，等晾好了一定主动告诉我呀，我在这儿等你的成品消息。")
+                assert initial["message_id"]
+                await wait_reply(0)
+                await asyncio.sleep(3)
+                event = p.engine.record_experience(ExperienceInput(summary="刚才拓印的梧桐叶帆布袋已经晾干了，细叶脉清清楚楚，原本糊成一团的叶柄补成了小鸟，成品比试印时好看，终于可以告诉一直等着看成果的朋友了", source="simulated", evidence="实机测试生活场景", importance=9, occurred_at=p.now().isoformat()), stream, p.now())
+                assert p.living.share_summary(p.now())[0]["sent"] == 0
+                await p.living.share(p.now())
+                row, = p.store.all("share_receipt")
+                accepted_count = p.living.share_summary(p.now())[0]["sent"]
+                assert accepted_count == 0, row
+                self.result.update(stage="等待主动发送", receipt=row)
+                for _ in range(120):
+                    await asyncio.sleep(2)
+                    await p.living.receipts.refresh(p.now())
+                    row = p.store.get("share_receipt", row["id"])
+                    if row["outcome"] != "MaiBot 已受理":
+                        break
+                assert row["outcome"] == "实际已发送", {"receipt": row, "outputs": self.planner_outputs}
+                assert row.get("sent_text") and row.get("sent_at"), row
+                p.living.settle_shares()
+                for _ in range(3):
+                    await p.living.receipts.refresh(p.now())
+                assert p.living.share_summary(p.now())[0]["sent"] == 1
+                assert event["id"] in p.store.get("sharing", stream)["experience_ids"]
+                await p.living.share(p.now())
+                cooldown = dict(p.living.share_decisions[0])
+                assert "下次可请求时间" in cooldown["reason"], cooldown
+                context = p.context_text(stream, text="帆布袋上的叶脉")
+                assert row["id"] in context and "shared_topics" in context
+                assert len(context) <= p.config.context.private_chars
+                start = len(self.planner_outputs)
+                self.result.update(stage="接续真实聊天", receipt=row)
+                answer = "哇，叶柄还能改成小鸟！这个补救太可爱了。你说叶脉现在清清楚楚，是不是晾干以后颜色比湿的时候淡一点？我下次也想试试这种帆布袋。"
+                incoming = await self.ctx.call_capability("internal_chat.send", text=answer)
+                assert incoming["message_id"]
+                reply = await wait_reply(start)
+                for _ in range(30):
+                    row = p.store.get("share_receipt", row["id"])
+                    if row.get("followup") == "answered":
+                        break
+                    await asyncio.sleep(2)
+                assert row.get("followup") == "answered", {"receipt": row, "outputs": self.planner_outputs[start:]}
+                assert row["response_text"] == answer and row["response_user"] == "owner"
+                assert row["observation"] == "分享后收到用户发言"
+                await p.living.share(p.now())
+                continuation = dict(p.living.share_decisions[0])
+                assert continuation["outcome"] == "接着聊", continuation
+                assert p.living.share_summary(p.now())[0]["sent"] == 1
+                data = json.loads(reply["tool_data"])
+                ids = data.get("metadata", {}).get("sent_message_ids", [])
+                texts = []
+                for message_id in ids:
+                    message = await p.ctx.db.get("Messages", filters={"session_id": stream, "message_id": message_id}, single_result=True)
+                    texts.append(message["processed_plain_text"])
+                self.result = {"status": "通过", "case": case, "result": {"receipt": row, "accepted_count": accepted_count,
+                    "sent_count": p.living.share_summary(p.now())[0]["sent"], "cooldown": cooldown, "continuation": continuation,
+                    "context_chars": len(context), "context_budget": p.config.context.private_chars,
+                    "reply_texts": texts, "reply_record": data, "deliveries": self.deliveries}}
+                return
+            if case == "business":
+                from datetime import date
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                profile = await p.ui_save_profile("实机日历核验", stream)
+                solar = await p.ui_save_anniversary(profile["id"], "生日", "solar", 2, 29, 2000)
+                lunar = await p.ui_save_anniversary(profile["id"], "纪念日", "lunar", 1, 1)
+                assert p.anniversaries.occurrence(solar, 2025) == date(2025, 2, 28)
+                assert p.anniversaries.occurrence(lunar, 2024) == date(2024, 2, 10)
+                assert not p.anniversaries.upcoming(now.date(), "other-chat")
+                for ago in (1, 2, 3):
+                    at = now - timedelta(days=ago)
+                    plan = p.engine.create_plan(PlanInput(title="饭后散步", kind="leisure", location="公园", start=at.isoformat(), end=(at+timedelta(minutes=20)).isoformat()), stream, at)
+                    with p.store.db: p.store.put("plan", {**plan, "status": "completed", "elapsed_seconds": 1200})
+                p.rhythm.learn(now)
+                assert p.store.all("habit")[0]["observed_days"] == 3
+                before = list(p.store.db.iterdump())
+                for behavior in ("conversation", "proactive"):
+                    assert (await p.evaluate_behavior(behavior))["decision"] in {"allow", "defer"}
+                assert before == list(p.store.db.iterdump())
+                native_status = await self.ctx.api.call("ilworkcn.maiweave.get_life_status", version="1")
+                assert native_status["version"] == 1
+                queued = await p.ui_change_begin("profile", '{"name":"实机资料核验","session_id":"isolated-test"}')
+                await asyncio.gather(*list(p.jobs))
+                checked = await p.ui_change_status(queued["review_id"])
+                assert checked["status"] in {"已保存", "待确认"}, checked
+                async def operation():
+                    return None
+                task = p.start_job("实机任务状态核验", operation())
+                await asyncio.gather(*list(p.jobs))
+                assert (await p.ui_operation_status(task_id=task["task_id"]))["done"]
+                await p.ui_retention()
+                await p.ui_cleanup()
+                await p.ui_books()
+                await p.ui_anniversaries()
+                self.result = {"status": "通过", "case": case, "result": {"calendar": "公历与农历通过", "habits": "多日期活动学习通过",
+                    "readonly_api": "跨插件调用与只读检查通过", "review": checked["status"], "operation": "完成", "retention": "预览清理及页面读回通过"}}
+                return
+            if case in {"world", "world_weather", "world_search"}:
+                now = datetime.now(now.tzinfo)
+                p.config.world.weather_enabled = True
+                p.config.world.city = "Shanghai"
+                p.config.world.country_code = "CN"
+                weather = {}
+                if case != "world_search":
+                    weather = await p.world.weather(now)
+                    assert weather["forecast"] and weather["source"] == "Open-Meteo"
+                if case == "world_weather":
+                    self.result = {"status": "通过", "case": case, "result": {"city": weather["city"], "weather": weather["label"]}}
+                    return
+                p.config.world.search_enabled = True
+                search = await p.world.search("上海 自然博物馆 开放时间 官方", now)
+                assert search["results"], search
+                page = await p.world.read(search["results"][0]["url"], now)
+                assert page["content"], page
+                self.result = {"status": "通过", "case": case, "result": {"city": weather.get("city"), "weather": weather.get("label"),
+                    "search_results": len(search["results"]), "page_title": page["title"], "page_chars": len(page["content"])}}
+                return
+            if case == "proactive_gates":
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                now = datetime.now(now.tzinfo).replace(hour=14)
+                await p.identify_person(stream, "owner", "internal")
+                person = p.living.person_key(stream, "owner")
+                p.anniversaries.save_profile("测试接收人", stream, "owner", person_id=person)
+                p.engine.record_experience(ExperienceInput(summary="实机交流判定核验", importance=6, source="simulated", evidence="测试数据", occurred_at=now.isoformat()), stream, now)
+                checks = []
+                for mode in ("自然交流", "主动表达"):
+                    for gate in ("关闭", "时段", "额度", "冷却", "睡眠", "学习", "忙碌人物", "低精力", "告别"):
+                        with p.store.db:
+                            for category in ("plan", "share_receipt", "person_state"):
+                                for row in p.store.all(category):
+                                    p.store.delete(category, row["id"])
+                            p.store.delete("runtime", "awakening")
+                            p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "energy": 80})
+                        cfg = p.config.proactive
+                        cfg.enabled, cfg.mode, cfg.session_ids = True, mode, [stream]
+                        cfg.start_hour = cfg.end_hour = 0
+                        cfg.daily_limit = 4
+                        p.config.life.schedule_enabled = True
+                        if gate == "关闭": cfg.enabled = False
+                        if gate == "时段": cfg.start_hour, cfg.end_hour = 16, 18
+                        if gate == "额度": cfg.daily_limit = 0
+                        if gate == "冷却":
+                            with p.store.db:
+                                p.store.put("share_receipt", {"id": "sent", "session": stream, "outcome": "实际已发送", "created": now.isoformat(), "sent_at": now.isoformat()})
+                        if gate in {"睡眠", "学习", "告别"}:
+                            p.engine.create_plan(PlanInput(title=gate, kind="study" if gate == "学习" else "sleep", location="住处",
+                                start=now.isoformat(), end=(now+timedelta(hours=2)).isoformat()), "", now)
+                        if gate == "告别":
+                            assert p.living.wake(stream, now, "测试", "owner", require_intimacy=False)
+                            assert p.living.wake_for_message("晚安", stream, now, "owner")
+                        if gate == "忙碌人物": p.presence.declare(stream, "owner", "忙碌", now)
+                        if gate == "低精力":
+                            with p.store.db: p.store.put("state", {**p.engine.state(), "energy": 20})
+                        before = len(p.store.all("share_receipt"))
+                        await p.living.share(now)
+                        assert len(p.store.all("share_receipt")) == before, (mode, gate)
+                        checks.append({"mode": mode, "gate": gate, "result": "未发送"})
+                self.result = {"status": "通过", "case": case, "result": {"checks": checks}}
+                return
+            if case.startswith("greeting_"):
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                now = datetime.now(now.tzinfo) + timedelta(hours=4)
+                p.config.life.schedule_enabled = True
+                p.config.proactive.enabled = True
+                p.config.proactive.natural_greetings = True
+                p.config.proactive.session_ids = [stream]
+                p.config.proactive.start_hour = p.config.proactive.end_hour = 0
+                p.config.proactive.mode = "自然交流" if case.endswith("natural") else "主动表达"
+                profile = p.anniversaries.save_profile("实机测试人物", stream, "owner")
+                with p.store.db:
+                    p.store.put("profile", {**profile, "intimacy": 2, "intimacy_mode": "manual"})
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "energy": 80})
+                if "morning" in case:
+                    end = now - timedelta(minutes=5)
+                    p.engine.create_plan(PlanInput(title="测试夜间睡眠", kind="sleep", start=(end-timedelta(hours=8)).isoformat(), end=end.isoformat()), "", end-timedelta(hours=8))
+                    with p.store.db:
+                        p.store.put("state", {**p.engine.state(), "updated_at": (end-timedelta(hours=8)).isoformat()})
+                    p.engine.advance(now)
+                else:
+                    start = now + timedelta(minutes=10)
+                    p.engine.create_plan(PlanInput(title="测试夜间睡眠", kind="sleep", start=start.isoformat(), end=(start+timedelta(hours=8)).isoformat()), "", now)
+                self.active = p
+                self.deliveries = []
+                window = p.living.greetings.window(now)
+                assert window, case
+                candidate = await p.living.greetings.candidate(stream, now, window)
+                assert candidate, window
+                await p.living.share(now)
+                row, = p.store.all("share_receipt")
+                for _ in range(90):
+                    if row["outcome"] != "MaiBot 已受理":
+                        break
+                    await asyncio.sleep(2)
+                    await p.living.receipts.refresh(now)
+                    row = p.store.get("share_receipt", row["id"])
+                assert row["outcome"] in {"实际已发送", "Planner 选择沉默", "Planner 未调用工具", "稍后再聊"}, row
+                if row["outcome"] == "实际已发送":
+                    assert await p.living.greetings.candidate(stream, now, window) is None
+                    p.config.proactive.daily_limit = 1
+                    await p.living.share(now)
+                    assert "今日实际已发送" in p.living.share_decisions[0]["reason"]
+                p.config.life.schedule_enabled = False
+                assert p.living.greetings.window(now) is None
+                self.result = {"status": "通过", "case": case, "result": {"kind": window["kind"], "mode": p.config.proactive.mode,
+                    "outcome": row["outcome"], "text": row.get("sent_text"), "deliveries": self.deliveries, "daily_quota": "通过", "all_day": "通过"}}
+                return
+            if case in {"farewell_nap", "farewell_night"}:
+                import json
+                stream = "3a2048f0aa247f60f912da52c3a8ece6"
+                p.config.life.schedule_enabled = True
+                now = now.replace(hour=13 if case == "farewell_nap" else 23)
+                with p.store.db:
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat(), "location": "住处"})
+                p.engine.create_plan(PlanInput(title="实机告别测试睡眠", kind="sleep", location="住处",
+                    start=now.isoformat(), end=(now + timedelta(hours=2)).isoformat()), "", now)
+                p.engine.advance(now)
+                assert p.living.wake(stream, now, "实机告别测试", "owner", require_intimacy=False)
+                self.active = p
+                self.deliveries = []
+                result = await self.ctx.call_capability("internal_chat.send", text="晚安，去睡吧。跟我说声晚安，再单独一句叮嘱我早点休息就好。")
+                assert result["message_id"], result
+                assert p.living.proactive_pause(now)["reason"] == "farewell"
+                observed = {}
+                for _ in range(120):
+                    await asyncio.sleep(2)
+                    row = p.living.farewell(now)
+                    if row and row.get("farewell_calls"):
+                        observed = row["farewell_calls"]
+                    await p.living.refresh_farewell(now)
+                    if p.living.sleeping(now):
+                        break
+                assert observed, self.deliveries
+                records = []
+                for call_id, name in observed.items():
+                    record = await p.ctx.db.get("ToolRecord", filters={"session_id": stream, "tool_id": call_id}, single_result=True)
+                    assert record, name
+                    data = json.loads(record["tool_data"])
+                    records.append({"name": name, "success": data["success"], "error": data.get("error_message"),
+                                    "send_results": data.get("metadata", {}).get("send_results", [])})
+                assert any(x.get("sent") for x in self.deliveries), records
+                assert all(x["action"] == "continue" for x in self.deliveries if x["stage"] == "before"), self.deliveries
+                assert p.living.quiet_sleep(now)
+                assert (await p.sleep_before_send({"session_id": stream}))["action"] == "abort"
+                self.result = {"status": "通过", "case": case, "result": {"deliveries": self.deliveries,
+                    "records": records, "sleep": p.engine.current(now)["title"], "status": await p.get_life_status()}}
+                return
             if case == "tool_schema":
                 import json
                 # 安装临时核验插件时附上实际模型返回的工具参数。
@@ -276,7 +580,7 @@ class Probe(MaiBotPlugin):
                     await asyncio.sleep(2)
                     await p.living.receipts.refresh(datetime.now(now.tzinfo))
                     row=p.store.get("share_receipt",row["id"])
-                assert row["outcome"] in {"实际已发送","Planner 选择沉默"},row
+                assert row["outcome"] in {"实际已发送","Planner 选择沉默","Planner 未调用工具","稍后再聊"},row
                 if row["outcome"]=="实际已发送":
                     assert row.get("sent_text"),row
                 output={"mode":p.config.proactive.mode,"repeat":deferred["delivery"],"outcome":row["outcome"],"sent_text":row.get("sent_text",""),"models":[{"feature":x["feature"],"status":x["status"]} for x in p.store.all("model_usage")]}
@@ -287,18 +591,20 @@ class Probe(MaiBotPlugin):
                 stream="3a2048f0aa247f60f912da52c3a8ece6"
                 p.config.memory.enabled=True
                 now=datetime.now(now.tzinfo)
+                with p.store.db:
+                    p.store.put("state", {**p.engine.state(), "updated_at": now.isoformat()})
                 p.engine.advance(now)
                 marker="麦织实机验收-"+uuid4().hex[:8]
                 stages=[]
                 self.result.update(stages=stages, data_dir=str(folder))
-                event=p.engine.record_experience(ExperienceInput(summary=marker+"：已在 Edge 完成测试日程的新建和修改。",occurred_at=now.isoformat(),source="observed",evidence="本次浏览器实际操作结果",details={"用途":"插件验收测试"}),stream,now)
+                event=p.engine.record_experience(ExperienceInput(summary=marker+"：已通过插件接口完成本次测试记录的创建。",occurred_at=now.isoformat(),source="observed",evidence="本次实机接口核验结果",details={"用途":"插件验收测试"}),stream,now)
                 saved=await p.saved_experience(event)
                 assert saved["memory"]["status"]=="已保存",saved["memory"]
                 event=p.store.get("experience",event["id"])
                 fact=await p.memory.fact(event["memory_id"])
                 assert marker in str(fact),fact
                 stages.append({"step":"记忆创建与原文读取","claim_id":event["memory_id"],"status":"通过"})
-                event=p.engine.revise_experience(event["id"],{"日程结果":"已取消"},"","浏览器历史记录已显示测试日程取消",stream,now)
+                event=p.engine.revise_experience(event["id"],{"日程结果":"已取消"},"","本次实机核验已确认测试事项取消",stream,now)
                 revised=await p.saved_experience(event)
                 if revised["memory"]["status"]=="待确认":
                     await p.reviews.decide(revised["memory"]["id"],True)
@@ -541,7 +847,7 @@ class Probe(MaiBotPlugin):
             self.result={"status":"通过","case":case,"result":output}
         except Exception as error:
             self.ctx.logger.exception("阅读与精力实机验证失败")
-            self.result={**self.result,"status":"失败","case":case,"error":str(error)}
+            self.result={**self.result,"status":"失败","case":case,"error":str(error),"trace":__import__("traceback").format_exc()}
         finally:
             self.active = None
             await p.on_unload()

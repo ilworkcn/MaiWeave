@@ -62,9 +62,12 @@ class Living:
         wake = self.engine.store.find("runtime", "awakening")
         return bool(wake and wake.get("sleep_end") and self.engine.time(wake["sleep_end"]) > now)
 
-    def quiet_sleep(self, now):
+    def quiet_sleep(self, now, session=None):
         """按实际睡眠状态和作息设置决定本轮聊天静默。"""
         config = self.config.life
+        farewell = self.farewell(now)
+        if farewell and session is not None and session != farewell["farewell_session"]:
+            return True
         return self.sleeping(now) and (config.nap_quiet or in_hours(now.hour, config.sleep_hour, config.wake_hour))
 
     def sleep_until(self, now):
@@ -78,6 +81,9 @@ class Living:
 
     def proactive_pause(self, now):
         """查询生活状态导致的主动交流暂停原因。"""
+        farewell = self.farewell(now)
+        if farewell:
+            return {"reason": "farewell", "message": "正在道晚安，随后继续睡觉", "until": farewell["until"]}
         current = self.engine.current(now)
         if self.sleeping(now):
             return {"reason": "sleeping", "message": "正在睡觉", "until": self.sleep_until(now)}
@@ -106,6 +112,45 @@ class Living:
     def awake_until(self, now):
         record = self.engine.store.find("runtime", "awakening")
         return self.engine.time(record["until"]) if record and self.engine.time(record["until"]) > now else None
+
+    def farewell(self, now):
+        """临时陪伴结束前，为当前聊天保留一轮告别。"""
+        if not (self.config.life.enabled and self.config.life.schedule_enabled):
+            return None
+        row = self.engine.store.find("runtime", "awakening")
+        return row if row and row.get("farewell_session") and self.awake_until(now) else None
+
+    def finish_farewell(self, now):
+        row = self.farewell(now)
+        if row:
+            with self.engine.store.db:
+                self.engine.store.put("runtime", {**row, "until": now.isoformat(), "reason": "已结束告别，继续睡觉"})
+            self.resume_sleep(now)
+
+    def observe_farewell(self, session, items, now):
+        row = self.farewell(now)
+        if not row or row["farewell_session"] != session:
+            return
+        calls = {item["tool_call"]["call_id"]: item["tool_call"]["func_name"] for item in items
+                 if item.get("item_type") == "FunctionCallItem"}
+        if not calls:
+            self.finish_farewell(now)
+        elif any(name in {"reply", "send_emoji", "stop", "wait"} for name in calls.values()):
+            with self.engine.store.db:
+                self.engine.store.put("runtime", {**row, "farewell_calls": calls})
+
+    async def refresh_farewell(self, now):
+        """整轮工具执行完毕后续睡，分段消息共用同一条工具回执。"""
+        row = self.farewell(now)
+        if not row or not row.get("farewell_calls"):
+            return
+        for call_id, name in row["farewell_calls"].items():
+            result = await self.ctx.db.get("ToolRecord", filters={"session_id": row["farewell_session"], "tool_id": call_id}, single_result=True)
+            if not result or result.get("tool_name") != name:
+                return
+        current = self.farewell(now)
+        if current == row:
+            self.finish_farewell(now)
 
     def sleep_window(self, at):
         """返回该时刻所在或即将开始的作息窗口。"""
@@ -204,6 +249,8 @@ class Living:
             previous = {"sleep_end": current["end"], "sleep_location": current["location"], "sleep_deadline": current.get("sleep_deadline", "")}
             self.engine.advance(now)
             self.spatial.transition(current["id"], "cancel", current["session_id"], now)
+        previous.pop("farewell_session", None)
+        previous.pop("farewell_calls", None)
         minutes = config.wake_minutes * (1 + self.intimacy(session, user_id) / 3)
         with self.engine.store.db:
             self.engine.store.delete("runtime", "sleep_skip")
@@ -233,8 +280,8 @@ class Living:
         if self.awake_until(now) and same_person:
             if any(word in text for word in ("晚安", "去睡吧", "我去睡了", "先聊到这里")):
                 with self.engine.store.db:
-                    self.engine.store.put("runtime", {**active, "until": now.isoformat(), "reason": "这段聊天已结束，恢复作息"})
-                self.resume_sleep(now)
+                    self.engine.store.put("runtime", {**active, "until": (now + timedelta(minutes=5)).isoformat(),
+                                                     "farewell_session": session, "farewell_calls": {}, "reason": "正在道晚安，随后继续睡觉"})
                 return True
             if text.strip():
                 return self.wake(session, now, "正在继续聊天", user_id, require_intimacy=False)

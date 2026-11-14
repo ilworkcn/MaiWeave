@@ -62,6 +62,8 @@ async def test_chat_extends_wake_and_goodnight_releases_it(plugin):
     assert plugin.living.awake_until(now + timedelta(minutes=65)) == now + timedelta(minutes=160)
     assert not plugin.living.wake_for_message("普通消息", "chat-a", now + timedelta(minutes=60), "u2")
     assert plugin.living.wake_for_message("先聊到这里，晚安", "chat-a", now + timedelta(minutes=70), "u1")
+    assert plugin.living.farewell(now + timedelta(minutes=70))
+    plugin.living.observe_farewell("chat-a", [], now + timedelta(minutes=70))
     assert plugin.living.awake_until(now + timedelta(minutes=70)) is None
 
 

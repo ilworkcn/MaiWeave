@@ -98,8 +98,11 @@ class ChatContext:
         awake = p.living.awake_until(now) if p.config.life.schedule_enabled else None
         snapshot = {"now": now.isoformat(timespec="minutes"), "timezone": engine.timezone,
                     "state": {k: state[k] for k in ("location", "energy", "mood")}, "current": current,
-                    "sleep_policy": {"sleeping": p.living.sleeping(now), "quiet": p.living.quiet_sleep(now), "mode": "按作息生活" if p.config.life.schedule_enabled else "全天候交流",
+                    "sleep_policy": {"sleeping": p.living.sleeping(now), "quiet": p.living.quiet_sleep(now, session), "mode": "按作息生活" if p.config.life.schedule_enabled else "全天候交流",
                                      "awake_until": awake.isoformat() if awake else ""}}
+        farewell = p.living.farewell(now)
+        if farewell and farewell["farewell_session"] == session:
+            snapshot["sleep_policy"]["farewell"] = "对方已道别，简短自然地回应晚安，reply 使用 after_reply=stop；本轮发送完毕后继续睡觉。"
         snapshot = brief(snapshot, 80, 3)
         pending = [{k: r[k] for k in ("id", "action", "conflicts")} for r in store.all("review")
                    if r["session_id"] == session and r["status"] == "待确认"]

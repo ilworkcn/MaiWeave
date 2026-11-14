@@ -179,3 +179,19 @@ async def test_sleep_statement_is_not_a_completed_goodnight(plugin):
     candidate=await plugin.living.greetings.candidate("a",now,plugin.living.greetings.window(now))
     assert candidate["kind"]=="晚安"
     assert "对方刚说要休息" in candidate["intent"]
+
+
+@pytest.mark.parametrize("text", ["晚安啦", "晚安呀，早点休息", "好梦，晚安哦", "晚安～"])
+async def test_colloquial_goodnight_prevents_repeat(plugin, text):
+    now = await prepare(plugin)
+    plugin.ctx.db.get.return_value[0]["processed_plain_text"] = text
+    assert await plugin.living.greetings.candidate("a", now, plugin.living.greetings.window(now)) is None
+
+
+async def test_goodnight_before_midnight_stays_recent_after_midnight(plugin):
+    now = await prepare(plugin)
+    now = now.replace(hour=0, minute=5)
+    plugin.now = lambda: now
+    plugin.ctx.db.get.return_value[0].update(timestamp=(now-timedelta(minutes=10)).isoformat(), processed_plain_text="晚安，明天见")
+    window = {"kind": "晚安", "until": now+timedelta(minutes=10), "reason": "准备休息"}
+    assert await plugin.living.greetings.candidate("a", now, window) is None

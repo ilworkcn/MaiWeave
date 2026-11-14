@@ -35,7 +35,7 @@ class LifeConfig(PluginConfigBase):
     wake_enabled: bool = setting("允许聊天唤醒", default=True, description="聊天唤醒总开关。普通私聊按下方概率唤醒；亲密人物可通过关键词或当前陪伴请求唤醒，群聊和私聊共用人物关系。")
     private_wake_probability: int = setting("私聊消息唤醒概率（%）", default=0, ge=0, le=100, description="开启聊天唤醒后，睡眠静默期间每轮普通私聊按此概率醒来。0 为关闭，100 为每轮都会醒来；午睡和夜间共用，醒来后沿用清醒时长。")
     wake_keywords: list[str] = setting("唤醒关键词（选填）", default_factory=lambda: ["心情不好", "难过", "很低落", "睡不着", "想找人聊聊", "陪陪我"], description="每项填写一个词。聊天中出现这些词时唤醒角色；可增删默认词，清空词表可关闭匹配。")
-    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="同一个人在群聊或私聊继续聊天都会延长清醒时间；道晚安或时间到期后继续剩余睡眠。")
+    wake_minutes: int = setting("唤醒后保持清醒（分钟）", default=60, ge=1, le=1440, description="同一个人在群聊或私聊继续聊天都会延长清醒时间；道晚安时先完成本轮回复再续睡，清醒时间到期后也会继续剩余睡眠。")
     sleep_hour: int = setting("习惯入睡时间（整点）", default=23, ge=0, le=23, description="夜间睡眠窗口开始时间")
     wake_hour: int = setting("习惯起床时间（整点）", default=7, ge=0, le=23, description="夜间睡眠窗口结束时间")
     tick_seconds: int = setting("状态更新间隔（秒）", default=60, ge=10, description="每次推进生活的间隔")

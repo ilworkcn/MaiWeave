@@ -65,6 +65,8 @@ async def test_nap_wake_chat_extension_goodnight_and_end(plugin):
     assert plugin.living.wake_for_message("继续聊聊", "group", now + timedelta(minutes=2), "u")
     assert plugin.living.awake_until(now) > previous
     assert plugin.living.wake_for_message("先聊到这里，晚安", "group", now + timedelta(minutes=3), "u")
+    assert plugin.living.farewell(now + timedelta(minutes=3))
+    plugin.living.observe_farewell("group", [], now + timedelta(minutes=3))
     assert plugin.living.quiet_sleep(now + timedelta(minutes=3))
     plugin.engine.advance(end)
     assert not plugin.living.quiet_sleep(end)

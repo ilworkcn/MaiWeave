@@ -212,6 +212,7 @@ async def read_maiweave_behavior(self, behavior: str):
 | --- | --- | --- |
 | `allow` | `available` | 当前生活状态适合这类交流 |
 | `defer` | `sleeping` | 当前处于相关睡眠时段 |
+| `defer` | `farewell` | 正在完成晚安回复，主动交流稍后再评估 |
 | `defer` | `busy` | 正在工作或学习，主动交流适合稍后进行 |
 | `abstain` | `disabled` | 生活引擎已关闭，交流由调用方自行安排 |
 | `unknown` | `not_ready` | 生活状态尚未就绪，可稍后查询 |
@@ -311,3 +312,7 @@ async def describe_maiweave_proactive(self):
 | 接口找不到或调用失败 | 检查 MaiWeave 是否已加载、安装版本是否提供该接口、调用方是否声明 `api.call`，并查看 MaiBot 日志中的具体错误 |
 
 SDK 会将调用异常交给调用方。异常与 `ready=false` 含义不同：前者是本次调用失败，后者是已成功读到“尚无生活状态”的结果。
+
+### 告别后续睡
+
+临时陪伴结束时，角色先完成当前聊天的晚安回复，再继续睡觉。收尾期间 `effective_sleeping` 和 `quiet` 为 `false`，`awake_until` 表示本轮收尾的最晚结束时间。普通对话判断仍为 `allow`，实际发送仅向告别所在聊天开放；主动交流判断为 `defer`，`reason` 为 `farewell`，`until` 为收尾截止时间。整轮工具回执到达后，下一次生活状态更新会恢复剩余睡眠；未取得回执时最多等候 5 分钟。

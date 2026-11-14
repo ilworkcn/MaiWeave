@@ -95,6 +95,8 @@ async def test_goodnight_does_not_draw_again(plugin,monkeypatch):
     await turn(plugin)
     await receive(plugin,"先聊到这里，晚安")
     await turn(plugin)
+    assert plugin.living.farewell(now)
+    await plugin.planner_receipt("private", [])
     assert plugin.living.quiet_sleep(now)
     assert draw.call_count==1
 
