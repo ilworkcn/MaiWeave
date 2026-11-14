@@ -31,7 +31,7 @@ dialog{top:calc(var(--maibot-viewport-top,0px) + 88px);bottom:auto;margin:0 auto
 <dialog id="detail"><button id="close" class="btn close">关闭</button><div id="detailContent"></div></dialog>
 <script type="module">
 const $=id=>document.getElementById(id),esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const colors={sleep:'#8a78a3',meal:'#bc7844',work:'#6387a1',study:'#6387a1',leisure:'#5d8c73',travel:'#b59b52',rest:'#97a885',social:'#c08082',diary:'#a78368'};
+const colors={sleep:'#8a78a3',cook:'#d47755',meal:'#bc7844',work:'#6387a1',study:'#6387a1',leisure:'#5d8c73',travel:'#b59b52',rest:'#97a885',social:'#c08082',diary:'#a78368'};
 let data,day=0,chartKey='energy',busy=false,received=0;
 const time=value=>value?.slice(11,16)||'—';
 const clockNow=()=>new Date(new Date(data.now).getTime()+Date.now()-received);
