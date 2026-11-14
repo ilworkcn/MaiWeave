@@ -343,6 +343,21 @@ class Probe(MaiBotPlugin):
                 checks.append("cancel_trip_stops_movement")
                 self.result = {"status":"通过", "case":case, "result":{"checks":checks}}
                 return
+            if case == "diary_catchup":
+                plan = p.engine.create_plan(PlanInput(title="写日记", kind="diary", diary_day=now.date().isoformat(),
+                    start=(now+timedelta(minutes=5)).isoformat(), end=(now+timedelta(minutes=20)).isoformat()), "", now)
+                later = now + timedelta(minutes=30)
+                p.engine.advance(later)
+                assert p.store.get("plan", plan["id"])["status"] == "completed"
+                assert p.store.find("diary", now.date().isoformat()) is None
+                await p.diary.process(later)
+                diary = p.store.get("diary", now.date().isoformat())
+                assert diary["status"] == "已生成" and diary["plan_id"] == plan["id"] and diary["content"]
+                await p.diary.process(later+timedelta(minutes=1))
+                assert p.store.get("diary", diary["id"]) == diary
+                self.result = {"status":"通过", "case":case, "result":{"day":diary["day"],
+                    "status":diary["status"], "chars":len(diary["content"]), "repeat":"保留已生成日记"}}
+                return
             if case in {"world", "world_weather", "world_search"}:
                 now = datetime.now(now.tzinfo)
                 p.config.world.weather_enabled = True

@@ -49,3 +49,23 @@ async def test_diary_model_retries_empty_output(plugin):
 async def test_diary_empty_day(plugin):
     with pytest.raises(ValueError,match="生活记录"):
         await plugin.diary.write((plugin.now().date()-timedelta(days=3)).isoformat(),plugin.now())
+
+
+async def test_missed_diary_window_is_written_after_restart(plugin):
+    now = plugin.now()
+    history(plugin, now - timedelta(minutes=1))
+    plan = plugin.engine.create_plan(PlanInput(title="写日记", kind="diary",
+        start=(now + timedelta(minutes=5)).isoformat(), end=(now + timedelta(minutes=20)).isoformat(),
+        diary_day=now.date().isoformat()), "", now)
+    await plugin.on_unload()
+    await plugin.on_load()
+    later = now + timedelta(minutes=30)
+    plugin.engine.advance(later)
+    assert plugin.store.get("plan", plan["id"])["status"] == "completed"
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": "今天整理了书桌，留下一点安静的时间。"}
+    await plugin.diary.process(later)
+    diary = plugin.store.find("diary", now.date().isoformat())
+    assert diary and diary["status"] == "已生成"
+    assert diary["plan_id"] == plan["id"]
+    await plugin.diary.process(later + timedelta(minutes=1))
+    assert plugin.ctx.llm.generate.await_count == 1
