@@ -188,8 +188,11 @@ class Continuity:
             raise ValueError("只能分解进行中的目标")
         if goal.get("steps") and not revise:
             return goal
-        if any(p["goal_id"] == goal_id and p["status"] in {"active", "scheduled", "paused"} for p in store.all("plan")):
-            raise ValueError("请先完成或取消该目标已安排的活动，再调整阶段")
+        if any(p["goal_id"] == goal_id and (
+                p["status"] in {"active", "scheduled", "paused", "blocked", "awaiting_confirmation"}
+                or p["status"] == "completed" and p.get("goal_step_id") and not p.get("goal_progress_applied")
+                or p.get("reading_goal_pending")) for p in store.all("plan")):
+            raise ValueError("请先完成或取消该目标已安排的活动，等活动进度结算后再调整阶段")
         remaining = max(1, goal["target_sessions"] - goal["completed_sessions"])
         prompt = (
             "把角色长期目标拆为可执行阶段，输出包含 steps 数组的 JSON 对象。每阶段包含title、criterion（完成依据）、"

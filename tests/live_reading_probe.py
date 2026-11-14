@@ -343,6 +343,66 @@ class Probe(MaiBotPlugin):
                 checks.append("cancel_trip_stops_movement")
                 self.result = {"status":"通过", "case":case, "result":{"checks":checks}}
                 return
+            if case == "weather_network":
+                import socket
+                import ssl
+                import time
+                from urllib.request import urlopen
+                def inspect(host, path):
+                    row = {"host":host, "stage":"DNS"}
+                    started = time.monotonic()
+                    try:
+                        row["addresses"] = sorted({item[4][0] for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)})
+                        row["stage"] = "TCP"
+                        with socket.create_connection((host, 443), timeout=8) as connection:
+                            row["stage"] = "TLS"
+                            with ssl.create_default_context().wrap_socket(connection, server_hostname=host) as secure:
+                                row["tls"] = secure.version()
+                        row["stage"] = "HTTP"
+                        with urlopen("https://"+host+path, timeout=8) as response:
+                            row["http_status"] = response.status
+                            row["bytes"] = len(response.read())
+                        row["stage"] = "成功"
+                    except Exception as error:
+                        row["error"] = str(error)
+                    row["seconds"] = round(time.monotonic()-started, 2)
+                    return row
+                rows = await asyncio.gather(
+                    asyncio.to_thread(inspect, "api.open-meteo.com", "/v1/forecast?latitude=31.22&longitude=121.46&current=temperature_2m"),
+                    asyncio.to_thread(inspect, "geocoding-api.open-meteo.com", "/v1/search?name=Shanghai&count=1"))
+                self.result = {"status":"诊断完成", "case":case, "result":{"connections":rows}}
+                return
+            if case == "goal_stages":
+                from maiweave_probe_target.core.models import GoalInput
+                checks = []
+                for status in ("blocked", "awaiting_confirmation", "completed"):
+                    goal = p.engine.create_goal(GoalInput(title="画两张简单速写", target_sessions=2), "internal-audit", now)
+                    goal["steps"] = [{"id":"sketch", "title":"画轮廓", "sessions":2,
+                                      "completed_sessions":0, "status":"pending"}]
+                    with p.store.db:
+                        p.store.put("goal", goal)
+                    plan = p.engine.create_plan(PlanInput(title="练习速写", goal_id=goal["id"], goal_step_id="sketch",
+                        start=now.isoformat(), end=(now+timedelta(minutes=20)).isoformat()), "internal-audit", now)
+                    now += timedelta(minutes=20)
+                    p.engine.advance(now)
+                    plan = p.store.get("plan", plan["id"])
+                    with p.store.db:
+                        p.store.put("plan", {**plan, "status":status})
+                    try:
+                        await p.continuity.outline(goal["id"], now, revise=True)
+                    except ValueError as error:
+                        assert "阶段" in str(error)
+                    else:
+                        raise AssertionError("未结算活动的阶段被替换")
+                    if status == "completed":
+                        p.engine.progress_stage(plan, 1, "这张轮廓已画完")
+                    else:
+                        p.engine.transition(plan["id"], "cancel", "internal-audit", now)
+                    revised = await p.continuity.outline(goal["id"], now, revise=True)
+                    assert sum(step["sessions"] for step in revised["steps"]) == 2-revised["completed_sessions"]
+                    checks.append(status)
+                self.result = {"status":"通过", "case":case, "result":{"checks":checks, "model":"使用宿主实际模型重新分阶段"}}
+                return
             if case == "diary_catchup":
                 plan = p.engine.create_plan(PlanInput(title="写日记", kind="diary", diary_day=now.date().isoformat(),
                     start=(now+timedelta(minutes=5)).isoformat(), end=(now+timedelta(minutes=20)).isoformat()), "", now)

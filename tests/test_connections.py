@@ -145,16 +145,22 @@ async def test_diary_planning_wait_leaves_life_clock_running(plugin, monkeypatch
     await asyncio.gather(*plugin.background.values())
 
 
-async def test_diary_writes_only_during_active_window(plugin):
+async def test_diary_waits_until_schedule_then_catches_up(plugin):
     await stop_clock(plugin)
     now=plugin.now()
     start=now+timedelta(minutes=1)
     plan=plugin.engine.create_plan(PlanInput(title="写日记",kind="diary",start=start.isoformat(),
         end=(start+timedelta(minutes=15)).isoformat(),diary_day=now.date().isoformat()),"",now,autonomous=True)
-    plugin.engine.advance(start+timedelta(minutes=16))
-    await plugin.diary.process(start+timedelta(minutes=16))
+    await plugin.diary.process(now)
     assert not plugin.store.all("diary")
     plugin.ctx.llm.generate.assert_not_awaited()
+    plugin.ctx.llm.generate.return_value = {"success": True, "response": "今天整理了书桌。"}
+    plugin.engine.advance(start+timedelta(minutes=16))
+    await plugin.diary.process(start+timedelta(minutes=16))
+    diary = plugin.store.get("diary", now.date().isoformat())
+    assert diary["status"] == "已生成" and diary["plan_id"] == plan["id"]
+    await plugin.diary.process(start+timedelta(minutes=17))
+    plugin.ctx.llm.generate.assert_awaited_once()
 
 
 async def test_missing_conflict_assessment_retries_instead_of_writing(plugin):

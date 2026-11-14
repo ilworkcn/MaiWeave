@@ -142,3 +142,44 @@ async def test_cancelling_trip_clears_movement_display(plugin, target):
     assert plugin.engine.state()["journey"]["next"]
     plugin.spatial.transition(plan["id"] if target == "activity" else plan["travel_id"], "cancel", "private", at)
     assert plugin.engine.state()["journey"] is None
+
+
+@pytest.mark.parametrize("status", ["blocked", "awaiting_confirmation", "completed"])
+async def test_goal_reoutline_waits_for_unsettled_activity(plugin, status):
+    now = plugin.now()
+    goal = plugin.engine.create_goal(GoalInput(title="练习速写", target_sessions=2), "private", now)
+    goal["steps"] = [{"id": "sketch", "title": "画轮廓", "sessions": 2,
+                      "completed_sessions": 0, "status": "pending"}]
+    with plugin.store.db:
+        plugin.store.put("goal", goal)
+    plan = plugin.engine.create_plan(PlanInput(title="画一张轮廓", goal_id=goal["id"], goal_step_id="sketch",
+        start=now.isoformat(), end=(now + timedelta(minutes=20)).isoformat()), "private", now)
+    with plugin.store.db:
+        plugin.store.put("plan", {**plan, "status": status})
+    plugin.ctx.llm.generate.return_value = {"success": True,
+        "response": '{"steps":[{"title":"重新练习","criterion":"完成速写","sessions":2}]}'}
+    with pytest.raises(ValueError, match="阶段"):
+        await plugin.continuity.outline(goal["id"], now, revise=True)
+    assert plugin.store.get("goal", goal["id"])["steps"] == goal["steps"]
+    plugin.ctx.llm.generate.assert_not_awaited()
+
+
+async def test_reoutline_waits_for_book_note_then_uses_updated_progress(plugin):
+    now = plugin.now()
+    book = await upload(plugin)
+    goal = plugin.engine.create_goal(GoalInput(title="阅读两次", target_sessions=2), "", now)
+    plan = plugin.engine.create_plan(PlanInput(title="阅读", book_id=book["id"], goal_id=goal["id"],
+        start=now.isoformat(), end=(now+timedelta(minutes=15)).isoformat()), "", now)
+    end = now+timedelta(minutes=16)
+    plugin.engine.advance(end)
+    assert plugin.store.get("plan", plan["id"])["reading_goal_pending"]
+    with pytest.raises(ValueError, match="结算"):
+        await plugin.continuity.outline(goal["id"], end, revise=True)
+    answer(plugin)
+    await plugin.books.process(end)
+    assert plugin.store.get("goal", goal["id"])["completed_sessions"] == 1
+    plugin.ctx.llm.generate.return_value = {"success": True,
+        "response": '{"steps":[{"title":"继续阅读","criterion":"完成阅读","sessions":1}]}'}
+    revised = await plugin.continuity.outline(goal["id"], end, revise=True)
+    assert revised["completed_sessions"] == 1
+    assert sum(step["sessions"] for step in revised["steps"]) == 1
