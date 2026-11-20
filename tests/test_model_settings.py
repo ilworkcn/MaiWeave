@@ -2,7 +2,28 @@
 import pytest
 from test_plugin import plugin
 from maiweave.config import MODEL_FEATURES
-from maiweave.integrations.usage import generate, _once
+from maiweave.integrations.usage import generate, _once, json_payload
+from pydantic import BaseModel
+
+
+class JsonPayloadSample(BaseModel):
+    arrangements: list
+    promises: list
+
+
+@pytest.mark.parametrize("text", [
+    '```json\n{"arrangements": [], "promises": []}\n```',
+    '{\n  "arrangements": [],\n  "promises": []\n}\n```\n',
+    '问题原因：模型输出带了代码块。\n{"arrangements": [], "promises": []}',
+    '```json {"arrangements": [], "promises": []} ```',
+])
+def test_json_payload_extracts_structured_model_output(text):
+    value = JsonPayloadSample.model_validate_json(json_payload(text))
+    assert value.arrangements == [] and value.promises == []
+
+
+def test_json_payload_supports_array_top_level():
+    assert json_payload('说明\n[{"title": "阅读"}]\n结束') == '[{"title": "阅读"}]'
 
 
 @pytest.mark.parametrize("feature,key", MODEL_FEATURES.items())

@@ -10,6 +10,23 @@ from zoneinfo import ZoneInfo
 from ..config import MODEL_FEATURES
 
 
+def json_payload(text):
+    """从模型输出中取出首个完整的 JSON 对象或数组。"""
+    if not text:
+        return text
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char not in "{[":
+            continue
+        try:
+            value, end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, (dict, list)):
+            return text[index:end]
+    return text
+
+
 async def _once(ctx, store, config, feature, prompt):
     key = MODEL_FEATURES.get(feature)
     selected = getattr(config.models, key) if key else "跟随默认"
@@ -49,9 +66,7 @@ async def generate(ctx, store, config, feature, prompt, model=None, validate=Non
             if not text:
                 raise ValueError("模型返回了空内容")
             if model:
-                if text.startswith("```"):
-                    text = "\n".join(text.splitlines()[1:-1])
-                value = model.model_validate_json(text)
+                value = model.model_validate_json(json_payload(text))
                 if validate:
                     validate(value)
                 return value
@@ -61,7 +76,7 @@ async def generate(ctx, store, config, feature, prompt, model=None, validate=Non
                 raise
             ctx.logger.warning("%s第%s次调用失败，将重试：%s", feature, attempt + 1, error)
             if isinstance(error, ValueError):
-                correction = "\n请重新输出，修正上次结果的问题：" + str(error)
+                correction = "\n请重新输出，只输出 JSON，不要解释、不要代码块，不要添加前置或结尾说明：" + str(error)
                 if max_chars:
                     correction = correction[:300]
                     prompt = prompt[:max_chars - len(correction)] + correction
