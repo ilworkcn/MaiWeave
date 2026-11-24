@@ -303,7 +303,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                 "留空时从人设提取，人设未提及身份就写未设定，duties填空数组。"
                 "上学、上课、实验、论文和组会用study；只有明确的职业排班用work。学生按具体学段和专业安排，"
                 "各类身份都可有自己的作息。自由接单或没有固定时段可留空。将相同时间的星期合并，最多四条，时段互不重叠。"
-                "优先选合适的已有地点，也可写学校或单位。只返回JSON，name是身份全称，duties为数组，"
+                "优先沿用符合身份的已有地点和具体校名。新课程地点随学段和活动命名，例如小学、中学、大学教学楼、大学实验室；学段未知可写学校。只返回JSON，name是身份全称，duties为数组，"
                 "每条含kind、title、location、weekdays（周一0至周日6）、start_time（HH:MM）、duration_minutes。"
                 f"手填身份={setting}；{await self.continuity.work_background()}；已有地点={places}"
             )
@@ -797,7 +797,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.13.0\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.13.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

@@ -74,6 +74,17 @@ class Rhythm:
         for duty in identity.duties:
             if duty.kind in existing:
                 continue
+            if duty.kind == "study" and duty.location in {"学校", "校园"}:
+                role = setting or identity.name
+                for terms, campus in (
+                    (("小学", "小学生"), "小学"),
+                    (("高中", "高一", "高二", "高三"), "高中"),
+                    (("初中", "初一", "初二", "初三", "中学"), "中学"),
+                    (("大学", "本科", "大一", "大二", "大三", "大四", "研究生", "硕士", "博士"), "大学"),
+                ):
+                    if any(term in role for term in terms):
+                        duty = duty.model_copy(update={"location": campus})
+                        break
             if duty.location not in places:
                 place = self.spatial.save_place(duty.location, False, duty.title)
                 self.spatial.save_route("street", place["id"], 15, "步行")

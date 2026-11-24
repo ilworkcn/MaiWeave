@@ -65,12 +65,13 @@ async def test_weekly_class_handoff(plugin, monkeypatch):
             assert not p.store.all("activity_memory")[-1]["next_action"]
 
 
-@pytest.mark.parametrize(("identity", "lesson"), [
-    ("小学四年级学生", "自然课"), ("初中二年级学生", "几何课"),
-    ("建筑学本科生", "设计课"), ("材料学硕士研究生", "材料实验"),
-    ("研究海洋生态的博士生", "浮游生物课题组会"),
+@pytest.mark.parametrize(("identity", "lesson", "campus"), [
+    ("小学四年级学生", "自然课", "小学"), ("初中二年级学生", "几何课", "中学"),
+    ("高二学生", "物理课", "高中"), ("高中一年级学生", "化学课", "高中"),
+    ("建筑学本科生", "设计课", "大学"), ("材料学硕士研究生", "材料实验", "大学"),
+    ("研究海洋生态的博士生", "浮游生物课题组会", "大学"),
 ])
-async def test_personal_timetable(plugin, monkeypatch, identity, lesson):
+async def test_personal_timetable(plugin, monkeypatch, identity, lesson, campus):
     p = plugin
     p.worker.cancel()
     await asyncio.gather(p.worker, return_exceptions=True)
@@ -88,6 +89,8 @@ async def test_personal_timetable(plugin, monkeypatch, identity, lesson):
     p.rhythm.materialize(at)
     plans = [r for r in p.store.all("plan") if r["title"] == lesson]
     assert plans and all(r["kind"] == "study" and r["pay"] == 0 for r in plans)
+    assert {plan["location"] for plan in plans} == {campus}
+    assert campus in {place["name"] for place in p.store.all("place")}
     assert identity in p.get_webui_config_schema()["sections"]["profile"]["fields"]["occupation"]["hint"]
     p.config.life.occupation = "古籍修复师"
     ask.return_value = Occupation(name="修复师", duties=[duty.model_copy(update={"title": "修复室值班", "kind": "work"})])
