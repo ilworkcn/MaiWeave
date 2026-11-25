@@ -1,0 +1,31 @@
+name: 检查 Issue 提交模板
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  check-template:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            if (['OWNER', 'MEMBER', 'COLLABORATOR'].includes(issue.author_association)) return;
+
+            // 两种表单分别自带分类标签，必填项由 GitHub 表单校验。
+            const categories = ['bug | 问题', 'enhancement | 功能建议'];
+            if (issue.labels.some(label => categories.includes(label.name))) return;
+
+            const { owner, repo } = context.repo;
+            const target = { owner, repo, issue_number: issue.number };
+            await github.rest.issues.addLabels({ ...target, labels: ['P∞ | 不处理'] });
+            await github.rest.issues.createComment({
+              ...target,
+              body: `请从[反馈入口](https://github.com/${owner}/${repo}/issues/new/choose)选择「问题反馈」或「功能建议」，把内容填进对应表单重新提交。这条先关闭。`,
+            });
+            await github.rest.issues.update({ ...target, state: 'closed', state_reason: 'not_planned' });
