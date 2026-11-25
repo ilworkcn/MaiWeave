@@ -2,7 +2,7 @@
 
 [文档目录](README.md) · [使用手册](使用手册.md) · [配置指南](配置指南.md)
 
-其他 MaiBot 插件可以通过这两个接口读取麦麦的生活状态，用来显示近况，或判断自己的交流任务适合在什么时候进行。
+其他 MaiBot 插件可以读取麦麦的生活状态、交流判断和人物关系，用来显示近况，或判断自己的交流任务适合在什么时候进行。
 
 **接口只负责查询。** 调用会读取已有记录，结合当前时间返回结果。日程推进、睡眠唤醒、模型请求和消息发送由各自原有功能执行；调用方收到的“允许”或“暂缓”也是一份查询结果。
 
@@ -14,8 +14,20 @@
 | --- | --- | --- |
 | 当前活动、下一项安排、地点、精力、心情和睡眠 | `ilworkcn.maiweave.get_life_status` | 无 |
 | 当前生活状态是否适合普通对话或主动交流 | `ilworkcn.maiweave.evaluate_behavior` | `behavior` |
+| 指定聊天对象与麦麦的关系 | `ilworkcn.maiweave.get_relationship` | `session_id`、`user_id` |
 
-两个接口的调用版本都是字符串 `"1"`，返回字典中的 `version` 为整数 `1`。查询的是角色共享的生活状态，群聊和私聊读取同一份数据，调用时无需传聊天流 ID 或用户 ID。
+接口版本传字符串 `"1"`。生活状态与交流判断由角色共享。查询关系时传入宿主聊天流 ID 和该对象的平台用户 ID。
+
+## 查询人物关系
+
+```python
+relation = await self.ctx.api.call(
+    "ilworkcn.maiweave.get_relationship", version="1",
+    session_id=session_id, user_id=user_id,
+)
+```
+
+`found` 表示是否已有关系资料或互动分数。关系称呼见 `relationship`，有效等级见 `intimacy`（0 至 3）和 `intimacy_label`（普通、熟悉、亲近、亲密）。关联到同一人物的资料可以跨聊天使用，手动设置的等级优先。`scores` 返回这个聊天中积累的熟悉度 `familiarity`、信任度 `trust` 和亲近度 `closeness`。尚无本聊天分数时为 `null`。首次查询陌生人返回 `found: false`，各关系字段为 `null`。
 
 ## 在插件中调用
 

@@ -18,10 +18,10 @@ from .config import MaiWeaveConfig
 from .core.engine import LifeEngine, public_plan, read_life_status
 from .life.living import Living
 from .integrations.memory import NativeMemory
-from .integrations.life_images import LifeImages, current_image_candidates, distinct_image_calls
+from .integrations.life_images import LifeImages, asks_progress, asks_selfie, deferred_picture, incoming_photo_message, current_image_candidates, distinct_image_calls
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
-from .integrations.chat_context import ChatContext, discovered_tools
+from .integrations.chat_context import ChatContext, discovered_tools, without_sleep_tail
 from .integrations.chat_schedule import ChatSchedule
 from .core.retention import Retention
 from .integrations.share_receipts import planner_task, output_summary
@@ -94,6 +94,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             result = await self.ui_image_test()
             text = "测试失败：" + result["error"] if result["error"] else "测试完成：" + result["status"]
             text += f" · 总用时 {self._image_test_seconds:.1f} 秒"
+            if result["returned_size"]:
+                text += f" · 请求 {result['requested_size']} · 返回 {result['returned_size']}"
             tone = "error" if result["error"] else "success"
         if visible:
             text += f" · 测试时间 {self._image_test_date}"
@@ -128,7 +130,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ("quota", "proactive", "每日发送额度", "生活分享和提醒共用额度，约好在到站或完事后回你的消息单独计。", ["daily_limit"]),
         ]
         groups += [
-            ('image_service', 'diary', '图片生成服务', '空间随笔与聊天共用此接口。', ['image_service_enabled', 'image_base_url', 'image_api_key', 'image_model', 'image_reference_protocol']),
+            ('image_service', 'diary', '图片生成服务', '空间随笔与聊天共用此接口。', ['image_service_enabled', 'image_base_url', 'image_api_key', 'image_model', 'image_size', 'image_custom_size', 'image_reference_protocol']),
             ('image_use', 'diary', '图片用途', '选择聊天与空间的配图用途。', ['chat_images_enabled', 'image_enabled']),
             ('diary', 'diary', '生活日记', '安排写日记，整理空间随笔。', ['enabled', 'publish_mode', 'publish_visibility']),
             ('model_default', 'life', '默认生活模型', '各功能选择跟随默认时使用此任务。', ['model_task']),
@@ -374,8 +376,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         if not self.config.life.enabled:
             raise ValueError("MaiWeave 已停用，请先启用生活引擎")
 
-    def start_job(self, label, coroutine) -> dict:
-        record = {"id": uuid4().hex[:12], "label": label, "status": "进行中", "error": "", "created_at": self.now().isoformat()}
+    def start_job(self, label, coroutine, *, job_id=None) -> dict:
+        record = {"id": job_id or uuid4().hex[:12], "label": label, "status": "进行中", "error": "", "created_at": self.now().isoformat()}
         with self.store.db:
             self.store.put("job", record)
         async def run():
@@ -435,13 +437,19 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             kwargs["tool_definitions"] = [t for t in kwargs["tool_definitions"] if t is not followup_tool]
         if "tool_definitions" in kwargs:
             self.life_images.planner_actions[session] = ()
-            kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], kwargs["session_id"], kwargs["items"])
         if not self.config.life.enabled:
+            if "tool_definitions" in kwargs:
+                kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"])
             return {"action": "continue", "modified_kwargs": kwargs}
         if "tool_definitions" in kwargs:
             kwargs["tool_definitions"] = discovered_tools(kwargs["items"], kwargs["tool_definitions"], self.searchable_tools)
+            kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"])
         task = planner_task(kwargs["items"])
-        kwargs["items"] = current_image_candidates(kwargs["items"])
+        if task:
+            self.chat_context.proactive_turns.add(session)
+        else:
+            self.chat_context.proactive_turns.discard(session)
+        kwargs["items"] = current_image_candidates(kwargs["items"], lambda mid: self.life_images.sent_image(session, mid))
         if task and "tool_definitions" in kwargs:
             # 主动分享由发送回执按选定话题配图。
             kwargs["tool_definitions"] = [t for t in kwargs["tool_definitions"]
@@ -465,6 +473,32 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         if wake_user is not None and self.chat_context.kinds.get(session) == "private":
             self.living.wake_for_private_turn(session, self.now(), wake_user)
         self.chat_context.topics[session] = text
+        message_id, photo_text = incoming_photo_message(kwargs["items"])
+        if text and text in photo_text:
+            photo_text = text
+        if task or not message_id:
+            self.life_images.turn_notes.pop(session, None)
+        elif (self.config.diary.chat_images_enabled and self.chat_context.kinds.get(session) != "group"
+              and not self.living.quiet_sleep(self.now(), session)):
+            mode = self.life_images.prepare_request(session, message_id, photo_text, self.now(), self.start_job)
+            pending = self.life_images.pending_requests
+            if (not mode and asks_progress(photo_text) and asks_progress(photo_text, standalone=True)
+                    and any(stream == session for stream, _ in pending)):
+                note = "还在出图，好了发你。"
+                self.life_images.turn_notes[session] = (message_id, photo_text, note, "进度")
+                delivery = await self.ctx.send.text(note, session, return_details=True,
+                    storage_message=True, sync_to_maisaka_history=True)
+                mode = "进度" if delivery["sent"] else "查询"
+                self.life_images.turn_notes[session] = (message_id, photo_text, note, mode)
+            if mode in {"发送", "进度"}:
+                kwargs["tool_definitions"] = [t for t in kwargs.get("tool_definitions", [])
+                                              if t.get("function", {}).get("name") in {"wait", "stop"}]
+            elif mode or asks_progress(photo_text):
+                kwargs["tool_definitions"] = [t for t in kwargs.get("tool_definitions", [])
+                                              if t.get("function", {}).get("name") not in {"maiweave_show_life", "tool_search"}]
+            elif deferred_picture(photo_text):
+                kwargs["tool_definitions"] = [t for t in kwargs.get("tool_definitions", [])
+                                              if t.get("function", {}).get("name") != "maiweave_show_life"]
         book_id = self.books.mentioned_book(text)
         if book_id:
             self.chat_books[session] = book_id
@@ -496,6 +530,15 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     async def planner_receipt(self, session_id: str, output_items: list, **kwargs):
         original_items = output_items
         output_items = distinct_image_calls(output_items, self.life_images.planner_actions.pop(session_id, None))
+        note = self.life_images.turn_notes.get(session_id)
+        if (note and note[3] == "发送" and asks_selfie(note[1])
+                and note[1] == self.chat_context.messages.get(session_id)
+                and session_id not in self.chat_context.proactive_turns):
+            # 自拍任务负责回图或报错，本次单独要自拍的来信已经处理完毕。
+            output_items = [{"item_type": "FunctionCallItem",
+                "meta": {"item_id": uuid4().hex, "logical_turn_id": None, "timestamp": self.now().isoformat()},
+                "tool_call": {
+                "call_id": uuid4().hex, "func_name": "wait", "args": {}}}]
         self.living.receipts.observe(session_id, output_items)
         self.presence.observe_planner(session_id, output_items, self.now())
         self.living.observe_farewell(session_id, output_items, self.now())
@@ -514,8 +557,30 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         book_id = self.books.mentioned_book(kwargs.get("reply_reason", "")) or self.chat_books.get(session, "")
         await self.chat_context.identify(session)
         text = self.chat_context.topics.get(session, "") + " " + kwargs.get("reply_reason", "")
-        kwargs["extra_prompt"] += self.context_text(session, book_id, text, "回复")
+        closing = ""
+        incoming = self.chat_context.messages.get(session, "")
+        if (kwargs.get("request_type") == "maisaka.replyer" and self.chat_context.kinds.get(session) == "private"
+                and session not in self.chat_context.proactive_turns and incoming
+                and not re.search(r"睡|困|晚安|熬夜|休息|累|晚了|早安|作息|道别|再见|明天见|晚点聊", incoming)
+                and not self.living.farewell(self.now())):
+            topic = incoming.strip()[:120]
+            closing = f"\n本轮接话：对方说「{topic}」。直接给对方想要的答案，说完就收住。"
+            kwargs["reply_tool_args"] = {**kwargs.get("reply_tool_args", {}), "maiweave_topic_reply": topic}
+        kwargs["extra_prompt"] += self.chat_context.build(session, book_id, text, "回复", closing=closing)
         return {"action": "continue", "modified_kwargs": kwargs}
+
+    @HookHandler("maisaka.replyer.after_response")
+    async def trim_sleep_signoff(self, response: str, reply_tool_args: dict, **kwargs):
+        """普通私聊保留话题正文，去掉模型额外补上的催睡尾句。"""
+        topic = reply_tool_args.get("maiweave_topic_reply")
+        if topic:
+            body = without_sleep_tail(response)
+            if body and body != response:
+                return {"action": "continue", "modified_kwargs": {**kwargs, "reply_tool_args": reply_tool_args, "response": body}}
+            if response and not body and not kwargs.get("retry_count", 0):
+                return {"action": "continue", "modified_kwargs": {**kwargs, "reply_tool_args": reply_tool_args, "response": response,
+                    "retry": True, "retry_reason": f"上一句只顾催对方，漏答了「{topic}」。请用一句话回答这件事。"}}
+        return {"action": "continue"}
 
     @Tool("maiweave_wallet", description="查日常收支用list；私聊还能查余额和本次聊天的借还。payments是已经入账的收支，正数为收入、负数为支出。对方明确借出用lend、赠送用give、以后再给用promise、拒绝用decline。车费看list的commutes，按最晚出发时间判断能否赶上。用对应id办理，金额沿用差额。", parameters=schema({
         "action": {"type": "string", "enum": ["list", "lend", "give", "promise", "decline"]},
@@ -797,12 +862,28 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.13.1\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.13.2\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"
         )
         return await self.ctx.send.text(message, session, storage_message=False, sync_to_maisaka_history=False)
+
+    @API("get_relationship", description="只读查询指定聊天对象与麦麦的关系", version="1", public=True)
+    async def get_relationship(self, session_id: str, user_id: str) -> dict:
+        if not session_id.strip() or not user_id.strip():
+            raise ValueError("请指定聊天流和用户")
+        identity, profiles = self.living.relationship_profiles(session_id, user_id)
+        profile = next((p for p in profiles if p.get("intimacy_mode") == "manual"), profiles[0] if profiles else {})
+        local = self.store.find("relationship", f"{session_id}:{user_id}")
+        found = bool(profile or local)
+        if identity and not found:
+            found = any(self.store.find("relationship", f"{link['session_id']}:{user_id}")
+                        for link in self.store.all("identity") if link["person_id"] == identity)
+        level = self.living.intimacy(session_id, user_id) if found else None
+        return {"version": 1, "found": found, "relationship": profile.get("relationship"),
+                "intimacy": level, "intimacy_label": ("普通", "熟悉", "亲近", "亲密")[level] if found else None,
+                "scores": {k: local[k] for k in ("familiarity", "trust", "closeness")} if local else None}
 
     @API("get_life_status", description="只读查询当前生活状态", version="1", public=True)
     async def get_life_status(self) -> dict:

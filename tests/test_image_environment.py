@@ -29,6 +29,8 @@ async def test_environment_reaches_prompt_and_image(plugin, monkeypatch, locatio
     assert '白色毛衣' in prompt and '室外气温仅供出门参考' in prompt
     llm=p.ctx.llm.generate.call_args.args[0]
     assert expected in llm and '白色毛衣' in llm
+    stamp = "本次生成时间：" + now.isoformat(timespec="minutes")
+    assert stamp in llm and stamp in prompt
     weather(p,now,30)
     await p.life_images.send(event['id'],'chat-a',now)
     assert request.call_count==1
@@ -70,3 +72,16 @@ async def test_new_trial_refreshes_weather(plugin,monkeypatch):
     await asyncio.gather(*list(p.jobs))
     second=p.store.get('image_test','latest')['image_environment']
     assert '-8' in first and '30' in second and '-8' not in second
+
+async def test_current_mirror_selfie_uses_current_time_and_visible_phone(plugin, monkeypatch):
+    now, event = setup(plugin, monkeypatch)
+    images = plugin.life_images.images
+    event["occurred_at"] = (now - timedelta(days=2)).isoformat()
+    images.put("experience", event)
+    request = Mock(return_value=(PNG, {}))
+    monkeypatch.setattr(type(images), "request", lambda self, *args: request(*args))
+    await plugin.life_images.send(event["id"], "chat-a", now, framing="现在拍一张对镜自拍")
+    prompt = request.call_args.args[0]
+    assert "拍摄时间：" + now.isoformat() in prompt
+    assert "手机和倒影一起入镜" in prompt
+    assert "设备和持机手处于画外" not in prompt

@@ -6,6 +6,31 @@ from maiweave.core.models import PlanInput
 from test_plugin import plugin
 
 
+@pytest.mark.parametrize("message,kind,proactive,trim", [
+    ("丝带配什么颜色", "maisaka.replyer", False, True),
+    ("我想看看你", "maisaka.replyer", False, True),
+    ("我想睡了，晚安", "maisaka.replyer", False, False),
+    ("丝带配什么颜色", "maisaka.replyer", True, False),
+    ("丝带配什么颜色", "plugin.replyer", False, False),
+])
+async def test_only_unsolicited_private_signoff_is_trimmed(plugin, message, kind, proactive, trim):
+    plugin.chat_context.kinds["a"] = "private"
+    plugin.chat_context.messages["a"] = message
+    if proactive:
+        plugin.chat_context.proactive_turns.add("a")
+    prepared = await plugin.reply_context(session_id="a", request_type=kind, extra_prompt="", reply_tool_args={})
+    args = prepared["modified_kwargs"]["reply_tool_args"]
+    for tail in ("看完赶紧睡", "快睡", "赶紧睡吧真的", "你也早点去睡吧！",
+                 "你是不是根本不想睡，就找个话头反复问", "这回看完就闭眼睡，别再绕了"):
+        result = await plugin.trim_sleep_signoff("米白或者银灰。\n" + tail, args)
+        assert result.get("modified_kwargs", {}).get("response") == ("米白或者银灰。" if trim else None)
+    for text in ("我也快睡着了", "书签上写着「早点睡」。", "米白或者银灰。"):
+        assert await plugin.trim_sleep_signoff(text, args) == {"action": "continue"}
+    result = await plugin.trim_sleep_signoff("你是不是根本不想睡，就找个话头反复问", args)
+    assert bool(result.get("modified_kwargs", {}).get("retry")) == trim
+    assert await plugin.trim_sleep_signoff("赶紧睡吧", args, retry_count=1) == {"action": "continue"}
+
+
 def prepare(plugin, hour=23):
     now = plugin.now().replace(hour=hour, minute=0, second=0, microsecond=0)
     plugin.now = lambda: now
@@ -49,6 +74,14 @@ async def test_segments_finish_before_sleep(plugin, hour, success):
     assert plugin.living.quiet_sleep(now)
     assert plugin.engine.current(now)["kind"] == "sleep"
     assert await plugin.sleep_before_send({"session_id": "private"}) == {"action": "abort"}
+
+
+async def test_farewell_keeps_window_for_host_text_tool(plugin):
+    now = prepare(plugin)
+    await plugin.planner_receipt("private", [{"item_type": "AssistantMessageItem",
+        "parts": [{"type": "text", "text": 'reply({"after_reply":"stop"})'}]}])
+    assert await plugin.sleep_before_send({"session_id": "private"}) == {"action": "continue"}
+    assert plugin.living.quiet_sleep(now + timedelta(minutes=5), "private")
 
 
 @pytest.mark.parametrize("outcome", ["silent", "stop", "wait", "timeout"])

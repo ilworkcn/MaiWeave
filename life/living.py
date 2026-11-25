@@ -53,11 +53,15 @@ class Living:
                         if p["session_id"] == session and p["user_id"] == user and p.get("person_id")), {})
         return profile.get("person_id", "")
 
-    def intimacy(self, session, user, *, person_id=""):
+    def relationship_profiles(self, session, user, person_id=""):
         identity = person_id or self.person_key(session, user)
         profiles = [p for p in self.engine.store.all("profile") if
                     (identity and p.get("person_id") == identity) or
                     ((not identity or not p.get("person_id")) and p["session_id"] == session and p["user_id"] == user)]
+        return identity, profiles
+
+    def intimacy(self, session, user, *, person_id=""):
+        identity, profiles = self.relationship_profiles(session, user, person_id)
         profile = next((p for p in profiles if p.get("intimacy_mode") == "manual"), profiles[0] if profiles else {})
         level = profile.get("intimacy", 0)
         if profile.get("intimacy_mode") != "manual":
@@ -148,7 +152,10 @@ class Living:
             return
         calls = {item["tool_call"]["call_id"]: item["tool_call"]["func_name"] for item in items
                  if item.get("item_type") == "FunctionCallItem"}
-        if not calls and not row.get("farewell_calls"):
+        # 宿主还会从正文解析工具。此时保留告别时段，让后续回复和分段发送完成。
+        has_body = any(item.get("item_type") == "AssistantMessageItem" and
+                       any(part.get("text", "").strip() for part in item.get("parts", [])) for item in items)
+        if not calls and not has_body and not row.get("farewell_calls"):
             self.finish_farewell(now)
         elif any(name in {"reply", "send_emoji", "stop", "wait"} for name in calls.values()):
             with self.engine.store.db:

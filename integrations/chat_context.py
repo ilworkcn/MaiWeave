@@ -7,14 +7,24 @@ from copy import deepcopy
 from ..core.engine import work_now
 
 
+def without_sleep_tail(text):
+    """普通话题答完后，识别另起一句的催睡或追问睡意。"""
+    boundary = r"(?:^|(?<=[。，！？、,.!?；;|\s]))"
+    signoff = (r"(?:你(?:也)?|这回|看完|说完|好了|真的|行了|现在|就)*"
+               r"(?:赶紧睡|赶快睡|快点睡|早点(?:去)?睡|快(?:去)?睡|乖乖睡|去睡|闭眼睡|睡觉吧|别熬夜|晚安)"
+               r"|你[^，,。！？!?\n「」“”]{0,12}(?:不想睡|不打算睡|还不睡|不肯睡|睡不睡|还没睡)")
+    match = re.search(boundary + "(?:" + signoff + r")(?!莲|衣|袋|帽|着)"
+                      + r"[^「」“”\n。！？!?]*(?:[。！？!?…\s]*)$", text)
+    return text[:match.start()].rstrip("，,、；;| \n") if match else text
+
+
 GUIDE = (
     "\n【MaiWeave 当前生活】\n"
     "时间参照 now、timezone；计划是安排，simulated 为模拟，reported 为陈述，observed 为观测。"
     "用 maiweave 工具保存变化；记录查 maiweave_query，人物历史查 query_memory。"
     "资料冲突说明修改 ID，明确同意后用 maiweave_confirm_change。"
     "sleep_policy.quiet=true时静默。睡眠中需要陪伴用maiweave_wake，awake=true后回应，false结束本轮。提供reply时用它发送，after_reply=stop为发送后结束。"
-    "energy<=25简短接话，普通休息照常聊。对方讲自己的事就顺着那件事聊，你的状态体现在口气里；问起你时再聊你的近况。"
-    "bedtime是你的睡点。困了先道别，双方都困就互道晚安。"
+    "energy<=25简短接话，普通休息照常聊。作息和疲倦描述的是你自己。对方换了话题就顺着新话题聊，口气随你的状态变化。"
     "person_states 是当时近况，same_chat=false 时承接近况。"
     "读书沿用书名和笔记，原文与感想分别表述；查笔记用 maiweave_books 的 notes、book_id，安排阅读填 book_id。"
     "跨地点用 maiweave_space 查路线，目标填 goal_step_id；梦境说梦见，资讯带出处。\n"
@@ -104,6 +114,7 @@ class ChatContext:
         self.kinds = {}
         self.topics = {}
         self.messages = {}
+        self.proactive_turns = set()
         self.speakers = {}
         self.wake_candidates = {}
         self.recent = deque(maxlen=10)
@@ -113,12 +124,12 @@ class ChatContext:
             streams = await self.plugin.ctx.chat.get_all_streams(platform="all_platforms")
             self.kinds.update({s["stream_id"]: "group" if s.get("group_id") or s.get("is_group_session") else "private" for s in streams})
 
-    def build(self, session, book_id="", text="", stage="Planner", *, followup_ids=None):
+    def build(self, session, book_id="", text="", stage="Planner", *, followup_ids=None, closing=""):
         p = self.plugin
         cfg, now = p.config.context, p.now()
         group = self.kinds.get(session) == "group"
         mode = {1: "精简", 2: "均衡", 3: "丰富"}[cfg.group_mode if group else cfg.private_mode]
-        budget = cfg.group_chars if group else cfg.private_chars
+        budget = (cfg.group_chars if group else cfg.private_chars) - len(closing)
         count, chars = {"精简": (1, 180), "均衡": (3, 300), "丰富": (6, 600)}[mode]
         engine, store = p.engine, p.store
         state = engine.advance(now)
@@ -132,6 +143,21 @@ class ChatContext:
                     "state": {k: state[k] for k in ("location", "energy", "mood")}, "current": current,
                     "sleep_policy": {"sleeping": p.living.sleeping(now), "quiet": p.living.quiet_sleep(now, session), "mode": "按作息生活" if p.config.life.schedule_enabled else "全天候交流",
                                      "awake_until": awake.isoformat() if awake else ""}}
+        from .life_images import asks_progress
+        incoming = self.messages.get(session, text)
+        note = p.life_images.turn_notes.get(session)
+        if note and note[1] == incoming:
+            snapshot["本次配图"] = note[2]
+        elif asks_progress(incoming):
+            if any(stream == session for stream, _ in p.life_images.pending_requests):
+                snapshot["本聊天的图片"] = "尚未送达，完成后自动发送。回答催图可说「好了发你」。"
+            else:
+                receipts = [r for r in store.all("image_delivery") if r["session_id"] == session]
+                if receipts:
+                    latest = max(receipts, key=lambda r: r["at"])
+                    snapshot["本聊天的图片"] = latest["status"] + "，时间 " + latest["at"]
+        elif stage == "回复" and any(stream == session for stream, _ in p.life_images.pending_requests):
+            snapshot["接话"] = "之前的配图由后台继续处理。这条回复只聊对方刚说的内容。"
         bedtime = p.living.bedtime(now)
         if bedtime:
             snapshot["sleep_policy"].update(bedtime=bedtime.isoformat(timespec="minutes"),
@@ -320,16 +346,16 @@ class ChatContext:
                     snapshot = candidate
                     break
             else:
-                omitted.append(LABELS[key])
-        sections = [{"category": LABELS[key], "chars": len(dump({key: value})) - 1}
-                    for key, value in snapshot.items() if key in LABELS]
+                omitted.append(LABELS.get(key, key))
+        sections = [{"category": LABELS.get(key, key), "chars": len(dump({key: snapshot[key]})) - 1}
+                    for _, key, _ in candidates if key in snapshot]
         if stage == "Planner":
             if followup_ids is not None:
                 followup_ids.extend(row["id"] for row in snapshot.get("shared_topics", []))
             p.presence.offered_context(session, self.speakers.get(session, ""), now, bool(snapshot.get("encounters") and snapshot["encounters"][0].get("stage") == "群里遇见"))
-        result = GUIDE + dump(snapshot)
+        result = GUIDE + dump(snapshot) + closing
         self.recent.appendleft({"at": now.strftime("%m-%d %H:%M:%S"), "session": session,
-            "chat": "群聊" if group else "私聊", "stage": stage, "mode": mode, "chars": len(result), "budget": budget,
+            "chat": "群聊" if group else "私聊", "stage": stage, "mode": mode, "chars": len(result), "budget": budget + len(closing),
             "detail": "；".join([f"规则与当前状态 {base_chars} 字符（{base_chars / len(result):.0%}）", *[f"{s['category']} {s['chars']} 字符（{s['chars'] / len(result):.0%}）" for s in sections]]),
             "omitted": "、".join(omitted) or "无", "sections": sections, "base_chars": base_chars})
         return result

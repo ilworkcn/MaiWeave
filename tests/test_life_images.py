@@ -30,7 +30,7 @@ def test_previous_candidate_lookup_is_removed_as_a_pair():
         return {"item_type": "FunctionCallOutputItem", "call_id": key, "output": "{}"}
     message = {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": "<message >这样呀"}]}
     keep = [call("photo", "send"), output("photo"), message, call("now", "list"), output("now")]
-    assert current_image_candidates([call("old", "list"), output("old"), *keep]) == keep
+    assert current_image_candidates([call("old", "list"), output("old"), *keep]) == keep[2:]
 
 
 def test_planner_stops_offering_images_after_accepted_send():
@@ -45,6 +45,8 @@ def test_planner_stops_offering_images_after_accepted_send():
     assert image_request_stage(items) == "sent"
     assert image_request_stage([*items, message('<message msg_id="image-1" user="麦麦">[图片]')],
                                  lambda mid: mid == "image-1") == "sent"
+    echoed = [*items, message('<message msg_id="image-1" user="麦麦">[图片]')]
+    assert current_image_candidates(echoed, lambda mid: mid == "image-1") == echoed
     assert not image_request_stage([*items, message('<message msg_id="3">再发一次')])
     assert not image_request_stage([*items, message('<plugin_proactive_task id="next">')])
 
@@ -102,6 +104,7 @@ async def test_planner_repeating_list_across_rounds(plugin, monkeypatch):
 async def test_same_picture_reaches_chat_once(plugin, monkeypatch, mode, first):
     p = plugin
     now, event = setup(p, monkeypatch)
+    monkeypatch.setattr(p.life_images, "short_wait", 0.01)
     row = {"id": "share", "session": "chat-a", "created": now.isoformat(), "sent_at": now.isoformat(),
            "outcome": "实际已发送", "mode": mode, "experience_id": event["id"], "image_requested": True}
     with p.store.db:
@@ -155,6 +158,18 @@ async def test_auto_image_uses_only_matching_deliveries(plugin, monkeypatch):
         p.store.put("share_receipt", row)
     await p.living.share_images(later)
     assert p.ctx.send.image.await_count == 3
+
+
+async def test_accepted_selfie_finishes_current_request(plugin):
+    p = plugin
+    p.life_images.turn_notes["chat-a"] = ("msg-a", "我想看看你", "已接单", "发送")
+    p.chat_context.messages["chat-a"] = "我想看看你"
+    reply = [{"item_type": "FunctionCallItem", "tool_call": {"call_id": "reply1", "func_name": "reply", "args": {}}}]
+    done = await p.planner_receipt("chat-a", reply)
+    assert [i["tool_call"]["func_name"] for i in done["modified_kwargs"]["output_items"]] == ["wait"]
+    assert done["modified_kwargs"]["output_items"][0]["meta"]["item_id"]
+    p.chat_context.messages["chat-a"] = "这张图是在哪拍的？"
+    assert await p.planner_receipt("chat-a", reply) == {"action": "continue"}
 
 
 def setup(p, monkeypatch, session="chat-a"):
@@ -329,3 +344,97 @@ async def test_successful_list_offers_only_send_until_next_message(plugin, monke
     assert definitions([tool], "chat-a", [call, {**result, "output": '{"items":[]}'}]) == []
     new = {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": '<message msg_id="new">我想看看你'}]}
     assert definitions([tool], "chat-a", [call, result, new]) == [tool]
+
+async def test_finished_dish_before_recent_unrelated_events(plugin, monkeypatch):
+    p = plugin
+    now, _ = setup(p, monkeypatch)
+    def event(summary, offset, session="chat-a"):
+        at = now + timedelta(minutes=offset)
+        return p.engine.record_experience(ExperienceInput(summary=summary, source="simulated",
+            occurred_at=at.isoformat(), evidence="活动结束"), session, at)
+    dish = event("做完番茄炒蛋，盛在白瓷碗里", -60)
+    private_dish = event("做完番茄炒蛋，盛在蓝碗里", -1, "chat-b")
+    for i in range(12):
+        event("整理书桌和工具", -i)
+    result = await p.show_life("list", framing="番茄炒蛋做好了是什么样？", stream_id="chat-a")
+    first = result["items"][0]
+    assert first["id"] == dish["id"] and not first["has_image"]
+    assert first["action_hint"] == "可根据这段经历生成"
+    assert private_dish["id"] not in {item["id"] for item in result["items"]}
+    sent = await p.show_life("send", dish["id"], stream_id="chat-a")
+    assert sent["status"] == "已发送"
+    p.ctx.send.image.assert_awaited_once()
+
+async def test_reply_knows_which_chat_is_waiting_for_a_photo(plugin):
+    plugin.life_images.pending_requests.add(("private-a", "dish"))
+    for session, waiting in [("private-a", True), ("private-b", False)]:
+        plugin.chat_context.messages[session] = "照片好了吗？"
+        result = await plugin.reply_context(session_id=session, reply_reason="聊聊刚做好的菜", extra_prompt="")
+        assert ("尚未送达" in result["modified_kwargs"]["extra_prompt"]) == waiting
+
+    plugin.chat_context.messages["private-a"] = "书签选薄荷绿还是栗子棕？"
+    result = await plugin.reply_context(session_id="private-a", reply_reason="图片仍在生成", extra_prompt="")
+    assert "尚未送达" not in result["modified_kwargs"]["extra_prompt"]
+
+
+async def test_short_progress_question_gets_one_delivery_receipt(plugin):
+    p = plugin
+    p.config.diary.chat_images_enabled = True
+    p.config.life.schedule_enabled = False
+    p.life_images.pending_requests.add(("chat-a", "dish"))
+    p.ctx.send.text.return_value = {"sent": True}
+    for _ in range(2):
+        items = [{"item_type": "UserMessageItem", "parts": [
+            {"type": "text", "text": '<message msg_id="progress">图好了吗？</message>'}]}]
+        await p.planner_context(session_id="chat-a", items=items, tool_definitions=[])
+    p.ctx.send.text.assert_awaited_once()
+
+
+async def test_reconstruct_finished_shift_once(plugin, monkeypatch):
+    p = plugin
+    now, _ = setup(p, monkeypatch)
+    at = (now - timedelta(days=1)).replace(hour=10)
+    event = p.engine.record_experience(ExperienceInput(summary="在公司办公室核对资料", occurred_at=at.isoformat(),
+        evidence="上午工作已完成", source="simulated"), "chat-a", now)
+    images = p.life_images
+    text = "按昨天上午上班的经历给我配一张工位图"
+    assert images.history_request("chat-a", text, now)[0] == event["id"]
+    assert images.history_request("chat-b", text, now)[0] == ""
+    assert images.history_request("chat-a", "明天上午再配一张工位图", now) is None
+    assert images.history_request("chat-a", "昨天上午不用配一张图了", now) is None
+    assert images.history_request("chat-a", "昨天我画了一张工位图", now) is None
+    assert "没有保存" in images.history_request("chat-a", "昨天上午有拍过工位吗", now)[1]
+    p.config.life.schedule_enabled = False
+    p.chat_context.messages["chat-a"] = text
+    for _ in range(3):
+        items = [{"item_type":"UserMessageItem", "parts":[{"type":"text","text":'<message msg_id="qa-one">'+text}]}]
+        result = await p.planner_context(session_id="chat-a",items=items,tool_definitions=[])
+        assert "已接单" in str(result)
+        await asyncio.gather(*list(p.jobs))
+    p.ctx.send.image.assert_awaited_once()
+    assert "生成于" in images.history_request("chat-a", "这张是昨天上午拍的吗", now)[1]
+    images.prepare_request("chat-a", "ask", "昨天上午有拍过工位吗", now, p.start_job)
+    assert images.prepare_request("chat-a", "continue", "按上午的经历配一张", now, p.start_job) == "发送"
+    await asyncio.gather(*list(p.jobs))
+    assert images.prepare_request("chat-a", "selfie", "我想看看你", now, p.start_job) == "发送"
+    await asyncio.gather(*list(p.jobs))
+    assert p.ctx.send.image.await_count == 3
+
+
+async def test_noon_shift_has_ended_before_afternoon_photo(plugin, monkeypatch):
+    p = plugin
+    now, _ = setup(p, monkeypatch)
+    day = (now - timedelta(days=1)).replace(minute=0, second=0, microsecond=0)
+    ids = []
+    for label, start, end, kind in [("上午", 9, 12, "work"), ("下午", 13, 18, "work"), ("通勤", 12, 13, "travel")]:
+        at = day.replace(hour=end)
+        event = p.engine.record_experience(ExperienceInput(summary=f"{label}在公司办公室核对资料",
+            occurred_at=at.isoformat(), source="simulated", evidence="已下班"), "chat-a", now)
+        event["plan_id"] = label
+        with p.store.db:
+            p.store.put("plan", {"id": label, "start": day.replace(hour=start).isoformat(), "title": "办公", "kind": kind})
+            p.store.put("experience", event)
+        ids.append(event["id"])
+    images = p.life_images
+    assert images.history_request("chat-a", "按昨天上班经历配一张工位图", now)[0] == ""
+    assert images.history_request("chat-a", "按昨天下午上班经历配一张工位图", now)[0] == ids[1]
