@@ -26,7 +26,7 @@ def setting(label: str, **kwargs):
 
 class PluginSection(PluginConfigBase):
     __ui_label__ = "插件信息"
-    config_version: str = setting("配置版本", default="0.13.1", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
+    config_version: str = setting("配置版本", default="0.13.2", description="配置结构变更时更新。当前安装的插件版本见页面顶部。", json_schema_extra={"disabled": True})
 
 
 class LifeConfig(PluginConfigBase):
@@ -152,7 +152,15 @@ class DiaryConfig(PluginConfigBase):
     image_base_url: str = setting("生图接口地址（生图必填）", default="https://api.openai.com/v1", description="填写所选图片接口的基础地址；OpenAI 与通义兼容地址通常包含 /v1，Gemini 与 DashScope 填服务根地址。")
     image_api_key: str = setting("生图 API Key（生图必填）", default="", description="填写图片生成服务提供的密钥。", json_schema_extra={"x-widget": "password", "input_type": "password"})
     image_retry_count: int = setting("图片生成重试次数", default=3, ge=0, description="首次请求失败后最多重试的次数，默认 3 次，即最多请求 4 次；0 表示关闭自动重试。每次重试间隔 3 秒，沿用本次提示词和参考图。")
-    image_model: str = setting("生图模型（生图必填）", default="gpt-image-1", description="填写服务实际支持的图片生成模型名称。每次生成一张横向 4:3、1024×768 图片。保存后可点击配置页顶部「测试生图配置」验证。")
+    image_size: Literal["1024x768", "2304x1728", "1728x2304", "2048x2048", "服务默认", "自定义"] = setting("出图尺寸", default="1024x768", description="选择横图、竖图、方图或服务默认尺寸。")
+    image_custom_size: str = setting("自定义宽高", default="2048x2048", description="选择「自定义」时使用，格式为宽x高。", pattern=r"^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}$")
+
+    @property
+    def requested_image_size(self):
+        if self.image_size == "自定义":
+            return self.image_custom_size
+        return "" if self.image_size == "服务默认" else self.image_size
+    image_model: str = setting("生图模型（生图必填）", default="gpt-image-1", description="填写服务实际支持的图片生成模型名称。保存后可点击配置页顶部「测试生图配置」验证。")
     image_character_enabled: bool = setting("启用麦麦角色卡", default=False, description="空间和聊天共用一张角色卡，由提示词模型结合场景决定麦麦是否入镜。")
     image_reference_protocol: Literal["OpenAI 图片编辑", "通义千问兼容接口", "OpenAI Chat 生图", "Gemini 原生", "DashScope 多模态", "Unsloth 原生"] = setting("图片接口格式", default="OpenAI 图片编辑", description="按服务选择请求格式。OpenAI 与通义兼容地址通常包含 /v1；Gemini、DashScope、Unsloth 填服务根地址。Unsloth 使用服务中已加载的图片模型。DashScope 使用同步多模态生图接口。")
     image_character_reference_enabled: bool = setting("使用角色参考图", default=False, description="麦麦入镜时优先参考图片中的外貌，文字角色卡补充细节。请在「角色与图片」页面上传图片，并选择服务支持的参考图接口。")

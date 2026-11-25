@@ -106,3 +106,16 @@ async def test_unsloth_reference_and_authenticated_download(plugin, monkeypatch,
     monkeypatch.setattr(diary_images, "urlopen", respond)
     assert images.request("窗边", images.reference_path if reference else "") == (PNG, {})
     assert len(calls) == 2
+
+@pytest.mark.parametrize("choice,expected", [("自定义", "2560x1440"), ("2048x2048", "2048x2048"), ("服务默认", None)])
+async def test_image_size_config_reaches_provider(plugin, monkeypatch, choice, expected):
+    cfg = plugin.config.diary
+    cfg.image_size = choice
+    cfg.image_custom_size = "2560x1440"
+    encoded = base64.b64encode(PNG).decode()
+    def respond(request, timeout):
+        body = json.loads(request.data)
+        assert body.get("size") == expected
+        return io.BytesIO(json.dumps({"data": [{"b64_json": encoded}]}).encode())
+    monkeypatch.setattr(diary_images, "urlopen", respond)
+    assert plugin.diary_publisher.images.request("成品近景")[0] == PNG

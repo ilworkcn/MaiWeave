@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+from math import gcd
 import io
 import re
 from PIL import Image
@@ -105,10 +106,16 @@ class DiaryImages:
         if category == "experience_image":
             event = self.store.get("experience", row["id"])
             moment = self.engine.time(event["occurred_at"])
+            request = row.get("image_request", "")
+            current_selfie = re.search(r"现在|此刻|这会儿", request) and re.search(r"自拍|看你|本人|对镜", request)
+            if current_selfie:
+                moment = now
+                location = self.engine.state()["location"]
+                parts.append("本次拍摄的是此刻的麦麦。")
             plan = self.store.find("plan", event.get("plan_id", "")) or {}
-            location = event["details"].get("地点", "") or plan.get("location", "")
-            parts.append("经历时间：" + moment.isoformat())
-            if event.get("plan_id"):
+            location = location or event["details"].get("地点", "") or plan.get("location", "")
+            parts.append(("拍摄时间：" if current_selfie else "经历时间：") + moment.isoformat())
+            if event.get("plan_id") and not current_selfie:
                 related = {e["id"] for e in self.store.all("experience")
                            if e.get("plan_id") == event["plan_id"] and e["id"] != event["id"]
                            and self.engine.visible(e, event["session_id"])
@@ -120,6 +127,8 @@ class DiaryImages:
                     parts.append("同一活动已有画面，延续其中的穿着：" + latest["image_prompt"][:600])
         elif category == "diary_publication" and row.get("day", row["id"]) != now.date().isoformat():
             return "回顾场景的环境和穿着取自正文及本次画面描述。"
+        else:
+            parts.append("当前本地时间：" + now.isoformat() + "。正文标明了场景时间时，按正文取景。")
         if location:
             place = next((p for p in self.store.all("place") if location in {p["id"], p["name"]}), None)
             parts.append("经历地点：" + location[:120])
@@ -151,11 +160,12 @@ class DiaryImages:
         with self.store.db:
             self.store.put(category, row)
 
-    def encoded(self, row, size=512):
+    def encoded(self, row, size=None):
         with Image.open(Path(self.ctx.paths.data_dir) / row["image_file"]) as image:
-            image.thumbnail((size, size))
+            if size:
+                image.thumbnail((size, size))
             output = io.BytesIO()
-            image.convert("RGB").save(output, format="JPEG", quality=80)
+            image.convert("RGB").save(output, format="JPEG", quality=80 if size else 90)
         return base64.b64encode(output.getvalue()).decode()
 
     def preview(self, row, size=512):
@@ -242,7 +252,13 @@ class DiaryImages:
 
     def request(self, prompt, reference=""):
         config = self.config.diary
-        payload = {"model": config.image_model, "prompt": prompt, "n": 1, "size": "1024x768"}
+        payload = {"model": config.image_model, "prompt": prompt, "n": 1,}
+        size = config.requested_image_size
+        if size:
+            payload["size"] = size
+            width, height = map(int, size.split("x"))
+            divisor = gcd(width, height)
+            ratio = f"{width // divisor}:{height // divisor}"
         endpoint = self.request_endpoint(bool(reference))
         reference_data = ""
         content_type = "application/json"
@@ -274,12 +290,14 @@ class DiaryImages:
         headers = {"Authorization": "Bearer " + config.image_api_key, "Content-Type": content_type}
         protocol = config.image_reference_protocol
         if protocol == "Unsloth 原生":
-            payload = {"prompt": prompt, "width": 1024, "height": 768, "batch_size": 1}
+            payload = {"prompt": prompt, "batch_size": 1}
+            if size:
+                payload.update(width=width, height=height)
             if reference_data:
                 payload.update(workflow="reference", init_image="data:image/png;base64," + reference_data)
             data = json.dumps(payload).encode()
         elif protocol == "OpenAI Chat 生图":
-            content = [{"type": "text", "text": "请生成一张 4:3 横向图片。" + prompt}]
+            content = [{"type": "text", "text": (f"请生成一张 {ratio} {'横向' if width > height else '竖向' if height > width else '方形'}图片，尺寸 {size}。" if size else "") + prompt}]
             if reference_data:
                 content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + reference_data}})
             data = json.dumps({"model": config.image_model, "messages": [{"role": "user", "content": content}]}).encode()
@@ -287,15 +305,22 @@ class DiaryImages:
             parts = [{"text": prompt}]
             if reference_data:
                 parts.append({"inlineData": {"mimeType": "image/png", "data": reference_data}})
+            generation = {"responseModalities": ["TEXT", "IMAGE"]}
+            if size:
+                image_config = {"aspectRatio": ratio}
+                if max(width, height) >= 2048:
+                    image_config["imageSize"] = "4K" if max(width, height) >= 3840 else "2K"
+                generation["imageConfig"] = image_config
             data = json.dumps({"contents": [{"role": "user", "parts": parts}],
-                               "generationConfig": {"responseModalities": ["TEXT", "IMAGE"],
-                                                    "imageConfig": {"aspectRatio": "4:3"}}}).encode()
+                               "generationConfig": generation}).encode()
             headers = {"x-goog-api-key": config.image_api_key, "Content-Type": "application/json"}
         elif protocol == "DashScope 多模态":
             content = [{"text": prompt}]
             if reference_data:
                 content.append({"image": "data:image/png;base64," + reference_data})
-            parameters = {"n": 1, "size": "1024*768"}
+            parameters = {"n": 1}
+            if size:
+                parameters["size"] = size.replace("x", "*")
             if config.image_negative_prompt.strip() and self.separate_negative():
                 parameters["negative_prompt"] = config.image_negative_prompt.strip()
             data = json.dumps({"model": config.image_model, "input": {"messages": [{"role": "user", "content": content}]},
@@ -377,7 +402,8 @@ class DiaryImages:
         try:
             if "image_environment" not in row:
                 row["image_environment"] = self.environment(category, row, now)
-            environment = row["image_environment"]
+            request_time = now.astimezone(ZoneInfo(self.config.life.timezone)).isoformat(timespec="minutes")
+            environment = f"本次生成时间：{request_time}。画面光线以场景发生时间为准。\n" + row["image_environment"]
             decide_character = (config.image_character_enabled and category != "image_test"
                                 and (bool(supplied_prompt) or "image_character_visible" not in row))
             if not prompt or decide_character:
@@ -400,7 +426,10 @@ class DiaryImages:
             character = self.character_prompt(row.get("image_character_visible", False)) if character_scene else ""
             full_prompt = prompt + ("\n" + character if character else "") + "\n画面风格：" + style
             full_prompt += "\n穿着安排：" + CLOTHING_INSTRUCTION + "\n环境与穿着参考：" + environment
-            if character_scene and row.get("image_selfie"):
+            mirror = re.compile(r"对镜|镜前自拍|镜子自拍|镜中自拍")
+            if mirror.search(row.get("image_request", "") + prompt) or (row.get("image_selfie") and mirror.search(style)):
+                full_prompt += "\n拍摄构图：对着镜子取景，镜中人物手持手机，手机和倒影一起入镜。"
+            elif character_scene and row.get("image_selfie"):
                 full_prompt += "\n拍摄构图：" + SELFIE_COMPOSITION
             if row.get("image_request"):
                 full_prompt += "\n本次用户的拍摄要求：" + row["image_request"][:300]
@@ -442,6 +471,9 @@ class DiaryImages:
             await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
             await asyncio.to_thread(path.write_bytes, data)
             previous = row.get("image_file")
+            if category == "image_test":
+                with Image.open(io.BytesIO(data)) as picture:
+                    row["returned_size"] = f"{picture.width}x{picture.height}"
             row.update(image_status="已生成", image_file=relative, image_mime=mime, image_model=config.image_model,
                        image_content=row["content"], image_at=now.isoformat())
             self.put(category, row)

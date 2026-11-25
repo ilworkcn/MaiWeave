@@ -58,6 +58,7 @@ async def test_retry_shared_paths_send_once(plugin,monkeypatch,entry):
 async def test_retry_failure_reports_once_and_keeps_busy(plugin,monkeypatch,retries):
     p=plugin
     now,event=setup(p,monkeypatch)
+    monkeypatch.setattr(p.life_images, "short_wait", 0.01)
     images=p.life_images.images
     p.config.diary.image_retry_count=retries
     request=Mock(side_effect=RetryableImageError('HTTP 504'))

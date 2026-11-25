@@ -106,7 +106,7 @@ class WebUI:
         usages = [item for item in self.store.all("model_usage") if item["feature"] == "生图测试"]
         last = usages[-1] if usages else {}
         return {"enabled": self.config.diary.image_service_enabled,
-                "model": self.config.diary.image_model, "tested_model": row.get("tested_model", ""), "tested_at": row.get("tested_at", ""), "status": row.get("image_status", "尚未测试"),
+                "model": self.config.diary.image_model, "requested_size": row.get("requested_size", ""), "returned_size": row.get("returned_size", ""), "tested_model": row.get("tested_model", ""), "tested_at": row.get("tested_at", ""), "status": row.get("image_status", "尚未测试"),
                 "progress": row.get("image_progress", ""), "attempts": row.get("image_attempts", 0),
                 "error": row.get("image_error", ""), "seconds": None if row.get("image_status") == "生成中" else last.get("seconds")}
 
@@ -123,11 +123,11 @@ class WebUI:
         if not self.config.diary.image_service_enabled:
             raise ValueError("请先保存生图配置并开启图片生成服务")
         row = {**old, "id": "latest", "status": "草稿", "content": "窗边木桌上的一杯热茶与一盆小绿植",
-               "tested_model": self.config.diary.image_model, "tested_at": self.now().isoformat()}
+               "requested_size": self.config.diary.requested_image_size or "服务默认", "returned_size": "", "tested_model": self.config.diary.image_model, "tested_at": self.now().isoformat()}
         for key in ("image_selfie", "image_character_visible", "image_environment", "test_scene"):
             row.pop(key, None)
         if scene:
-            framing = "前置自拍，人物看向镜头。" if scene == "自拍" else "第一人称物件近景或俯拍，物件为主体，可带入局部手部，脸和身体留在画外。"
+            framing = "人物自拍。" if scene == "自拍" else "第一人称物件近景或俯拍，物件为主体，可带入局部手部，脸和身体留在画外。"
             row.update(content=prompt.strip(), image_prompt=framing + prompt.strip(), test_scene=scene,
                        image_selfie=scene == "自拍", image_character_visible=scene == "自拍")
         images.put("image_test", row)

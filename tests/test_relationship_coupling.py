@@ -202,3 +202,26 @@ async def test_review_to_planner_receipt(plugin, mode, sent):
     assert len(p.living.receipts.sent_times("a",now.tzinfo)) == int(sent)
     await p.living.receipts.refresh(now)
     assert len(p.living.receipts.sent_times("a",now.tzinfo)) == int(sent)
+
+async def test_public_relationship_reads_existing_identity_only(plugin):
+    p = plugin
+    profile = p.anniversaries.save_profile("小禾", "private-a", "a", person_id="test:a")
+    with p.store.db:
+        p.store.put("profile", {**profile, "intimacy_mode": "manual", "intimacy": 2, "relationship": "朋友"})
+        p.store.put("identity", {"id": "group:a", "session_id": "group", "person_id": "test:a"})
+    before = p.store.db.total_changes
+    relation = await p.get_relationship("group", "a")
+    assert relation == {"version": 1, "found": True, "relationship": "朋友", "intimacy": 2,
+                        "intimacy_label": "亲近", "scores": None}
+    assert not (await p.get_relationship("group", "b"))["found"]
+    assert p.store.db.total_changes == before
+
+async def test_public_relationship_linked_scores_stay_in_source_chat(plugin):
+    p = plugin
+    with p.store.db:
+        for session in ("private-a", "group"):
+            p.store.put("identity", {"id": session + ":a", "session_id": session, "person_id": "test:a"})
+        p.store.put("relationship", {**p.engine.relationship("private-a", "a"), "closeness": 85})
+    group = await p.get_relationship("group", "a")
+    assert group["found"] and group["intimacy"] == 3 and group["scores"] is None
+    assert (await p.get_relationship("private-a", "a"))["scores"]["closeness"] == 85

@@ -155,7 +155,7 @@ class DiaryPublisher:
         try:
             await self.check_connection()
             visibility = {"所有人": 1, "好友": 4, "仅自己": 64}[row["visibility"]]
-            image = await asyncio.to_thread(self.images.encoded, row, 768) if row.get("image_file") else ""
+            image = await asyncio.to_thread(self.images.encoded, row) if row.get("image_file") else ""
             if self.connection["client"] == "NapCat":
                 cookies = await self.ctx.call_capability("api.call", api_name="adapter.napcat.account.get_cookies",
                     version="1", timeout_ms=15000, args={"params": {"domain": "qzone.qq.com"}})

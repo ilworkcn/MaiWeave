@@ -16,6 +16,7 @@ from test_plugin import plugin
 @pytest.mark.parametrize("sleep_hour", [None, 1, 2])
 async def test_linked_activity_and_confirmation_fit_budget(plugin, session, budget, action, sleep_hour):
     now = plugin.now()
+    plugin.config.life.occupation = "图书馆古籍保护与修复工作人员" * 12
     if sleep_hour is not None:
         plugin.config.life.sleep_hour = sleep_hour
         now = (now + timedelta(days=1)).replace(hour=sleep_hour, minute=0, second=0, microsecond=0) - timedelta(minutes=40)
@@ -46,5 +47,21 @@ async def test_linked_activity_and_confirmation_fit_budget(plugin, session, budg
         assert snapshot["sleep_policy"]["bedtime"] == (now + timedelta(minutes=40)).isoformat(timespec="minutes")
     assert plugin.store.get("plan", plan["id"])["title"] == before["title"]
     report = plugin.chat_context.recent[0]
+    if budget == 1200:
+        assert "日常身份" in report["omitted"]
+    else:
+        assert any(section["category"] == "日常身份" for section in report["sections"])
     assert report["chars"] == len(text)
     assert report["base_chars"] + sum(row["chars"] for row in report["sections"]) == len(text)
+
+@pytest.mark.parametrize("stage", ["Planner", "Reply"])
+async def test_budget_records_occupation_when_trimmed(plugin, stage):
+    p = plugin
+    p.config.life.occupation = "古籍修复师"
+    p.config.context.private_chars = 1200
+    p.chat_context.kinds["a"] = "private"
+    result = p.chat_context.build("a", "", "今天工作怎么样", stage=stage)
+    report = p.chat_context.recent[0]
+    labels = {row["category"] for row in report["sections"]}
+    assert len(result) <= 1200
+    assert "日常身份" in labels or "日常身份" in report["omitted"]

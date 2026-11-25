@@ -88,7 +88,7 @@ def test_upgrade_0120_keeps_weather_and_adds_provider():
     old['world'].update(city='测试城市', weather_minutes=90)
     upgraded = rebuild_plugin_config_data(defaults, old)
     instance.set_plugin_config(upgraded)
-    assert instance.config.plugin.config_version == '0.13.1'
+    assert instance.config.plugin.config_version == '0.13.2'
     assert instance.config.world.city == '测试城市'
     assert instance.config.world.weather_minutes == 90
     assert instance.config.world.weather_provider == 'Open-Meteo'

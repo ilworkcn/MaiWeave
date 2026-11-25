@@ -1,5 +1,7 @@
 """扩展生活能力的自然语言工具。"""
 
+import asyncio
+
 from maibot_sdk import Tool
 
 from ..core.models import RoutineInput, ChatArrangement
@@ -17,7 +19,7 @@ def parameters(properties, required):
 
 
 class FeatureTools:
-    @Tool("maiweave_show_life", visibility="visible", description="给当前聊天发生活图片。对方明确想看画面（如“我想看看你”）时使用。本轮已有候选就选一个 ID 调 send 一次，需要选图时才调 list。普通接话、询问经过和分享文字话题，按聊天内容回复或等待。", parameters=parameters({
+    @Tool("maiweave_show_life", visibility="visible", timeout_ms=50000, description="给当前聊天发生活图片。对方明确想看画面（如“我想看看你”）时使用。本轮已有候选就选一个 ID 调 send 一次，需要选图时才调 list。普通接话、询问经过和分享文字话题，按聊天内容回复或等待。", parameters=parameters({
         "action": {"type": "string", "enum": ["list", "send"]},
         "experience_id": {"type": "string", "description": "要展示的生活经历编号"},
         "framing": {"type": "string", "maxLength": 300, "description": "当前用户希望展示的画面，如单手持机自拍、物件特写、麦麦做饭的样子；沿用当前请求，并填写本轮已明确的麦麦穿着；已有图片继续复用"},
@@ -26,8 +28,10 @@ class FeatureTools:
         self.require_life()
         session = kwargs["stream_id"]
         if action == "list":
-            items = self.life_images.candidates(session)
-            return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有合适候选时，用其 ID 调 send 一次；普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
+            recent = self.living.receipts.context(session, self.now())
+            shared_id = next((r["experience_id"] for r in recent if r["experience_id"]), "")
+            items = self.life_images.candidates(session, framing or self.chat_context.messages.get(session, ""), shared_id)
+            return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
                     "enabled": self.config.diary.chat_images_enabled and (self.config.diary.image_service_enabled or bool(items)),
                     "generation_enabled": self.config.diary.image_service_enabled, "items": items}
         if action != "send":
@@ -44,9 +48,22 @@ class FeatureTools:
             return {**result, "instruction": SENT_IMAGE}
         if not self.config.diary.image_service_enabled:
             raise ValueError("图片生成服务已关闭")
-        job = self.start_job("生成生活图片，完成后发送到当前聊天", self.life_images.requested(experience_id, session, self.now(), framing=framing))
+        done = asyncio.Event()
+        delivery = {}
+        async def generate_and_send():
+            try:
+                delivery.update(await self.life_images.requested(experience_id, session, self.now(), framing=framing))
+            finally:
+                done.set()
+        job = self.start_job("生成生活图片，完成后发送到当前聊天", generate_and_send())
         self.life_images.pending_requests.add(key)
-        return {**job, "instruction": FINISH_IMAGE}
+        try:
+            await asyncio.wait_for(done.wait(), self.life_images.short_wait)
+        except TimeoutError:
+            return {**job, "instruction": FINISH_IMAGE}
+        if delivery:
+            return {**job, **delivery, "instruction": SENT_IMAGE}
+        return {**job, "status": "失败", "instruction": "本次发图已结束，失败提示已由发图流程处理。本轮用 wait 结束。"}
 
     @Tool("maiweave_chat_arrangement", description="保存聊天中已确定的角色本人临时安排，如调休、请假。填写适用时间、原话依据，调休blocked_kinds填work；更新同一事项传record_id，取消限制时填空blocked_kinds。cancel_plan_ids用于取消已有日程；plan_updates按plan_id和patch改期，沿用日程与出行逻辑。用户自己的作息使用maiweave_person_state。成功后再向用户确认安排。", parameters=parameters({"arrangement": ChatArrangement.model_json_schema()}, ["arrangement"]))
     async def chat_arrangement(self, arrangement: dict, **kwargs):
