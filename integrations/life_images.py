@@ -391,7 +391,7 @@ class LifeImages:
                     "description": image["image_prompt"][:600], "error": ""}
         self.images.put("image_delivery", delivery)
         try:
-            encoded = await asyncio.to_thread(self.images.encoded, image)
+            encoded = await asyncio.to_thread(self.images.original_base64, image)
             result = await self.ctx.send.image(encoded, session, return_details=True,
                                                storage_message=True, sync_to_maisaka_history=True)
             if not result["sent"]:

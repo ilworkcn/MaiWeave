@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from maiweave.core.models import ChatArrangement, RoutineInput, PlanInput
+from maiweave.integrations.chat_schedule import ChatSchedule
 from test_plugin import plugin
 
 
@@ -177,7 +178,7 @@ async def test_native_chat_both_speakers_and_dedup(plugin, monkeypatch):
 
 
 @pytest.mark.parametrize("invalid", [{"evidence": "这句话是另一人说的"}, {"end": "无效时间"}])
-async def test_invalid_batch_leaves_chat_pending_and_other_chat_runs(plugin, monkeypatch, invalid):
+async def test_invalid_batch_waits_for_new_history_and_other_chat_runs(plugin, monkeypatch, invalid):
     now = moment(plugin, monkeypatch)
     monkeypatch.setattr("maiweave.integrations.usage.asyncio.sleep", AsyncMock())
     for session in ["chat-a", "chat-b"]:
@@ -191,10 +192,76 @@ async def test_invalid_batch_leaves_chat_pending_and_other_chat_runs(plugin, mon
     plugin.ctx.llm.generate.side_effect = [response([valid, {**valid, **invalid}])] * 3 + [response([valid]), response([valid])]
     await plugin.chat_schedule.process(now)
     assert [r["session_id"] for r in plugin.store.all("chat_arrangement")] == ["chat-b"]
-    assert plugin.store.get("runtime", "chat_schedule:chat-a")["pending"]
+    assert not plugin.store.get("runtime", "chat_schedule:chat-a")["pending"]
+    plugin.chat_schedule.mark("chat-a", now, "user")
     await plugin.chat_schedule.process(now + timedelta(seconds=10))
+    assert plugin.ctx.llm.generate.await_count == 4
+    plugin.ctx.db.get.return_value.insert(0, {"timestamp": now.isoformat(), "user_id": "user", "processed_plain_text": "下午休息吧"})
+    plugin.chat_schedule.mark("chat-a", now + timedelta(seconds=11), "user")
+    await plugin.chat_schedule.process(now + timedelta(seconds=20))
     assert sorted(r["session_id"] for r in plugin.store.all("chat_arrangement")) == ["chat-a", "chat-b"]
     assert plugin.ctx.llm.generate.await_count == 5
+
+
+@pytest.mark.parametrize("recovers", [True, False])
+async def test_service_failure_has_one_delayed_batch(plugin, monkeypatch, recovers):
+    now = moment(plugin, monkeypatch)
+    monkeypatch.setattr("maiweave.integrations.usage.asyncio.sleep", AsyncMock())
+    plugin.chat_schedule.mark("chat-a", now - timedelta(seconds=10), "user")
+    plugin.ctx.db.get.return_value = [{"timestamp": now.isoformat(), "user_id": "user", "processed_plain_text": "下午见"}]
+    failure = {"success": False, "error": "服务繁忙"}
+    plugin.ctx.llm.generate.side_effect = [failure] * 3 + ([{"success": True, "response": "{}"}] if recovers else [failure] * 3)
+    await plugin.chat_schedule.process(now)
+    restarted = ChatSchedule(plugin)
+    restarted.mark("chat-a", now + timedelta(seconds=5), "user")
+    await restarted.process(now + timedelta(seconds=50))
+    assert plugin.ctx.llm.generate.await_count == 3
+    await restarted.process(now + timedelta(minutes=2))
+    await restarted.process(now + timedelta(minutes=3))
+    assert plugin.ctx.llm.generate.await_count == (4 if recovers else 6)
+    assert not plugin.store.get("runtime", "chat_schedule:chat-a")["pending"]
+
+
+async def test_new_message_can_run_during_old_snapshot_cooldown(plugin, monkeypatch):
+    now = moment(plugin, monkeypatch)
+    monkeypatch.setattr("maiweave.integrations.usage.asyncio.sleep", AsyncMock())
+    plugin.chat_schedule.mark("chat-a", now - timedelta(seconds=10), "user")
+    history = [{"timestamp": now.isoformat(), "user_id": "user", "processed_plain_text": "下午见"}]
+    plugin.ctx.db.get.return_value = history
+    plugin.ctx.llm.generate.side_effect = [TimeoutError()] * 3 + [{"success": True, "response": "{}"}]
+    await plugin.chat_schedule.process(now)
+    history.insert(0, {**history[0], "processed_plain_text": "我们改天再聊"})
+    plugin.chat_schedule.mark("chat-a", now + timedelta(seconds=1), "user")
+    await plugin.chat_schedule.process(now + timedelta(seconds=10))
+    await plugin.chat_schedule.process(now + timedelta(minutes=2))
+    assert plugin.ctx.llm.generate.await_count == 4
+    row = plugin.store.get("runtime", "chat_schedule:chat-a")
+    assert not row["pending"] and "retry_digest" not in row
+
+
+@pytest.mark.parametrize("bad_field", ["plan_id", "evidence"])
+async def test_invalid_promise_stops_at_three_and_preserves_new_message(plugin, monkeypatch, bad_field):
+    now = moment(plugin, monkeypatch)
+    monkeypatch.setattr("maiweave.integrations.usage.asyncio.sleep", AsyncMock())
+    plan = plugin.engine.create_plan(PlanInput(title="去图书馆", start=(now + timedelta(hours=1)).isoformat(),
+        end=(now + timedelta(hours=2)).isoformat()), "chat-a", now)
+    promise = {"plan_id": plan["id"], "when": "arrival", "action": "promise", "evidence": "到了再跟你说"}
+    promise[bad_field] = "没有这项记录"
+    message = {"timestamp": now.isoformat(), "user_id": "bot", "processed_plain_text": "到了再跟你说"}
+    plugin.ctx.db.get.return_value = [message]
+    plugin.chat_schedule.mark("chat-a", now - timedelta(seconds=10), "user", "bot")
+    async def respond(*args, **kwargs):
+        if plugin.ctx.llm.generate.await_count == 3:
+            plugin.chat_schedule.mark("chat-a", now + timedelta(seconds=1), "user")
+        return {"success": True, "response": json.dumps({"promises": [promise]})}
+    plugin.ctx.llm.generate.side_effect = respond
+    await plugin.chat_schedule.process(now)
+    assert f"promises[0].{bad_field}" in plugin.ctx.llm.generate.await_args.args[0]
+    assert plugin.store.get("runtime", "chat_schedule:chat-a")["pending"]
+    for minute in range(1, 6):
+        await plugin.chat_schedule.process(now + timedelta(minutes=minute))
+    assert plugin.ctx.llm.generate.await_count == 3
+    assert not plugin.store.get("runtime", "chat_schedule:chat-a")["pending"]
 
 
 @pytest.mark.parametrize("budget", [1200, 2400, 4800])

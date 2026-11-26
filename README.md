@@ -132,6 +132,22 @@
 </table>
 </div>
 
+#### 🌦️ 同一天，三座城
+
+11 月 26 日，依次把生活城市设为大庆、杭州和三亚。三张图里都是从楼下街道步行到图书馆的 18 分钟，沿途的树色和光线随当地预报与实况而变。
+
+<div align="center">
+<table>
+  <tr><th>大庆 · 阴 · −4.5°C</th><th>杭州 · 晴 · 18.7°C</th><th>三亚 · 阴 · 26.2°C</th></tr>
+  <tr>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-daqing.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-daqing.webp" width="235" alt="大庆生活地图：连续三天最高温低于零度，河岸已是冬色。"></a></td>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-hangzhou.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-hangzhou.webp" width="235" alt="杭州生活地图：晴光落在街面上，沿河的树一片金黄。"></a></td>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-sanya.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-sanya.webp" width="235" alt="三亚生活地图：低纬暖地的树冠依然青绿，阴天的光线也柔和些。"></a></td>
+  </tr>
+  <tr><td align="center">连续三天最高温低于零度，河岸已是冬色。</td><td align="center">晴光落在街面上，沿河的树一片金黄。</td><td align="center">低纬暖地的树冠依然青绿，阴天的光线也柔和些。</td></tr>
+</table>
+</div>
+
 ### 💬 下班再跟你讲
 
 麦麦正在校对样书，你问她封底改了哪里。她约好七点四十左右来找你。19:39:55，她自己发来一句「刚收工啦，来跟你说一声」，接着讲了封底署名的事。

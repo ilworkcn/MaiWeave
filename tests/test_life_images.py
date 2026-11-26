@@ -1,11 +1,12 @@
 """聊天配图的来源、复用、开关与主动发送结算。"""
 import asyncio
+import base64
 import json
 from datetime import timedelta
 from unittest.mock import AsyncMock
 import pytest
 from test_plugin import plugin
-from test_diary_images import service
+from test_diary_images import PNG, service
 from maiweave.core.models import ExperienceInput
 from maiweave.integrations.life_images import current_image_candidates, image_request_stage, image_tool_relevant
 
@@ -195,6 +196,7 @@ async def test_send_reuses_image_and_checks_owner(plugin, monkeypatch):
     assert p.store.get("experience_image", event["id"])["image_file"] == first
     assert len([r for r in p.store.all("model_usage") if r["feature"] == "生活图片"]) == 1
     assert p.ctx.send.image.await_count == 2
+    assert all(base64.b64decode(call.args[0]) == PNG for call in p.ctx.send.image.await_args_list)
     assert len(p.life_images.context("chat-a")) == 2
     assert not p.life_images.context("other")
     with pytest.raises(ValueError, match="不属于"):
@@ -218,6 +220,7 @@ async def test_share_image_waits_for_text_and_counts_once(plugin, monkeypatch, m
     await p.living.share_images(now)
     await p.living.share_images(now)
     assert p.ctx.send.image.await_count == 1
+    assert base64.b64decode(p.ctx.send.image.await_args.args[0]) == PNG
     assert len(p.living.receipts.sent_times("chat-a", now.tzinfo)) == 1
     assert p.store.get("share_receipt", "share")["image_delivery"] == "已发送"
 

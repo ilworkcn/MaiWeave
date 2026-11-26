@@ -91,6 +91,12 @@ async function edit(row){
   wrapper.append(input);$('fields').append(wrapper);
  }
  if(category==='routine'){
+  const frequency=$('field_frequency');
+  const showDates=()=>{
+   $('field_weekdays').parentElement.hidden=frequency.value!=='weekly';
+   $('field_month_day').parentElement.hidden=frequency.value!=='monthly';
+  };
+  frequency.addEventListener('change',showDates);showDates();
   const kind=$('field_kind'),pay=$('field_pay');
   const showPay=()=>{pay.parentElement.hidden=kind.value!=='work';if(pay.parentElement.hidden)pay.value=''};
   kind.addEventListener('change',showPay);showPay();
@@ -123,6 +129,7 @@ async function run(work){message('处理中…');try{await work();if($('status')
 $('save').onclick=()=>run(async()=>{
  const schema=schemas[category],args={};
  for(const [name,,type,,source] of schema.fields){const input=$('field_'+name);const value=type==='checkbox'?input.checked:type==='weekdays'?Array.from(input.selectedOptions).map(o=>o.value).join(','):type==='number'||['month','day','month_day','intimacy'].includes(name)?Number(input.value):input.value;
+  if(category==='routine'&&input.parentElement.hidden)continue;
   if(['pay','fare'].includes(name)&&input.value==='')continue;const original=type==='datetime-local'?String(selected?.[source]??'').slice(0,16):(selected?.[source]??'');if(category==='plan'&&value===original)continue;args[name]=value;}
  if(schema.id&&selected)args[schema.id]=selected.id;
  if(category==='profile'){args.person_id=$('personChoice').value;args.name='';if(!args.person_id){message('请先搜索并选择 MaiBot 人物画像');return}}
