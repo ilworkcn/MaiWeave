@@ -107,16 +107,51 @@
 从楼下街道走到图书馆要 18 分钟。沿着同一条路，春天能看到河边的花，夏天树荫更浓，秋夜的街灯照着红叶，冬天能透过枝杈看清河岸。地图按麦麦的生活时区亮灯，深夜只留下路灯。
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-seasons.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-seasons.webp" width="800" alt="从楼下街道到图书馆的路线：春日、夏日、秋天傍晚和冬日深夜的实机画面"></a>
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/spring.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/spring.webp" width="900" alt="春日 · 河边开花"></a><br>
+  <sub>春日 · 河边开花</sub>
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/summer.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/summer.webp" width="900" alt="夏日 · 树荫沿岸"></a><br>
+  <sub>夏日 · 树荫沿岸</sub>
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/autumn.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/autumn.webp" width="900" alt="秋夜 · 街灯初亮"></a><br>
+  <sub>秋夜 · 街灯初亮</sub>
+</p>
+
+<p align="center">
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/winter.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/winter.webp" width="900" alt="冬夜 · 河岸落叶"></a><br>
+  <sub>冬夜 · 河岸落叶</sub>
 </p>
 
 #### 🌧️ 下雨、落雪和冰雹
 
 雨势渐大时，街面会映出灯光。小雪只薄薄落一点，大雪才盖住屋顶；遇到冰雹，湿路上能看到细小的冰粒。
 
-<p align="center">
-  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-weather.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-weather.webp" width="800" alt="大庆冬季地图的天气对照：小、中、大雨雪，以及冰雹和雷暴伴冰雹"></a>
-</p>
+下面截取同一段河岸。点图可以查看整张地图。
+
+<div align="center">
+<table>
+  <tr>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/rain-light.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/rain-light-detail.webp" width="418" alt="小雨时的河岸与步道"></a><br><sub>小雨</sub></td>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/snow-light.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/snow-light-detail.webp" width="418" alt="小雪时的河岸与步道"></a><br><sub>小雪</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/rain-medium.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/rain-medium-detail.webp" width="418" alt="中雨时的河岸与步道"></a><br><sub>中雨</sub></td>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/snow-medium.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/snow-medium-detail.webp" width="418" alt="中雪时的河岸与步道"></a><br><sub>中雪</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/rain-heavy.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/rain-heavy-detail.webp" width="418" alt="大雨时的河岸与步道"></a><br><sub>大雨</sub></td>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/snow-heavy.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/snow-heavy-detail.webp" width="418" alt="大雪时的河岸与步道"></a><br><sub>大雪</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/hail.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/hail-detail.webp" width="418" alt="冰雹时的河岸与步道"></a><br><sub>冰雹</sub></td>
+    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/thunder-hail.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/map-demo/thunder-hail-detail.webp" width="418" alt="雷暴伴冰雹时的河岸与步道"></a><br><sub>雷暴伴冰雹</sub></td>
+  </tr>
+</table>
+</div>
 
 ### 💬 下班再跟你讲
 
