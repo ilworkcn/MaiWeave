@@ -540,7 +540,7 @@ class WebUI:
         upcoming = min((p for p in plans if p["status"] == "scheduled" and self.engine.time(p["start"]) > now),
                        key=lambda p: self.engine.time(p["start"]), default=None)
         weather = self.world.context(now)["weather"]
-        weather_brief = None if not weather else {"city": weather["city"], "label": weather["label"],
+        weather_brief = None if not weather else {"city": weather["city"], "label": weather["label"], "latitude": weather.get("latitude"),
             "temperature": weather["current"]["temperature_2m"], "stale": weather["stale"], "at": display_time(weather["observed_at"])}
         if weather_brief:
             weather_brief["forecast"] = [day for day in weather.get("forecast", [])
