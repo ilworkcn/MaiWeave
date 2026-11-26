@@ -160,6 +160,10 @@ class DiaryImages:
         with self.store.db:
             self.store.put(category, row)
 
+    def original_base64(self, row):
+        path = Path(self.ctx.paths.data_dir) / row["image_file"]
+        return base64.b64encode(path.read_bytes()).decode("ascii")
+
     def encoded(self, row, size=None):
         with Image.open(Path(self.ctx.paths.data_dir) / row["image_file"]) as image:
             if size:
