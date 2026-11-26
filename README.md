@@ -104,49 +104,19 @@
 
 ### 🌇 生活地图 · 从天亮到熄灯
 
-傍晚 18:29，麦麦正从住处走去厨房。住宅图钉旁的小头像标着她的位置，沿街还能找到早餐铺、花店和大学。
+从楼下街道走到图书馆要 18 分钟。沿着同一条路，春天能看到河边的花，夏天树荫更浓，秋夜的街灯照着红叶，冬天能透过枝杈看清河岸。地图按麦麦的生活时区亮灯，深夜只留下路灯。
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-labeled.png"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-labeled.png" width="800" alt="傍晚的生活地图：麦麦在住宅图钉旁，街区标出了大学、图书馆、花店、早餐铺和公园"></a>
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-seasons.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-seasons.webp" width="800" alt="从楼下街道到图书馆的路线：春日、夏日、秋天傍晚和冬日深夜的实机画面"></a>
 </p>
 
-地图上的一天按麦麦的生活时区过。看看桥边的花店：白天看得见门口的花，傍晚橱窗亮起来，到了深夜，河边只剩一排路灯。
+#### 🌧️ 下雨、落雪和冰雹
 
-<div align="center">
-<table>
-  <tr>
-    <th>☀️ 白天</th>
-    <th>🌆 夜晚</th>
-    <th>🌙 深夜</th>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-day.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-day.webp" width="180" alt="白天的街区，大学、花店和河岸步道清晰可见"></a></td>
-    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-evening.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-evening.webp" width="180" alt="夜晚的同一街区，店铺、住宅窗户和路灯亮起"></a></td>
-    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-late.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-late.webp" width="180" alt="深夜楼窗熄灯，道路和桥边仍亮着路灯"></a></td>
-  </tr>
-  <tr>
-    <td align="center">06:00–18:00</td>
-    <td align="center">18:00–23:00</td>
-    <td align="center">23:00–次日 06:00</td>
-  </tr>
-</table>
-</div>
+雨势渐大时，街面会映出灯光。小雪只薄薄落一点，大雪才盖住屋顶；遇到冰雹，湿路上能看到细小的冰粒。
 
-#### 🌦️ 同一天，三座城
-
-11 月 26 日，依次把生活城市设为大庆、杭州和三亚。三张图里都是从楼下街道步行到图书馆的 18 分钟，沿途的树色和光线随当地预报与实况而变。
-
-<div align="center">
-<table>
-  <tr><th>大庆 · 阴 · −4.5°C</th><th>杭州 · 晴 · 18.7°C</th><th>三亚 · 阴 · 26.2°C</th></tr>
-  <tr>
-    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-daqing.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-daqing.webp" width="235" alt="大庆生活地图：连续三天最高温低于零度，河岸已是冬色。"></a></td>
-    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-hangzhou.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-hangzhou.webp" width="235" alt="杭州生活地图：晴光落在街面上，沿河的树一片金黄。"></a></td>
-    <td align="center"><a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-sanya.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/develop/assets/life-map-sanya.webp" width="235" alt="三亚生活地图：低纬暖地的树冠依然青绿，阴天的光线也柔和些。"></a></td>
-  </tr>
-  <tr><td align="center">连续三天最高温低于零度，河岸已是冬色。</td><td align="center">晴光落在街面上，沿河的树一片金黄。</td><td align="center">低纬暖地的树冠依然青绿，阴天的光线也柔和些。</td></tr>
-</table>
-</div>
+<p align="center">
+  <a href="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-weather.webp"><img src="https://raw.githubusercontent.com/ilworkcn/MaiWeave/main/assets/life-map-weather.webp" width="800" alt="大庆冬季地图的天气对照：小、中、大雨雪，以及冰雹和雷暴伴冰雹"></a>
+</p>
 
 ### 💬 下班再跟你讲
 
