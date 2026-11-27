@@ -528,7 +528,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             function = tool.get("function", {})
             if function.get("name") == "maiweave_show_life":
                 action = function.get("parameters", {}).get("properties", {}).get("action", {})
-                self.life_images.planner_actions[session] = action.get("enum", ("list", "send"))
+                self.life_images.planner_actions[session] = {name: function["parameters"]["properties"].get("experience_id", {}).get("enum", ()) for name in action["enum"]}
                 break
         return {"action": "continue", "modified_kwargs": kwargs}
 

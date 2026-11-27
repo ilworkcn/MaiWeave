@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 from weakref import WeakValueDictionary
 
+from ..core.models import ExperienceInput
 from .diary_images import DiaryImages
 from .chat_context import brief
 
@@ -15,7 +16,7 @@ SENT_IMAGE = "图片已发到当前聊天。还有文字要说时用 reply 并�
 
 
 def asks_selfie(text):
-    return re.fullmatch(r"(?:我想看看你|想看你的自拍|给我发(?:一)?张自拍)[呀啊吧。！!？?\s]*", text)
+    return re.fullmatch(r"(?:(?:我想)?看看你|(?:我想)?看看(?:现在|此刻)的你|想看你的自拍|给我发(?:一)?张自拍)[呀啊吧。！!？?\s]*", text)
 
 
 def asks_progress(text, *, standalone=False):
@@ -48,6 +49,7 @@ def incoming_photo_message(items):
 
 PHOTO_WORDS = re.compile(r"想看|看看|瞅瞅|瞧瞧|给我看|给你看|什么样|啥样|长啥样|照片|图片|拍张|拍一|自拍|发.{0,4}(张|图|来|给我)|photo|selfie|picture", re.I)
 MEDIA_DESCRIPTION = re.compile(r"\[(?:图片|表情包|视频)(?:\s*[:：][^\]]*)?\]")
+RESEND_PHOTO = re.compile(r"重发|再发一次|再发一遍|(?:原图|旧照|那张|上次|昨天|前天).{0,16}(?:再发|发我|发给我)|(?:再发|发我|发给我).{0,12}(?:原图|旧照|那张|上次|昨天|前天)")
 
 
 def photo_turn(items, group=False):
@@ -72,7 +74,7 @@ def photo_turn(items, group=False):
             return searched, None, "", ""
         body = MEDIA_DESCRIPTION.sub("", body.removesuffix("</message>")).strip()
         checked += 1
-        if PHOTO_WORDS.search(body) and not deferred_picture(body):
+        if (PHOTO_WORDS.search(body) or RESEND_PHOTO.search(body)) and not deferred_picture(body):
             message = re.search(r'\bmsg_id="([^"]+)"', header)
             return True, index, message[1] if message else "", body
         if not group or checked == 5 or deferred_picture(body):
@@ -95,7 +97,7 @@ def distinct_image_calls(items, allowed=None):
             args = call.get("args") or {}
             action = args.get("action")
             if allowed is not None and (action not in allowed or
-                                        (action == "send" and not args.get("experience_id"))):
+                                        (action == "send" and args.get("experience_id") not in allowed["send"])):
                 rejected = item
                 continue
             if action == "list" or (action == "send" and isinstance(args.get("experience_id"), str)):
@@ -175,7 +177,7 @@ def image_request_stage(items, is_sent_image=None, request_index=None):
                 if action == "send" and output.get("status") in {"进行中", "正在生成，请稍等", "已发送", "失败"}:
                     stage = "sent"
                 elif stage != "sent" and action == "list" and isinstance(output.get("items"), list):
-                    stage = "listed" if output["items"] else "empty"
+                    stage = tuple(row["id"] for row in output["items"] if isinstance(row, dict) and row.get("id")) or "empty"
     return stage
 
 
@@ -201,7 +203,7 @@ class LifeImages:
 
     def history_request(self, session, text, now):
         """识别明确的回顾配图与旧图查询，按本地日期和活动挑选经历。"""
-        if deferred_picture(text):
+        if deferred_picture(text) or RESEND_PHOTO.search(text):
             return None
         original = re.search(r"原照|旧照|拍过|拍了.*吗|有拍|有.{0,3}照片吗|当时拍的|拍的吗", text)
         render = re.search(r"(?:配|画|补|还原|生成)(?:个|一张|张|幅|一下|.{0,4}[图画])", text) and re.search(
@@ -267,13 +269,14 @@ class LifeImages:
             query = previous[1] + "，按那段经历" + text
         selfie = asks_selfie(text)
         if selfie:
-            result = ("", "目前没有可用的自拍或可供配图的角色经历。")
-            for candidate in self.candidates(session):
-                event = self.store.get("experience", candidate["id"])
-                image = self.store.find("experience_image", event["id"]) or {}
-                if event["source"] == "simulated" and (not candidate["has_image"] or image.get("image_selfie")):
-                    result = (event["id"], "按此刻所在地点和时间发一张麦麦自己的自拍。")
-                    break
+            job = self.store.find("job", f"配图:{session}:{message_id}")
+            if job:
+                result = ("", "这条来信的自拍任务状态：" + job["status"])
+            elif self.config.diary.image_service_enabled:
+                event = self.selfie_subject(session, now)
+                result = (event["id"], "按此刻所在地点和时间发一张麦麦自己的自拍。")
+            else:
+                result = ("", "图片生成服务已关闭，当前无法拍一张新的自拍。")
         else:
             result = self.history_request(session, query, now)
         if not result:
@@ -297,13 +300,22 @@ class LifeImages:
                 self.pending_requests.add(key)
                 framing = note if selfie else "按经历发生时的场景补画。" + query
                 start_job("发送麦麦的自拍" if selfie else "按已完成经历配图并发到当前聊天", self.requested(
-                    experience_id, session, now, framing=framing), job_id=job_id)
+                    experience_id, session, now, framing=framing, request_id=message_id), job_id=job_id)
                 note = "已接单，完成后自动发图。" + note
                 mode = "发送"
         self.turn_notes[session] = (message_id, text, note, mode)
         return mode
 
-    def candidates(self, session, framing="", shared_id=""):
+    def selfie_subject(self, session, now):
+        location = self.engine.state()["location"]
+        plan = self.engine.current(now)
+        details = {"地点": location}
+        if plan and self.engine.visible(plan, session):
+            details["正在做的事"] = plan["title"]
+        return self.engine.record_experience(ExperienceInput(summary=f"在{location}应邀准备自拍",
+            occurred_at=now.isoformat(), source="observed", details=details, evidence="收到当前聊天的自拍请求"), session, now)
+
+    def candidates(self, session, framing="", shared_id="", *, request="", now=None):
         if not self.config.diary.chat_images_enabled:
             return []
         rows = sorted((row for row in self.store.all("experience") if self.engine.visible(row, session)),
@@ -311,20 +323,34 @@ class LifeImages:
         # 中文菜名和物件名常嵌在整句话里，用相邻字匹配经历的摘要和细节。
         terms = set(re.findall(r"(?=([\w]{2}))", framing.casefold()))
 
+        deliveries = [r for r in self.store.all("image_delivery") if r["session_id"] == session and r["status"] == "已发送"]
+        sent = {r["experience_id"] for r in deliveries}
+        resend = RESEND_PHOTO.search(request)
+        if resend:
+            offset = 2 if "前天" in request else 1 if "昨天" in request else 0 if "今天" in request else None
+            last = {r["experience_id"]: r["at"] for r in deliveries if offset is None or
+                    (now.date() - self.engine.time(r["at"]).date()).days == offset}
+            rows = [r for r in rows if r["id"] in last]
+            rows.sort(key=lambda r: last[r["id"]], reverse=True)
+
         def relevance(row):
             content = row["summary"] + " " + json.dumps(row["details"], ensure_ascii=False)
             score = sum(term in content.casefold() for term in terms)
             shared = row["id"] == shared_id
-            return score, shared
+            return score, shared, row["id"] not in sent
         rows.sort(key=relevance, reverse=True)
         candidates = []
         for row in rows:
             cached = self.reusable(row, self.store.find("experience_image", row["id"]) or {})
             if not cached and not self.config.diary.image_service_enabled:
                 continue
+            if resend and not cached:
+                continue
+            if row["id"] in sent and not resend and re.fullmatch(r"(?:给我)?(?:发|来|拍)(?:一)?张(?:照片|图|自拍)(?:看看)?[呀吧。！!？?\s]*", request):
+                continue
             candidates.append({"id": row["id"], "summary": row["summary"][:160],
                                "details": brief(dict(list(row["details"].items())[:4]), 64, 2), "occurred_at": row["occurred_at"],
-                               "has_image": cached, "action_hint": "可直接发送" if cached else "可根据这段经历生成"})
+                               "sent_in_this_chat": row["id"] in sent, "has_image": cached, "action_hint": "可直接发送" if cached else "可根据这段经历生成"})
             if len(candidates) == 10:
                 break
         return candidates
@@ -343,12 +369,19 @@ class LifeImages:
                 stage = image_request_stage(items, lambda mid: self.sent_image(session, mid), index)
                 if stage in {"empty", "sent"}:
                     continue
-                if not self.config.diary.image_service_enabled:
-                    tool = {**tool, "function": {**function, "description": "对方明确想看图片时展示已有生活图片。本轮已有候选就按 experience_id 调 send 一次，需要选图时才调 list。普通接话和文字分享使用 reply 或 wait。"}}
-                if stage == "listed":
-                    params = function["parameters"]
-                    properties = {**params["properties"], "action": {"type": "string", "enum": ["send"]}}
-                    tool = {**tool, "function": {**function, "description": "已有图片直接发送，可生成的经历将现场生图。选择与所问成品相符的经历 ID；讲述经历时直接用 reply。", "parameters": {**params, "properties": properties, "required": ["action", "experience_id"]}}}
+                params = function.get("parameters", {})
+                properties = dict(params.get("properties", {}))
+                listed = isinstance(stage, tuple)
+                properties["action"] = {"type": "string", "enum": ["send" if listed else "list"]}
+                required = ["action"]
+                if listed:
+                    properties["experience_id"] = {"type": "string", "enum": list(stage)}
+                    required.append("experience_id")
+                else:
+                    properties.pop("experience_id", None)
+                description = "从本轮候选中选一张符合请求的图发送。" if listed else "先查本轮相关的生活经历和已有图片。"
+                tool = {**tool, "function": {**function, "description": description,
+                        "parameters": {**params, "properties": properties, "required": required}}}
             result.append(tool)
         return result
 

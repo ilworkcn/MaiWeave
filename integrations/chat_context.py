@@ -270,7 +270,7 @@ class ChatContext:
             if not acknowledgement:
                 add("shared_topics", p.living.receipts.context(session, now), True)
         if p.config.diary.chat_images_enabled:
-            add("life_images", p.life_images.context(session), True)
+            add("已展示图片", [{"描述": r["description"], "发送时间": r["at"]} for r in p.life_images.context(session)], True)
         if cfg.reading and (reading_topic or mode != "精简"):
             shelf = p.books.context(book_id=book_id)
             if book_id:

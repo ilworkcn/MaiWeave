@@ -5,7 +5,7 @@ import asyncio
 from maibot_sdk import Tool
 
 from ..core.models import RoutineInput, ChatArrangement
-from ..integrations.life_images import FINISH_IMAGE, SENT_IMAGE
+from ..integrations.life_images import FINISH_IMAGE, SENT_IMAGE, asks_selfie
 
 
 def parameters(properties, required):
@@ -31,8 +31,17 @@ class FeatureTools:
         if action == "list":
             recent = self.living.receipts.context(session, self.now())
             shared_id = next((r["experience_id"] for r in recent if r["experience_id"]), "")
-            items = self.life_images.candidates(session, framing or request_text or self.chat_context.messages.get(session, ""), shared_id)
-            return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
+            request = request_text or self.chat_context.messages.get(session, "") or framing
+            if request_id and asks_selfie(request):
+                if self.config.diary.image_service_enabled:
+                    event = self.life_images.selfie_subject(session, self.now())
+                    items = [{"id": event["id"], "summary": event["summary"], "has_image": False, "sent_in_this_chat": False,
+                              "action_hint": "按此刻的地点和时间生成自拍"}]
+                else:
+                    items = []
+            else:
+                items = self.life_images.candidates(session, framing or request, shared_id, request=request, now=self.now())
+            return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；同样符合话题时优先选当前聊天没发过的经历。普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
                     "enabled": self.config.diary.chat_images_enabled and (self.config.diary.image_service_enabled or bool(items)),
                     "generation_enabled": self.config.diary.image_service_enabled, "items": items}
         if action != "send":

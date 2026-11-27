@@ -373,7 +373,27 @@ async def test_successful_list_offers_only_send_until_next_message(plugin, monke
     assert params["required"] == ["action", "experience_id"]
     assert definitions([tool], "chat-a", [call, {**result, "output": '{"items":[]}'}]) == []
     new = {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": '<message msg_id="new">我想看看你'}]}
-    assert definitions([tool], "chat-a", [call, result, new]) == [tool]
+    assert definitions([tool], "chat-a", [call, result, new])[0]["function"]["parameters"]["properties"]["action"]["enum"] == ["list"]
+    assert params["properties"]["experience_id"]["enum"] == ["photo"]
+
+
+async def test_old_photo_requires_a_matching_request_and_candidate(plugin, monkeypatch):
+    p = plugin
+    now, old = setup(p, monkeypatch)
+    await p.life_images.send(old["id"], "chat-a", now)
+    row = p.store.all("image_delivery")[-1]
+    with p.store.db:
+        p.store.put("image_delivery", {**row, "at": (now - timedelta(days=1)).isoformat()})
+    images = p.life_images
+    assert not images.candidates("chat-a", request="发张照片", now=now)
+    old_items = images.candidates("chat-a", request="把昨天那张再发一次", now=now)
+    assert [(r["id"], r["sent_in_this_chat"]) for r in old_items] == [(old["id"], True)]
+    assert not images.candidates("chat-b", request="把昨天那张再发一次", now=now)
+    assert images.prepare_request("chat-a", "new-photo", "看看现在的你", now, p.start_job) == "发送"
+    await asyncio.gather(*list(p.jobs))
+    delivery = p.store.all("image_delivery")[-1]
+    assert delivery["experience_id"] != old["id"] and delivery["request_message_id"] == "new-photo"
+    assert "已展示图片" in p.chat_context.build("chat-a")
 
 async def test_finished_dish_before_recent_unrelated_events(plugin, monkeypatch):
     p = plugin
