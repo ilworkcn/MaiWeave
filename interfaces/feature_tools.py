@@ -27,10 +27,11 @@ class FeatureTools:
     async def show_life(self, action: str, experience_id: str = "", framing: str = "", **kwargs):
         self.require_life()
         session = kwargs["stream_id"]
+        request_id, request_text = self.life_images.group_photo_requests.get(session, ("", ""))
         if action == "list":
             recent = self.living.receipts.context(session, self.now())
             shared_id = next((r["experience_id"] for r in recent if r["experience_id"]), "")
-            items = self.life_images.candidates(session, framing or self.chat_context.messages.get(session, ""), shared_id)
+            items = self.life_images.candidates(session, framing or request_text or self.chat_context.messages.get(session, ""), shared_id)
             return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
                     "enabled": self.config.diary.chat_images_enabled and (self.config.diary.image_service_enabled or bool(items)),
                     "generation_enabled": self.config.diary.image_service_enabled, "items": items}
@@ -44,7 +45,7 @@ class FeatureTools:
         if key in self.life_images.pending_requests:
             return {"status": "正在生成，请稍等", "instruction": FINISH_IMAGE}
         if self.life_images.reusable(event, row):
-            result = await self.life_images.send(experience_id, session, self.now())
+            result = await self.life_images.send(experience_id, session, self.now(), request_id=request_id)
             return {**result, "instruction": SENT_IMAGE}
         if not self.config.diary.image_service_enabled:
             raise ValueError("图片生成服务已关闭")
@@ -52,7 +53,7 @@ class FeatureTools:
         delivery = {}
         async def generate_and_send():
             try:
-                delivery.update(await self.life_images.requested(experience_id, session, self.now(), framing=framing))
+                delivery.update(await self.life_images.requested(experience_id, session, self.now(), framing=framing or request_text, request_id=request_id))
             finally:
                 done.set()
         job = self.start_job("生成生活图片，完成后发送到当前聊天", generate_and_send())

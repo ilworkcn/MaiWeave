@@ -18,7 +18,7 @@ from .config import MaiWeaveConfig
 from .core.engine import LifeEngine, public_plan, read_life_status
 from .life.living import Living
 from .integrations.memory import NativeMemory
-from .integrations.life_images import LifeImages, asks_progress, asks_selfie, deferred_picture, incoming_photo_message, current_image_candidates, distinct_image_calls
+from .integrations.life_images import LifeImages, asks_progress, asks_selfie, deferred_picture, incoming_photo_message, photo_turn, current_image_candidates, distinct_image_calls
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
 from .integrations.chat_context import ChatContext, discovered_tools, without_sleep_tail
@@ -441,15 +441,22 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             if "tool_definitions" in kwargs:
                 kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"])
             return {"action": "continue", "modified_kwargs": kwargs}
+        await self.chat_context.identify(session)
+        group = self.chat_context.kinds.get(session) == "group"
+        turn = photo_turn(kwargs["items"], group)
+        if group and turn[2]:
+            self.life_images.group_photo_requests[session] = turn[2:]
+        else:
+            self.life_images.group_photo_requests.pop(session, None)
         if "tool_definitions" in kwargs:
             kwargs["tool_definitions"] = discovered_tools(kwargs["items"], kwargs["tool_definitions"], self.searchable_tools)
-            kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"])
+            kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"], turn)
         task = planner_task(kwargs["items"])
         if task:
             self.chat_context.proactive_turns.add(session)
         else:
             self.chat_context.proactive_turns.discard(session)
-        kwargs["items"] = current_image_candidates(kwargs["items"], lambda mid: self.life_images.sent_image(session, mid))
+        kwargs["items"] = current_image_candidates(kwargs["items"], lambda mid: self.life_images.sent_image(session, mid), turn[1] if group else None)
         if task and "tool_definitions" in kwargs:
             # 主动分享由发送回执按选定话题配图。
             kwargs["tool_definitions"] = [t for t in kwargs["tool_definitions"]
@@ -468,7 +475,6 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         text = "".join(p["text"] for p in latest.get("parts", []) if p.get("type") == "text")
         # MaiBot 会在请求末尾追加提醒，话题采用接收事件中的用户消息。
         text = self.chat_context.messages.get(session, text)
-        await self.chat_context.identify(session)
         wake_user = self.chat_context.wake_candidates.pop(session, None)
         if wake_user is not None and self.chat_context.kinds.get(session) == "private":
             self.living.wake_for_private_turn(session, self.now(), wake_user)

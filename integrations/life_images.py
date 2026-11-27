@@ -42,27 +42,46 @@ def incoming_photo_message(items):
             if header.startswith("<message ") and 'is_self_message="true"' not in header:
                 match = re.search(r'\bmsg_id="([^"]+)"', header)
                 body = "".join(p.get("text", "") for p in item.get("parts", []) if p.get("type") == "text")
-                return (match[1] if match else ""), body.partition(">")[2].removesuffix("</message>").strip()
+                return (match[1] if match else ""), MEDIA_DESCRIPTION.sub("", body.partition(">")[2].removesuffix("</message>")).strip()
     return "", ""
 
 
-def image_tool_relevant(items):
-    """按本次来信提供图片工具，也接受 Planner 在本轮主动找图。"""
-    for item in reversed(items):
+PHOTO_WORDS = re.compile(r"想看|看看|瞅瞅|瞧瞧|给我看|给你看|什么样|啥样|长啥样|照片|图片|拍张|拍一|自拍|发.{0,4}(张|图|来|给我)|photo|selfie|picture", re.I)
+MEDIA_DESCRIPTION = re.compile(r"\[(?:图片|表情包|视频)(?:\s*[:：][^\]]*)?\]")
+
+
+def photo_turn(items, group=False):
+    """找出本轮要图的消息，群里允许其他人插话。"""
+    checked = 0
+    searched = False
+    for index in range(len(items) - 1, -1, -1):
+        item = items[index]
         call = item.get("tool_call") or {}
-        if call.get("func_name") == "tool_search":
+        if not checked and call.get("func_name") == "tool_search":
             query = str(call.get("args", {}).get("query", ""))
-            if re.search(r"maiweave_show_life|图片|照片|自拍|发图", query, re.I):
-                return True
+            searched |= bool(re.search(r"maiweave_show_life|图片|照片|自拍|发图", query, re.I))
         if item.get("item_type") != "UserMessageItem":
             continue
         text = "".join(p.get("text", "") for p in item.get("parts", []) if p.get("type") == "text")
-        if text.startswith(("<plugin_proactive_task", "<internal_", "<subagent_result")):
-            return False
         header, _, body = text.partition(">")
-        if header.startswith("<message ") and 'is_self_message="true"' not in header:
-            return bool(re.search(r"想看|看看|瞅瞅|瞧瞧|给我看|给你看|什么样|啥样|长啥样|照片|图片|拍张|拍一|自拍|发.{0,4}(张|图|来|给我)|photo|selfie|picture", body, re.I))
-    return True
+        if header.startswith(("<plugin_proactive_task", "<internal_", "<subagent_result")):
+            return searched, None, "", ""
+        if not header.startswith("<message "):
+            continue
+        if 'is_self_message="true"' in header:
+            return searched, None, "", ""
+        body = MEDIA_DESCRIPTION.sub("", body.removesuffix("</message>")).strip()
+        checked += 1
+        if PHOTO_WORDS.search(body) and not deferred_picture(body):
+            message = re.search(r'\bmsg_id="([^"]+)"', header)
+            return True, index, message[1] if message else "", body
+        if not group or checked == 5 or deferred_picture(body):
+            break
+    return searched or checked == 0, None, "", ""
+
+
+def image_tool_relevant(items):
+    return photo_turn(items)[0]
 
 
 def distinct_image_calls(items, allowed=None):
@@ -94,12 +113,14 @@ def distinct_image_calls(items, allowed=None):
     return kept
 
 
-def current_image_candidates(items, is_sent_image=None):
+def current_image_candidates(items, is_sent_image=None, request_index=None):
     """给 Planner 保留本轮的选图过程，上一轮的候选随消息翻篇。"""
     old = set()
     current = set()
-    for item in items:
+    for index, item in enumerate(items):
         if item.get("item_type") == "UserMessageItem":
+            if request_index is not None and index > request_index:
+                continue
             text = next((p.get("text", "") for p in item.get("parts", []) if p.get("type") == "text"), "")
             if (text.startswith("<message ") and 'is_self_message="true"' not in text.split(">", 1)[0]
                     or text.startswith(("<plugin_proactive_task", "<internal_", "<subagent_result"))):
@@ -118,13 +139,15 @@ def current_image_candidates(items, is_sent_image=None):
     return [i for i in items if (i.get("tool_call") or {}).get("call_id") not in old and i.get("call_id") not in old]
 
 
-def image_request_stage(items, is_sent_image=None):
+def image_request_stage(items, is_sent_image=None, request_index=None):
     """从本轮回执识别已列出的候选和已受理的发图。"""
     calls = {}
     stage = ""
-    for item in items:
+    for index, item in enumerate(items):
         kind = item.get("item_type")
         if kind == "UserMessageItem":
+            if request_index is not None and index > request_index:
+                continue
             text = next((p.get("text", "") for p in item.get("parts", []) if p.get("type") == "text"), "")
             header = text.split(">", 1)[0]
             incoming = text.startswith("<message ") and 'is_self_message="true"' not in header
@@ -163,6 +186,7 @@ class LifeImages:
         self.images = DiaryImages(engine, ctx, config)
         self.pending_requests = set()
         self.planner_actions = {}
+        self.group_photo_requests = {}
         self.turn_notes = {}
         self.send_locks = WeakValueDictionary()
 
@@ -305,17 +329,18 @@ class LifeImages:
                 break
         return candidates
 
-    def tool_definitions(self, definitions, session, items=()):
+    def tool_definitions(self, definitions, session, items=(), turn=None):
         """按当前聊天可用的图片能力提供工具。"""
         enabled = self.config.life.enabled and self.config.diary.chat_images_enabled
         enabled = enabled and (self.config.diary.image_service_enabled or bool(self.candidates(session)))
+        relevant, index, _, _ = turn if turn is not None else photo_turn(items)
         result = []
         for tool in definitions:
             function = tool.get("function", {})
             if function.get("name") == "maiweave_show_life":
-                if not enabled or not image_tool_relevant(items):
+                if not enabled or not relevant:
                     continue
-                stage = image_request_stage(items, lambda mid: self.sent_image(session, mid))
+                stage = image_request_stage(items, lambda mid: self.sent_image(session, mid), index)
                 if stage in {"empty", "sent"}:
                     continue
                 if not self.config.diary.image_service_enabled:
@@ -334,11 +359,11 @@ class LifeImages:
                AND json_extract(data,'$.status')='已发送' LIMIT 1""", (session, message_id)
         ).fetchone() is not None
 
-    async def requested(self, experience_id, session, now, *, framing=""):
+    async def requested(self, experience_id, session, now, *, framing="", request_id=""):
         """追问图片的后台任务失败时，在原聊天告知结果。"""
         self.engine.owned("experience", experience_id, session)
         try:
-            return await self.send(experience_id, session, now, framing=framing)
+            return await self.send(experience_id, session, now, framing=framing, request_id=request_id)
         except Exception:
             result = await self.ctx.send.text("这次图片没发出来，可以稍后再让我试试。", session,
                 return_details=True, storage_message=True, sync_to_maisaka_history=True)
@@ -348,7 +373,7 @@ class LifeImages:
         finally:
             self.pending_requests.discard((session, experience_id))
 
-    async def send(self, experience_id, session, now, *, share_id="", framing="", since=None):
+    async def send(self, experience_id, session, now, *, share_id="", framing="", since=None, request_id=""):
         if not self.config.diary.chat_images_enabled:
             raise ValueError("聊天图片已关闭，可在「插件配置 → 模型设置 → 图片用途」中开启")
         event = self.engine.owned("experience", experience_id, session)
@@ -363,9 +388,9 @@ class LifeImages:
                             and row["status"] == "已发送" and self.engine.time(row["at"]) >= since):
                         return {"status": "已发送", "message_id": row["message_id"], "experience_id": experience_id,
                                 "description": row["description"]}
-            return await self._deliver(event, session, now, share_id, framing)
+            return await self._deliver(event, session, now, share_id, framing, request_id)
 
-    async def _deliver(self, event, session, now, share_id, framing):
+    async def _deliver(self, event, session, now, share_id, framing, request_id):
         experience_id = event["id"]
         image = self.store.find("experience_image", experience_id)
         content = self.content(event)
@@ -389,6 +414,8 @@ class LifeImages:
         delivery = {"id": uuid4().hex, "at": now.isoformat(), "session_id": session,
                     "experience_id": experience_id, "share_id": share_id, "status": "发送中",
                     "description": image["image_prompt"][:600], "error": ""}
+        if request_id:
+            delivery["request_message_id"] = request_id
         self.images.put("image_delivery", delivery)
         try:
             encoded = await asyncio.to_thread(self.images.original_base64, image)

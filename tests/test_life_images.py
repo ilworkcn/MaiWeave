@@ -34,6 +34,33 @@ def test_previous_candidate_lookup_is_removed_as_a_pair():
     assert current_image_candidates([call("old", "list"), output("old"), *keep]) == keep[2:]
 
 
+async def test_group_picture_request_survives_an_interruption(plugin, monkeypatch):
+    p = plugin
+    _, event = setup(p, monkeypatch)
+    session = "chat-a"
+    p.chat_context.kinds[session] = "group"
+    def message(mid, body, own=False):
+        header = f'<message msg_id="{mid}" is_self_message="{str(own).lower()}">'
+        return {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": header + body + "</message>"}]}
+    tool = {"function": {"name": "maiweave_show_life", "parameters": {"properties": {"action": {}}}}}
+    async def offered(items):
+        result = await p.planner_context(session_id=session, items=list(items), tool_definitions=[tool])
+        return result["modified_kwargs"]["tool_definitions"]
+    ask = message("a", "[图片：人物自拍]给我看看书签")
+    aside = message("b", "哈哈")
+    assert await offered([ask, aside])
+    assert p.life_images.group_photo_requests[session] == ("a", "给我看看书签")
+    assert (await p.show_life("list", stream_id=session))["items"]
+    await p.show_life("send", event["id"], stream_id=session)
+    assert p.store.all("image_delivery")[-1]["request_message_id"] == "a"
+    call = {"item_type": "FunctionCallItem", "tool_call": {"func_name": "maiweave_show_life", "args": {"action": "send"}, "call_id": "s"}}
+    receipt = {"item_type": "FunctionCallOutputItem", "call_id": "s", "output": {"status": "已发送"}}
+    assert not await offered([ask, call, receipt, aside])
+    assert not await offered([ask, message("self", "给你", True), aside])
+    assert not await offered([message("media", "[图片：自拍][表情包:发张照片][视频：看看]")])
+    assert not await offered([ask] + [aside] * 5)
+
+
 def test_planner_stops_offering_images_after_accepted_send():
     def message(body):
         return {"item_type": "UserMessageItem", "parts": [{"type": "text", "text": body}]}
