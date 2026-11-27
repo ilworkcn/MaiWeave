@@ -29,6 +29,17 @@ class Wallet:
     def pantry(self):
         return self.store.find("runtime", "pantry") or {"id": "pantry", "raw": 3, "ready": 0}
 
+    def meal_options(self, pantry):
+        options = []
+        if pantry["ready"] > 0:
+            options.append("回家吃留餐（meal，food=吃留餐）")
+        if pantry["raw"] > 0:
+            options.append("在家现做现吃（meal），或先备料、做好留餐（cook）")
+        if self.account()["balance"] > 0:
+            options.append("按余额和路程选外食（meal，food=外食，cost填餐费），或买菜（groceries填买够几餐，cost填菜钱）")
+        options.append("已有请客或供餐依据时可选受招待（meal）")
+        return "；".join(options)
+
     def food_action(self, choice):
         pantry = self.pantry()
         food = choice.food
@@ -50,10 +61,10 @@ class Wallet:
         if (food in {"做好留餐", "备料"} and choice.kind != "cook"
                 or food in {"现做现吃", "吃留餐", "外食", "受招待"} and choice.kind != "meal"):
             raise ValueError("请按实际活动填写做饭或用餐类型")
-        if food in {"做好留餐", "现做现吃"} and pantry["raw"] + choice.groceries < 1:
-            raise ValueError("家里食材已用完，可以安排买菜、吃留餐或付费用餐")
+        if food in {"备料", "做好留餐", "现做现吃"} and pantry["raw"] + choice.groceries < 1:
+            raise ValueError("家里食材已用完。" + self.meal_options(pantry))
         if food == "吃留餐" and not pantry["ready"]:
-            raise ValueError("目前没有已经做好的留餐")
+            raise ValueError("目前没有已经做好的留餐。" + self.meal_options(pantry))
         if food == "外食" and not choice.cost:
             raise ValueError("在外购买成品餐请填写餐费")
         return food

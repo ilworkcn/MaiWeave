@@ -10,6 +10,25 @@ from test_plugin import plugin
 from test_proactive_modes import prepare
 
 
+@pytest.mark.parametrize("raw,ready", [(0, 0), (1, 0), (0, 1), (1, 1)])
+async def test_meal_options_follow_pantry(plugin, raw, ready):
+    wallet = plugin.engine.wallet
+    with plugin.store.db:
+        plugin.store.put("runtime", {"id": "pantry", "raw": raw, "ready": ready})
+    options = wallet.meal_options(wallet.pantry())
+    assert ("吃留餐" in options) == bool(ready)
+    assert ("现做现吃" in options) == bool(raw)
+    meal = ActivityChoice(kind="meal", title="午餐", minutes=20, motivation="吃午饭", location="住处")
+    for food, available in [("吃留餐", ready), ("现做现吃", raw)]:
+        meal.food = food
+        if available:
+            assert wallet.food_action(meal) == food
+        else:
+            with pytest.raises(ValueError) as error:
+                wallet.food_action(meal)
+            assert str(error.value).endswith(options)
+
+
 @pytest.mark.parametrize("plugin", ["默认账单"], indirect=True)
 async def test_default_monthly_bills(plugin):
     from maibot_sdk.config import rebuild_plugin_config_data

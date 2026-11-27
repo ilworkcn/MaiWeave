@@ -671,8 +671,8 @@ class Living:
                 "外食按想吃的东西、店里供应什么、路程和下一项安排选地方；赶时间可以买现成的，有空可以坐下点餐。"
                 "临近饭点想想眼下怎么吃；下班或散步回家时，也可以为下一顿打算。冰箱见底时，看看沿路哪家店卖合适的食材、下一餐有没有时间下厨。"
                 "决定顺路买菜时可单独安排，标题写买什么，groceries填能做几餐，cost填总价。"
-                "food按实际选：做好留餐、现做现吃、吃留餐、外食、受招待、备料。切洗食材选备料。吃刚做好的饭选吃留餐。"
-                "外卖和买早餐属于外食。受招待要有具体的请客或供餐依据。其他活动food留空。"
+                f"本次吃饭和备餐选项：{wallet.meal_options(pantry)}。"
+                "外卖和买早餐属于外食。单独买菜或其他非餐食活动的food留空。"
                 f"钱包有{wallet.account()['balance']}{wallet.currency_name}。{wallet.rent_note()} 每单位按人民币1元估价，已知标价优先。早餐5～12、简餐15～30、饮料3～15、少量食材10～30、日用品或手工材料10～50，按品类和数量估总价。买东西或外食时cost填实际花费，取快递或使用已有物品填0。房租由钱包按月支付，车费沿用路线。"
                 f"日常身份：{(self.engine.store.find('runtime', 'occupation') or {}).get('name', self.config.life.occupation or '未设定')}。"
                 "课程和班次沿用日程。按学段、专业、职业和技能安排空闲时间；上课和课题研究用study，远程工作也可以在住处进行。"
@@ -726,7 +726,7 @@ class Living:
                     raise ValueError("阅读书架时选学习或休闲，并填写书架中的书籍 ID；其他活动将 book_id 留空")
                 buying_for_meal = choice.groceries and pantry["raw"] == pantry["ready"] == 0
                 if state["hunger"] >= 65 and choice.kind not in {"cook", "meal"} and not buying_for_meal:
-                    raise ValueError("当前饥饿程度已达到65，请选择吃饭meal或做饭cook；已有待吃饭菜时优先meal")
+                    raise ValueError("当前饥饿程度已达到65，先安排下一餐。" + wallet.meal_options(wallet.pantry()))
                 if choice.continuation_id:
                     offer = next((r for r in continuations if r["id"] == choice.continuation_id), {})
                     if offer.get("hourly_pay") and (choice.kind != "work" or choice.location != offer["location"] or choice.place_query):
@@ -1241,7 +1241,7 @@ class Living:
             else:
                 try:
                     result = await self.ctx.maisaka.proactive.trigger(
-                        session, intent + ("现在请用 reply 兑现这条约定。" if notices and promised else "结合当前对话判断是否适合开口，可以选择沉默。"),
+                        session, intent + ("现在请用 reply 兑现这条约定。这次只接上约好的话题，答完就结束本轮。" if notices and promised else "结合当前对话判断是否适合开口，可以选择沉默。"),
                         reason="MaiWeave 生活跟进", metadata={"maiweave_record_id": record_id})
                     if not result["success"]:
                         raise RuntimeError(result.get("error") or "主动交流请求失败")
