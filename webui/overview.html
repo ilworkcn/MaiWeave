@@ -109,14 +109,21 @@ const colors={sleep:'#8a78a3',cook:'#d47755',meal:'#bc7844',work:'#6387a1',study
 let data,day=0,chartKey='energy',busy=false,received=0;
 const time=value=>value?.slice(11,16)||'—';
 const clockNow=()=>new Date(new Date(data.now).getTime()+Date.now()-received);
-async function detail(plan){const id=plan.id;$('detailContent').dataset.plan=id;$('detailContent').innerHTML=`<small>${esc(plan.kind_label)} · ${esc(plan.status_label)} · ${esc(plan.source_label)}</small><h2>${esc(plan.title)}</h2><p>${esc(time(plan.start))}–${esc(time(plan.end))} · ${esc(plan.location||'未指定地点')}</p><div id="explanation">正在读取活动经过…</div>`;const actions=document.createElement('div');actions.className='tabs';$('detailContent').append(actions);if(['scheduled','active','paused','blocked','awaiting_confirmation'].includes(plan.status)){const button=document.createElement('button');button.className='btn';button.textContent='取消日程';button.onclick=async()=>{button.disabled=true;try{await maibot.action('plan_action',{plan_id:id,action:'cancel'});$('detail').close();await refresh()}catch(e){button.disabled=false;$('explanation').textContent=e.message}};actions.append(button)}const manage=document.createElement('button');manage.className='btn';manage.textContent='管理日程与历史';manage.onclick=()=>maibot.navigate('schedule');actions.append(manage);$('detail').showModal();try{const r=await maibot.query('timeline',{plan_id:id});if($('detailContent').dataset.plan!==id)return;$('explanation').innerHTML=r.events.map(e=>`<article class="moment"><small>${esc(e.at.replace('T',' ').slice(5,16))} · ${esc(e.title)}</small><p>${esc(e.text)}</p></article>`).join('')+(r.balance?`<p class="muted">安排时的今日节奏：${esc(r.balance.totals.map(x=>x.activity+' '+x.minutes+'分钟').join('、')||'刚开始今天的生活')} · 最近连续 ${r.balance.consecutive} 次${esc(r.balance.last_activity)}</p>`:'')}catch(e){if($('detailContent').dataset.plan===id)$('explanation').textContent='读取失败：'+e.message}}
+async function detail(plan){const id=plan.id;$('detailContent').dataset.plan=id;$('detailContent').innerHTML=`<small>${esc(plan.kind_label)} · ${esc(plan.status_label)} · ${esc(plan.source_label)}</small><h2>${esc(plan.title)}</h2><p>${esc(time(plan.start))}–${esc(time(plan.end))} · ${esc(plan.location||'未指定地点')}</p><div id="explanation">正在读取活动经过…</div>`;const actions=document.createElement('div');actions.className='tabs';$('detailContent').append(actions);if(['scheduled','active','paused','blocked','awaiting_confirmation'].includes(plan.status)){const button=document.createElement('button');button.className='btn';button.textContent='取消日程';button.onclick=async()=>{button.disabled=true;try{await maibot.action('plan_action',{plan_id:id,action:'cancel'});$('detail').close();await refresh()}catch(e){button.disabled=false;$('explanation').textContent=e.message}};actions.append(button)}const manage=document.createElement('button');manage.className='btn';manage.textContent='管理日程与历史';manage.onclick=()=>maibot.navigate('schedule');actions.append(manage);$('detail').showModal();try{const r=await overviewQuery('timeline',{plan_id:id});if($('detailContent').dataset.plan!==id)return;$('explanation').innerHTML=r.events.map(e=>`<article class="moment"><small>${esc(e.at.replace('T',' ').slice(5,16))} · ${esc(e.title)}</small><p>${esc(e.text)}</p></article>`).join('')+(r.balance?`<p class="muted">安排时的今日节奏：${esc(r.balance.totals.map(x=>x.activity+' '+x.minutes+'分钟').join('、')||'刚开始今天的生活')} · 最近连续 ${r.balance.consecutive} 次${esc(r.balance.last_activity)}</p>`:'')}catch(e){if($('detailContent').dataset.plan===id)$('explanation').textContent='读取失败：'+e.message}}
 
 function mapLight(hour){return hour<6||hour>=23?'late':hour>=18?'evening':'day'}
+// 首页数据、头像和地图画稿共用宿主的请求通道。
+let pendingQuery=Promise.resolve();
+function overviewQuery(name,args){
+ const request=pendingQuery.then(()=>maibot.query(name,args));
+ pendingQuery=request.catch(()=>{});
+ return request;
+}
 const mapPixels=new Map();
 let sceneryKey='';
 function mapBitmap(phase){
  if(!mapPixels.has(phase)){
-  mapPixels.set(phase,maibot.query('map_layer',{layer:phase}).then(async result=>{
+  mapPixels.set(phase,overviewQuery('map_layer',{layer:phase}).then(async result=>{
    const image=new Image();
    image.src=result.src;
    await image.decode();
@@ -140,7 +147,9 @@ function mapFoliage(local,weather){
  const month=(local.getUTCMonth()+(weather?.latitude<0?6:0))%12;
  const season=['winter','spring','summer','autumn'][Math.floor(((month+1)%12)/3)];
  const days=weather?.forecast?.slice(0,3);
- if(weather?.stale||days?.length!==3)return season;
+ if(days?.length!==3)return season;
+ // 实况按小时更新，草木仍可参考覆盖当地今天的三日预报。
+ if(weather.stale&&!days.some(day=>day.day===local.toISOString().slice(0,10)))return season;
  if((season==='autumn'||season==='spring')&&days.every(day=>Number.isFinite(day.high)&&day.high<=0))return 'winter';
  // 回归线之间的暖地沿用绿树。用三天的高低温一起看，避免午后短暂升温就换色。
  if(Number.isFinite(weather.latitude)&&Math.abs(weather.latitude)<=23.44&&
@@ -255,7 +264,7 @@ async function loadMapAvatar(){
  if(accountAvatar||loadingAvatar)return;
  loadingAvatar=true;
  try{
-  const {image}=await maibot.query('avatar');
+  const {image}=await overviewQuery('avatar');
   if(image){accountAvatar=image;const img=document.querySelector('.map-mai img');if(img)img.src=image}
  }catch(error){console.info('地图使用麦织头像',error.message)}finally{loadingAvatar=false}
 }
@@ -318,7 +327,7 @@ function paintMap(map,unit){
  async function findRoute(origin,destination){
   const request={origin,destination,message:'正在查路线…'};
   navigation=request;paintMap(map,unit);
-  try{request.route=await maibot.query('route',{origin,destination})}
+  try{request.route=await overviewQuery('route',{origin,destination})}
   catch(e){request.message=e.message||String(e)}
   if(navigation===request)paintMap(map,unit);
  }
@@ -581,6 +590,6 @@ $('moments').innerHTML=d.moments.length?d.moments.map(m=>`<article class="moment
 $('book').innerHTML=d.book?`<small>${esc(d.book.status)} · 已读 ${d.book.progress}%</small><h3 class="shelf-title">${esc(d.book.title)}</h3><div class="progress"><span style="width:${d.book.progress}%"></span></div><p class="excerpt">${esc(d.book.thoughts||'下一次阅读后，这里会留下新的感想。')}</p>${d.book.question?`<p class="question">还在想：${esc(d.book.question)}</p>`:''}`:'<p class="empty">书架还没有选定读物。放一本喜欢的书，让下一段闲暇有个去处。</p>';$('diary').innerHTML=d.diary?`<small>${esc(d.diary.day)}</small><p class="excerpt" style="margin-top:10px">${esc(d.diary.content)}</p>`:'<p class="empty">日记会随写作日程慢慢积累，记录一天去了哪里、做了什么。</p>';
 $('summary').innerHTML=`<div><b>${d.experience_count}</b><small>段生活经历</small></div><div><b>${d.habit_count}</b><small>个近期习惯 · ${d.dream_count}场梦</small></div><div><b>${d.usage.known_calls?d.usage.total.toLocaleString():'—'}</b><small>今日已知 Token · ${d.usage.calls}次调用${d.usage.missing_calls?' · '+d.usage.missing_calls+'次未返回用量':''}</small></div>`;
 $('diagnosticTitle').textContent='交流与运行详情 · '+(d.errors==='无运行错误'?'运行正常':'有运行错误');$('shareStatus').textContent=d.share_status;paintShares(d);$('shares').innerHTML=d.share_decisions.length?d.share_decisions.map(r=>`<details class="log"><summary>${esc(r.at)} · ${esc(r.mode)} · ${esc(r.outcome)} · ${esc(r.delivery)}</summary><p>${esc(r.session_name)} · ${esc(r.session_detail)}\n${esc(r.score)}\n${esc(r.reason)}\n${esc(r.followup==='answered'?'已接话：'+r.response:r.followup==='closed'?'已聊完：'+r.response:r.sent_at?'等待接话':'')}\n${esc(r.observation||'')}</p></details>`).join(''):'<p class="empty">还没有主动交流判定。</p>';$('planningStatus').textContent=d.planning_status;$('planning').innerHTML=d.planning_history.map(r=>`<details class="log"><summary>${esc(r.at)} · ${esc(r.title)} · ${r.minutes}分钟</summary><p>${esc(r.source)} · ${esc(r.place)}\n${esc(r.reason)}\n${esc(r.followup==='answered'?'已接话：'+r.response:r.followup==='closed'?'已聊完：'+r.response:r.sent_at?'等待接话':'')}\n${esc(r.observation||'')}</p></details>`).join('');$('runtime').textContent=d.errors+' · 最后推进 '+d.updated_at+'\n'+d.travel+' · '+d.awake_until+'\n最近规划错误：'+d.planning_failure;$('jobs').innerHTML=d.jobs.map(j=>`<div class="log">${esc(j.label)} · ${esc(j.status)}${j.error?' · '+esc(j.error):''}</div>`).join('');}
-async function refresh(){if(busy)return;busy=true;$('refresh').disabled=true;document.querySelectorAll('[data-day]').forEach(b=>b.disabled=true);try{data=await maibot.query('data',{day_offset:day});received=Date.now();render();void loadMapAvatar();$('error').hidden=true}catch(e){$('error').textContent='刷新失败：'+e.message;$('error').hidden=false;$('loading').hidden=true}finally{busy=false;$('refresh').disabled=false;document.querySelectorAll('[data-day]').forEach(b=>b.disabled=false)}}
-$('refresh').onclick=refresh;$('close').onclick=()=>$('detail').close();document.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{day=Number(b.dataset.day);refresh()});document.querySelectorAll('[data-chart]').forEach(b=>b.onclick=()=>{chartKey=b.dataset.chart;paintChart()});document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>maibot.navigate(b.dataset.page));await maibot.ready;maibot.query('map_layer',{layer:'brand'}).then(r=>{$('brandIcon').src=r.src}).catch(console.error);await refresh();document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});setInterval(()=>{if(!document.hidden)refresh()},30000);setInterval(paintProgress,1000);
+async function refresh(){if(busy)return;busy=true;$('refresh').disabled=true;document.querySelectorAll('[data-day]').forEach(b=>b.disabled=true);try{data=await overviewQuery('data',{day_offset:day});received=Date.now();render();void loadMapAvatar();$('error').hidden=true}catch(e){$('error').textContent='刷新失败：'+e.message;$('error').hidden=false;$('loading').hidden=true}finally{busy=false;$('refresh').disabled=false;document.querySelectorAll('[data-day]').forEach(b=>b.disabled=false)}}
+$('refresh').onclick=refresh;$('close').onclick=()=>$('detail').close();document.querySelectorAll('[data-day]').forEach(b=>b.onclick=()=>{day=Number(b.dataset.day);refresh()});document.querySelectorAll('[data-chart]').forEach(b=>b.onclick=()=>{chartKey=b.dataset.chart;paintChart()});document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>maibot.navigate(b.dataset.page));await maibot.ready;overviewQuery('map_layer',{layer:'brand'}).then(r=>{$('brandIcon').src=r.src}).catch(console.error);await refresh();document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});setInterval(()=>{if(!document.hidden)refresh()},30000);setInterval(paintProgress,1000);
 </script></body></html>
