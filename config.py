@@ -149,7 +149,7 @@ class DiaryConfig(PluginConfigBase):
     image_service_enabled: bool = setting("启用图片生成服务", default=False, description="开启后可生成空间随笔配图和聊天图片；关闭后仍可查看、发送已有图片。")
     chat_images_enabled: bool = setting("聊天中展示生活图片", default=False, description="允许追问时发图，以及主动分享时由模型选择配图；同一经历复用已保存图片。关闭后聊天不提供发图工具。")
     image_enabled: bool = setting("空间随笔自动配图", default=False, description="开启图片生成服务后，为新写好的空间随笔生成一张配图；关闭此项可在详情中手动生成。聊天配图由「聊天中展示生活图片」控制。")
-    image_base_url: str = setting("生图接口地址（生图必填）", default="https://api.openai.com/v1", description="填写所选图片接口的基础地址；OpenAI 与通义兼容地址通常包含 /v1，Gemini 与 DashScope 填服务根地址。")
+    image_base_url: str = setting("生图接口地址（生图必填）", default="https://api.openai.com/v1", description="填写所选图片接口的基础地址；火山方舟直连填 https://ark.cn-beijing.volces.com/api/v3，通义或中转服务填提供方给出的兼容地址。")
     image_api_key: str = setting("生图 API Key（生图必填）", default="", description="填写图片生成服务提供的密钥。", json_schema_extra={"x-widget": "password", "input_type": "password"})
     image_retry_count: int = setting("图片生成重试次数", default=3, ge=0, description="首次请求失败后最多重试的次数，默认 3 次，即最多请求 4 次；0 表示关闭自动重试。每次重试间隔 3 秒，沿用本次提示词和参考图。")
     image_size: Literal["1024x768", "2304x1728", "1728x2304", "2048x2048", "服务默认", "自定义"] = setting("出图尺寸", default="1024x768", description="选择横图、竖图、方图或服务默认尺寸。")
@@ -162,7 +162,7 @@ class DiaryConfig(PluginConfigBase):
         return "" if self.image_size == "服务默认" else self.image_size
     image_model: str = setting("生图模型（生图必填）", default="gpt-image-1", description="填写服务实际支持的图片生成模型名称。保存后可点击配置页顶部「测试生图配置」验证。")
     image_character_enabled: bool = setting("启用麦麦角色卡", default=False, description="空间和聊天共用一张角色卡，由提示词模型结合场景决定麦麦是否入镜。")
-    image_reference_protocol: Literal["OpenAI 图片编辑", "通义千问兼容接口", "OpenAI Chat 生图", "Gemini 原生", "DashScope 多模态", "Unsloth 原生"] = setting("图片接口格式", default="OpenAI 图片编辑", description="按服务选择请求格式。OpenAI 与通义兼容地址通常包含 /v1；Gemini、DashScope、Unsloth 填服务根地址。Unsloth 使用服务中已加载的图片模型。DashScope 使用同步多模态生图接口。")
+    image_reference_protocol: Literal["OpenAI 图片编辑", "通义千问兼容接口", "OpenAI Chat 生图", "Gemini 原生", "DashScope 多模态", "Unsloth 原生"] = setting("图片接口格式", default="OpenAI 图片编辑", description="豆包方舟、通义兼容服务选「参考图随生成请求发送」，自拍和物件近景都走 /images/generations。服务要求用 /images/edits 上传参考图时，选「OpenAI 图片编辑」。Gemini、DashScope 和 Unsloth 填服务根地址。")
     image_character_reference_enabled: bool = setting("使用角色参考图", default=False, description="麦麦入镜时优先参考图片中的外貌，文字角色卡补充细节。请在「角色与图片」页面上传图片，并选择服务支持的参考图接口。")
     image_character_reference_url: str = setting("参考图片地址（选填）", default="", description="也可填写 PNG、JPEG 或 WebP 的 HTTP(S) 直链。已上传的参考图优先使用；空间和聊天共用，已有图片继续复用。", max_length=2000)
     image_character_appearance: str = setting("外貌设定（选填）", default="", description="填写发型、发色、眼睛和体型等稳定特征，例如：黑色齐肩发、棕色眼睛。可结合参考图使用。", max_length=800)

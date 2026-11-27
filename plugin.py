@@ -154,6 +154,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ('book_context', 'books', '书架上下文长度', '设置工具查询带入的书目和近期笔记长度。', ['context_chars']),
         ]
         original = schema["sections"]
+        original["diary"]["fields"]["image_reference_protocol"]["i18n"] = {
+            "zh-CN": {"choice:通义千问兼容接口": "参考图随生成请求发送（豆包方舟、通义兼容）"}
+        }
         for name, choices in (("publish_mode", ["关闭", "手动发布", "日记完成后自动发布"]), ("publish_visibility", ["所有人", "好友", "仅自己"])):
             original["diary"]["fields"][name].update(choices=choices, ui_type="select")
         for key in ("group_mode", "private_mode"):

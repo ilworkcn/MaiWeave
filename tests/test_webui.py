@@ -92,6 +92,9 @@ def test_config_labels_and_controls_are_chinese():
         for field in section["fields"].values():
             assert any("\u4e00" <= c <= "\u9fff" for c in field["label"])
     assert sections["life"]["fields"]["enabled"]["ui_type"] == "switch"
+    protocol = sections["image_service"]["fields"]["image_reference_protocol"]
+    assert "通义千问兼容接口" in protocol["choices"]
+    assert protocol["i18n"]["zh-CN"]["choice:通义千问兼容接口"] == "参考图随生成请求发送（豆包方舟、通义兼容）"
     threshold = sections["proactive"]["fields"]["share_threshold"]
     assert threshold["choices"] == list(range(1, 11)) and threshold["ui_type"] == "select"
     assert instance.config.proactive.share_threshold == 5
