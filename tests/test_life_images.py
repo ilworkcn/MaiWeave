@@ -112,8 +112,9 @@ async def test_planner_repeating_list_across_rounds(plugin, monkeypatch):
     await prepare([message])
     assert await plugin.planner_receipt("chat-a", [first]) == {"action": "continue"}
     result = await plugin.show_life("list", stream_id="chat-a")
+    assert event["id"] in [row["id"] for row in result["items"]]
     history = [message, first, {"item_type": "FunctionCallOutputItem", "call_id": "first",
-                               "output": json.dumps(result)}]
+                               "output": "候选：已折好的书签。"}]
     await prepare(history)
     response = await plugin.planner_receipt("chat-a", [second])
     assert response["modified_kwargs"]["output_items"][0]["tool_call"] == {

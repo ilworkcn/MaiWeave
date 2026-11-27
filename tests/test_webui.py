@@ -12,6 +12,30 @@ from maiweave.plugin import create_plugin
 from test_plugin import plugin
 
 
+async def test_editor_uses_selected_page_bindings(plugin):
+    await plugin.ui_editor_write("space", "place", json.dumps({"name": "湖边书屋"}))
+    result = await plugin.ui_editor_read("space", "records", json.dumps({"category": "place", "query": "湖边书屋"}))
+    assert [row["name"] for row in result["records"]] == ["湖边书屋"]
+    with pytest.raises(ValueError):
+        await plugin.ui_editor_read("space", "place", "{}")
+    with pytest.raises(ValueError):
+        await plugin.ui_editor_write("books", "place", "{}")
+
+
+async def test_map_loads_layers_on_demand(plugin):
+    from base64 import b64decode
+    from io import BytesIO
+    from PIL import Image
+
+    for layer in ("brand", "day", "evening", "late", "spring", "autumn", "winter", "winter-evening", "winter-late", "snow", "atmosphere"):
+        src = (await plugin.ui_map_layer(layer))["src"]
+        with Image.open(BytesIO(b64decode(src.partition(",")[2]))) as img:
+            assert img.format == ("PNG" if layer == "brand" else "WEBP")
+            img.verify()
+    with pytest.raises(ValueError):
+        await plugin.ui_map_layer("未知")
+
+
 @pytest.mark.parametrize("status", ["unsupported", "missing"])
 async def test_map_uses_login_account_and_keeps_default_avatar(plugin, status):
     plugin.ctx.call_capability = AsyncMock(return_value={"user_id": "test-account"})

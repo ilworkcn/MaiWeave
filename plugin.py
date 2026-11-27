@@ -545,6 +545,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                 "meta": {"item_id": uuid4().hex, "logical_turn_id": None, "timestamp": self.now().isoformat()},
                 "tool_call": {
                 "call_id": uuid4().hex, "func_name": "wait", "args": {}}}]
+        for item in output_items:
+            call = item.get("tool_call") or {}
+            if call.get("func_name") == "maiweave_show_life" and call.get("args", {}).get("action") == "list":
+                self.life_images.list_receipts[session_id] = (call["call_id"], None)
         self.living.receipts.observe(session_id, output_items)
         self.presence.observe_planner(session_id, output_items, self.now())
         self.living.observe_farewell(session_id, output_items, self.now())

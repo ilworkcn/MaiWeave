@@ -41,6 +41,9 @@ class FeatureTools:
                     items = []
             else:
                 items = self.life_images.candidates(session, framing or request, shared_id, request=request, now=self.now())
+            pending = self.life_images.list_receipts.get(session)
+            if pending and pending[1] is None:
+                self.life_images.list_receipts[session] = (pending[0], tuple(row["id"] for row in items))
             return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；同样符合话题时优先选当前聊天没发过的经历。普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
                     "enabled": self.config.diary.chat_images_enabled and (self.config.diary.image_service_enabled or bool(items)),
                     "generation_enabled": self.config.diary.image_service_enabled, "items": items}

@@ -141,7 +141,7 @@ def current_image_candidates(items, is_sent_image=None, request_index=None):
     return [i for i in items if (i.get("tool_call") or {}).get("call_id") not in old and i.get("call_id") not in old]
 
 
-def image_request_stage(items, is_sent_image=None, request_index=None):
+def image_request_stage(items, is_sent_image=None, request_index=None, list_receipt=None):
     """从本轮回执识别已列出的候选和已受理的发图。"""
     calls = {}
     stage = ""
@@ -166,6 +166,10 @@ def image_request_stage(items, is_sent_image=None, request_index=None):
             if call.get("func_name") == "maiweave_show_life":
                 calls[call.get("call_id")] = call.get("args", {}).get("action")
         elif kind == "FunctionCallOutputItem" and calls and item.get("call_id") in calls:
+            if (stage != "sent" and list_receipt and list_receipt[0] == item["call_id"]
+                    and calls[item["call_id"]] == "list" and list_receipt[1] is not None):
+                stage = list_receipt[1] or "empty"
+                continue
             output = item.get("output")
             if isinstance(output, str):
                 try:
@@ -188,6 +192,7 @@ class LifeImages:
         self.images = DiaryImages(engine, ctx, config)
         self.pending_requests = set()
         self.planner_actions = {}
+        self.list_receipts = {}
         self.group_photo_requests = {}
         self.turn_notes = {}
         self.send_locks = WeakValueDictionary()
@@ -366,7 +371,7 @@ class LifeImages:
             if function.get("name") == "maiweave_show_life":
                 if not enabled or not relevant:
                     continue
-                stage = image_request_stage(items, lambda mid: self.sent_image(session, mid), index)
+                stage = image_request_stage(items, lambda mid: self.sent_image(session, mid), index, self.list_receipts.get(session))
                 if stage in {"empty", "sent"}:
                     continue
                 params = function.get("parameters", {})

@@ -14,6 +14,16 @@
       "entry": "webui/overview.html",
       "layout": "document",
       "queries": {
+        "map_layer": {
+          "api": "ui_map_layer",
+          "version": "1",
+          "parameters": {
+            "layer": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
         "data": {
           "api": "ui_dashboard",
           "version": "1",
@@ -34,8 +44,14 @@
           "api": "ui_map_route",
           "version": "1",
           "parameters": {
-            "origin": {"type": "string", "required": true},
-            "destination": {"type": "string", "required": true}
+            "origin": {
+              "type": "string",
+              "required": true
+            },
+            "destination": {
+              "type": "string",
+              "required": true
+            }
           }
         },
         "timeline": {
@@ -184,6 +200,25 @@
             "page": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -589,6 +624,25 @@
               "required": false
             }
           }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       }
     },
@@ -694,6 +748,25 @@
               "minimum": 1
             }
           }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       },
       "actions": {
@@ -729,6 +802,25 @@
         "check_memory": {
           "api": "ui_check_memory",
           "version": "1"
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       }
     },
@@ -814,10 +906,6 @@
             }
           }
         },
-        "memory_connection": {
-          "api": "ui_memory_connection",
-          "version": "1"
-        },
         "operation_status": {
           "api": "ui_operation_status",
           "version": "1",
@@ -861,6 +949,25 @@
             "section": {
               "type": "string",
               "required": true
+            }
+          }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -976,6 +1083,25 @@
             "keep": {
               "type": "boolean",
               "required": true
+            }
+          }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1097,6 +1223,25 @@
             "page": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1311,6 +1456,25 @@
               "required": true
             }
           }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       }
     },
@@ -1382,6 +1546,25 @@
             "page": {
               "type": "integer",
               "required": false
+            }
+          }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1463,6 +1646,25 @@
               "required": false
             }
           }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       }
     },
@@ -1542,6 +1744,25 @@
               "required": true
             }
           }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       },
       "actions": {
@@ -1580,6 +1801,25 @@
             },
             "image_prompt": {
               "type": "string"
+            }
+          }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1636,6 +1876,25 @@
             "page": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1711,6 +1970,25 @@
             "record_id": {
               "type": "string",
               "required": true
+            }
+          }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1820,6 +2098,25 @@
             "page": {
               "type": "integer",
               "minimum": 1
+            }
+          }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
             }
           }
         }
@@ -1992,6 +2289,25 @@
               "required": false
             }
           }
+        },
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       }
     },
@@ -2016,9 +2332,48 @@
               "required": false
             }
           }
+        },
+        "editor_read": {
+          "api": "ui_editor_read",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
         }
       },
-      "actions": {}
+      "actions": {
+        "editor_write": {
+          "api": "ui_editor_write",
+          "version": "1",
+          "parameters": {
+            "page": {
+              "type": "string",
+              "required": true
+            },
+            "binding": {
+              "type": "string",
+              "required": true
+            },
+            "arguments": {
+              "type": "string",
+              "required": true,
+              "max_length": 65536
+            }
+          }
+        }
+      }
     },
     {
       "id": "character",
