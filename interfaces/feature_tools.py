@@ -5,7 +5,7 @@ import asyncio
 from maibot_sdk import Tool
 
 from ..core.models import RoutineInput, ChatArrangement
-from ..integrations.life_images import FINISH_IMAGE, SENT_IMAGE
+from ..integrations.life_images import FINISH_IMAGE, SENT_IMAGE, asks_selfie
 
 
 def parameters(properties, required):
@@ -27,11 +27,24 @@ class FeatureTools:
     async def show_life(self, action: str, experience_id: str = "", framing: str = "", **kwargs):
         self.require_life()
         session = kwargs["stream_id"]
+        request_id, request_text = self.life_images.group_photo_requests.get(session, ("", ""))
         if action == "list":
             recent = self.living.receipts.context(session, self.now())
             shared_id = next((r["experience_id"] for r in recent if r["experience_id"]), "")
-            items = self.life_images.candidates(session, framing or self.chat_context.messages.get(session, ""), shared_id)
-            return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
+            request = request_text or self.chat_context.messages.get(session, "") or framing
+            if request_id and asks_selfie(request):
+                if self.config.diary.image_service_enabled:
+                    event = self.life_images.selfie_subject(session, self.now())
+                    items = [{"id": event["id"], "summary": event["summary"], "has_image": False, "sent_in_this_chat": False,
+                              "action_hint": "按此刻的地点和时间生成自拍"}]
+                else:
+                    items = []
+            else:
+                items = self.life_images.candidates(session, framing or request, shared_id, request=request, now=self.now())
+            pending = self.life_images.list_receipts.get(session)
+            if pending and pending[1] is None:
+                self.life_images.list_receipts[session] = (pending[0], tuple(row["id"] for row in items))
+            return {"instruction": "本轮选图候选已列出，直接复用。对方明确要图且有对应经历时，用其 ID 调 send 一次；可生成表示现场生图，成品须有已完成的经历依据；同样符合话题时优先选当前聊天没发过的经历。普通聊天、讲述细节或没有合适画面时，用 reply 接话或 wait 结束。",
                     "enabled": self.config.diary.chat_images_enabled and (self.config.diary.image_service_enabled or bool(items)),
                     "generation_enabled": self.config.diary.image_service_enabled, "items": items}
         if action != "send":
@@ -44,7 +57,7 @@ class FeatureTools:
         if key in self.life_images.pending_requests:
             return {"status": "正在生成，请稍等", "instruction": FINISH_IMAGE}
         if self.life_images.reusable(event, row):
-            result = await self.life_images.send(experience_id, session, self.now())
+            result = await self.life_images.send(experience_id, session, self.now(), request_id=request_id)
             return {**result, "instruction": SENT_IMAGE}
         if not self.config.diary.image_service_enabled:
             raise ValueError("图片生成服务已关闭")
@@ -52,7 +65,7 @@ class FeatureTools:
         delivery = {}
         async def generate_and_send():
             try:
-                delivery.update(await self.life_images.requested(experience_id, session, self.now(), framing=framing))
+                delivery.update(await self.life_images.requested(experience_id, session, self.now(), framing=framing or request_text, request_id=request_id))
             finally:
                 done.set()
         job = self.start_job("生成生活图片，完成后发送到当前聊天", generate_and_send())

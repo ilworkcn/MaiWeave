@@ -18,7 +18,7 @@ from .config import MaiWeaveConfig
 from .core.engine import LifeEngine, public_plan, read_life_status
 from .life.living import Living
 from .integrations.memory import NativeMemory
-from .integrations.life_images import LifeImages, asks_progress, asks_selfie, deferred_picture, incoming_photo_message, current_image_candidates, distinct_image_calls
+from .integrations.life_images import LifeImages, asks_progress, asks_selfie, deferred_picture, incoming_photo_message, photo_turn, current_image_candidates, distinct_image_calls
 from .core.models import ExperienceInput, GoalInput, PlanInput, PlanPatch, RelationshipChange
 from .core.store import Store
 from .integrations.chat_context import ChatContext, discovered_tools, without_sleep_tail
@@ -154,6 +154,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             ('book_context', 'books', '书架上下文长度', '设置工具查询带入的书目和近期笔记长度。', ['context_chars']),
         ]
         original = schema["sections"]
+        original["diary"]["fields"]["image_reference_protocol"]["i18n"] = {
+            "zh-CN": {"choice:通义千问兼容接口": "参考图随生成请求发送（豆包方舟、通义兼容）"}
+        }
         for name, choices in (("publish_mode", ["关闭", "手动发布", "日记完成后自动发布"]), ("publish_visibility", ["所有人", "好友", "仅自己"])):
             original["diary"]["fields"][name].update(choices=choices, ui_type="select")
         for key in ("group_mode", "private_mode"):
@@ -441,15 +444,22 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             if "tool_definitions" in kwargs:
                 kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"])
             return {"action": "continue", "modified_kwargs": kwargs}
+        await self.chat_context.identify(session)
+        group = self.chat_context.kinds.get(session) == "group"
+        turn = photo_turn(kwargs["items"], group)
+        if group and turn[2]:
+            self.life_images.group_photo_requests[session] = turn[2:]
+        else:
+            self.life_images.group_photo_requests.pop(session, None)
         if "tool_definitions" in kwargs:
             kwargs["tool_definitions"] = discovered_tools(kwargs["items"], kwargs["tool_definitions"], self.searchable_tools)
-            kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"])
+            kwargs["tool_definitions"] = self.life_images.tool_definitions(kwargs["tool_definitions"], session, kwargs["items"], turn)
         task = planner_task(kwargs["items"])
         if task:
             self.chat_context.proactive_turns.add(session)
         else:
             self.chat_context.proactive_turns.discard(session)
-        kwargs["items"] = current_image_candidates(kwargs["items"], lambda mid: self.life_images.sent_image(session, mid))
+        kwargs["items"] = current_image_candidates(kwargs["items"], lambda mid: self.life_images.sent_image(session, mid), turn[1] if group else None)
         if task and "tool_definitions" in kwargs:
             # 主动分享由发送回执按选定话题配图。
             kwargs["tool_definitions"] = [t for t in kwargs["tool_definitions"]
@@ -468,7 +478,6 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         text = "".join(p["text"] for p in latest.get("parts", []) if p.get("type") == "text")
         # MaiBot 会在请求末尾追加提醒，话题采用接收事件中的用户消息。
         text = self.chat_context.messages.get(session, text)
-        await self.chat_context.identify(session)
         wake_user = self.chat_context.wake_candidates.pop(session, None)
         if wake_user is not None and self.chat_context.kinds.get(session) == "private":
             self.living.wake_for_private_turn(session, self.now(), wake_user)
@@ -522,7 +531,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             function = tool.get("function", {})
             if function.get("name") == "maiweave_show_life":
                 action = function.get("parameters", {}).get("properties", {}).get("action", {})
-                self.life_images.planner_actions[session] = action.get("enum", ("list", "send"))
+                self.life_images.planner_actions[session] = {name: function["parameters"]["properties"].get("experience_id", {}).get("enum", ()) for name in action["enum"]}
                 break
         return {"action": "continue", "modified_kwargs": kwargs}
 
@@ -539,6 +548,10 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                 "meta": {"item_id": uuid4().hex, "logical_turn_id": None, "timestamp": self.now().isoformat()},
                 "tool_call": {
                 "call_id": uuid4().hex, "func_name": "wait", "args": {}}}]
+        for item in output_items:
+            call = item.get("tool_call") or {}
+            if call.get("func_name") == "maiweave_show_life" and call.get("args", {}).get("action") == "list":
+                self.life_images.list_receipts[session_id] = (call["call_id"], None)
         self.living.receipts.observe(session_id, output_items)
         self.presence.observe_planner(session_id, output_items, self.now())
         self.living.observe_farewell(session_id, output_items, self.now())
@@ -862,7 +875,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         activity = current["title"] if current and self.engine.visible(current, session) else "正在处理其他安排" if current else "空闲"
         state = self.engine.state()
         message = (
-            f"MaiWeave 0.13.3\n启用：{self.config.life.enabled}\n当前：{activity}\n"
+            f"MaiWeave 0.13.4\n启用：{self.config.life.enabled}\n当前：{activity}\n"
             f"精力：{state['energy']:.0f}；饥饿：{state['hunger']:.0f}；心情：{state['mood']:.0f}\n"
             f"聊天流：{session}\n原生记忆连接：{'已配置' if self.config.memory.enabled else '未配置'}\n"
             f"最近运行错误：{self.last_error or '无'}"

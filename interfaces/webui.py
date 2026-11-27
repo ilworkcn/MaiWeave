@@ -2,7 +2,9 @@
 
 import asyncio
 import base64
+from functools import lru_cache
 from io import BytesIO
+from pathlib import Path
 from urllib.request import urlopen
 from PIL import Image
 import json
@@ -49,6 +51,12 @@ def plan_row(plan):
             "start_label": display_time(plan["start"]), "end_label": display_time(plan["end"]),
             "scope_label": plan["session_id"] or "公共生活", "participants_label": "、".join(plan["participants"]) or "独自活动",
             "origin_label": "重复日程" if plan.get("routine_id") else ("自主安排" if plan["autonomous"] else "对话或页面安排")}
+
+
+@lru_cache(maxsize=1)
+def editor_pages():
+    manifest = json.loads((Path(__file__).resolve().parents[1] / "webui.json").read_text("utf-8"))
+    return {p["id"]: p for p in manifest["pages"] if p.get("entry") == "webui/editor.html"}
 
 
 class WebUI:
@@ -164,6 +172,8 @@ class WebUI:
 
     @API("ui_record_support", description="读取经历页的数据保留或图片记录")
     async def ui_record_support(self, section: str) -> dict:
+        if section == "memory":
+            return await self.ui_memory_connection()
         if section == "images":
             return await self.ui_life_images()
         if section == "retention":
@@ -512,6 +522,50 @@ class WebUI:
                 "next_plans": [plan_row(p) for p in sorted(plans, key=lambda p: p["start"]) if p["status"] in {"scheduled", "active"}][:12],
                 "errors": "\n".join(f"{name}：{error}" for name, error in self.last_errors.items()) or "无运行错误",
                 "jobs": self.store.all("job")[-10:]}
+
+    async def editor_call(self, kind, page, binding, arguments):
+        # 页内切换沿用目标页面声明的读写接口和参数范围。
+        definition = editor_pages().get(page, {}).get(kind, {}).get(binding)
+        if not definition or binding in {"editor_read", "editor_write"} or definition.get("confirmation"):
+            raise ValueError("当前页面没有此操作")
+        args = json.loads(arguments)
+        fields = definition.get("parameters", {})
+        if not isinstance(args, dict) or args.keys() - fields.keys():
+            raise ValueError("页面参数不匹配")
+        types = {"string": (str,), "integer": (int,), "number": (float, int), "boolean": (bool,)}
+        for name, field in fields.items():
+            if name not in args:
+                if field.get("required"):
+                    raise ValueError(f"缺少参数 {name}")
+                continue
+            value = args[name]
+            if type(value) not in types[field["type"]]:
+                raise ValueError(f"参数类型不符：{name}")
+            if isinstance(value, str) and len(value) > field.get("max_length", 4000):
+                raise ValueError(f"参数过长：{name}")
+            if ("minimum" in field and value < field["minimum"] or "maximum" in field and value > field["maximum"]
+                    or field.get("choices") and value not in field["choices"]):
+                raise ValueError(f"参数超出范围：{name}")
+        return await getattr(self, definition["api"])(**args)
+
+    @API("ui_editor_read", description="读取当前选中的管理页")
+    async def ui_editor_read(self, page: str, binding: str, arguments: str):
+        return await self.editor_call("queries", page, binding, arguments)
+
+    @API("ui_editor_write", description="保存当前选中的管理页")
+    async def ui_editor_write(self, page: str, binding: str, arguments: str):
+        return await self.editor_call("actions", page, binding, arguments)
+
+    @API("ui_map_layer", description="读取当前地图需要的画稿")
+    async def ui_map_layer(self, layer: str) -> dict:
+        if layer == "brand":
+            path = Path(__file__).resolve().parent.parent / "webui" / "map" / "brand.png"
+        elif layer in {"day", "evening", "late", "spring", "autumn", "winter", "winter-evening", "winter-late", "snow", "atmosphere"}:
+            path = Path(__file__).resolve().parent.parent / "webui" / "map" / (layer + ".webp")
+        else:
+            raise ValueError("未知地图图层")
+        data = await asyncio.to_thread(path.read_bytes)
+        return {"src": f"data:image/{path.suffix[1:]};base64," + base64.b64encode(data).decode("ascii")}
 
     @API("ui_dashboard", description="此刻生活总览与每日轨迹")
     async def ui_dashboard(self, day_offset: int = 0) -> dict:
