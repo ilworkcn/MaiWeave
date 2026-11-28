@@ -5,7 +5,7 @@ from itertools import count
 from datetime import timedelta
 
 from ..core.engine import ACTIVE, uid
-from ..core.models import PlanInput
+from ..core.models import PlanInput, tool_plan
 
 
 class FareShortfall(ValueError):
@@ -168,14 +168,14 @@ class Spatial:
         return route
 
     def projected_location(self, at, now, excluded=()) -> str:
-        previous = [p for p in self.engine.store.all("plan") if p["id"] not in excluded and p["status"] in ACTIVE and self.engine.time(p["end"]) <= at and self.engine.time(p["end"]) >= now and p["location"]]
+        previous = [p for p in self.engine.store.all("plan") if p["id"] not in excluded and p["status"] in ACTIVE and not tool_plan(p) and self.engine.time(p["end"]) <= at and self.engine.time(p["end"]) >= now and p["location"]]
         if previous:
             return max(previous, key=lambda p: self.engine.time(p["end"]))["location"]
         return self.engine.state()["location"]
 
     def check_after_reading(self, location, end, excluded=""):
         fixed = min((p for p in self.engine.store.all("plan") if p["id"] != excluded
-                     and p["status"] == "scheduled" and not p.get("activity_id") and not p.get("flexible")
+                     and p["status"] == "scheduled" and not tool_plan(p) and not p.get("activity_id") and not p.get("flexible")
                      and self.engine.time(p["start"]) >= end), key=lambda p: self.engine.time(p["start"]), default=None)
         if fixed and fixed["location"] and fixed["kind"] != "travel":
             minutes = self.travel_route(location, fixed["location"])["minutes"]
@@ -188,7 +188,7 @@ class Spatial:
         plans = store.all("plan")
         origin, available = engine.state()["location"], now
         used = set()
-        pending = [p for p in plans if not p.get("activity_id") and p["status"] in ACTIVE | {"blocked"}]
+        pending = [p for p in plans if not tool_plan(p) and not p.get("activity_id") and p["status"] in ACTIVE | {"blocked"}]
         moving = next((p for p in plans if p.get("activity_id") and p["status"] == "active"), None)
         if moving:
             origin, available = moving["location"], engine.time(moving["end"])
@@ -316,7 +316,7 @@ class Spatial:
 
     def make_room(self, start, end, now):
         """明确的新安排占用时间时，让自主活动让出该时间段。"""
-        conflicts = [p for p in self.engine.store.all("plan") if p["status"] in ACTIVE and not p.get("activity_id")
+        conflicts = [p for p in self.engine.store.all("plan") if p["status"] in ACTIVE and not tool_plan(p) and not p.get("activity_id")
                      and self.engine.time(p["start"]) < end and self.engine.time(p["end"]) > start]
         if any(not p["autonomous"] or p["participants"] for p in conflicts):
             raise ValueError("这段时间已有固定安排，请先调整原安排")
@@ -349,6 +349,14 @@ class Spatial:
     def change(self, plan_id, patch, session, now):
         old = self.engine.owned("plan", plan_id, session)
         changes = patch.model_dump(exclude_unset=True)
+        if tool_plan({**old, **changes}):
+            updated = self.engine.change_plan(plan_id, patch, session, now)
+            if travel_id := updated.pop("travel_id", None):
+                if self.engine.store.get("plan", travel_id)["status"] in ACTIVE:
+                    self.engine.transition(travel_id, "cancel", session, now)
+                with self.engine.store.db:
+                    self.engine.store.put("plan", updated)
+            return updated
         if old.get("book_id") and changes.get("kind", old["kind"]) in {"study", "leisure"} and {"start", "end", "location"} & changes.keys():
             self.check_after_reading(changes.get("location", old["location"]) or self.engine.state()["location"],
                                      self.engine.time(changes.get("end", old["end"])), plan_id)
@@ -389,6 +397,8 @@ class Spatial:
     def schedule(self, value: PlanInput, session: str, now, autonomous: bool = False, user_id=None, sleep_deadline: str = "") -> dict:
         """地点变化时，在活动前显式安排出行时间。"""
         self.engine.validate_plan(value, session, now)
+        if tool_plan({**value.model_dump(), "session_id": session}):
+            return self.engine.create_plan(value, session, now, autonomous)
         if value.book_id:
             self.check_after_reading(value.location or self.projected_location(self.engine.time(value.start), now),
                                      self.engine.time(value.end))

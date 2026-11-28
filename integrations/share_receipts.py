@@ -175,6 +175,11 @@ class ShareReceipts:
         if not row or row["session"] != session or row["outcome"] != "MaiBot 已受理":
             return
         calls = [item["tool_call"] for item in items if item.get("item_type") == "FunctionCallItem"]
+        if row.get("execution_plan"):
+            row["calls"].update({call["call_id"]: call["func_name"] for call in calls})
+            with self.store.db:
+                self.store.put("share_receipt", row)
+            return
         if len(calls) == 1 and calls[0]["func_name"] == "wait" and not (calls[0].get("args") or {}).get("seconds") and not row["calls"]:
             row.update(outcome="Planner 选择沉默", delivery="Planner 选择结束本轮，未发送消息",
                        finished_at=datetime.now().astimezone().isoformat())
@@ -190,6 +195,8 @@ class ShareReceipts:
 
     async def refresh(self, now):
         for row in self.store.all("share_receipt"):
+            if row.get("execution_plan"):
+                continue
             if row["outcome"] == "待核对":
                 messages = await self.ctx.db.get("Messages", filters={"session_id": row["session"],
                     "processed_plain_text": row["topic"]}, order_by="-id")

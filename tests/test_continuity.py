@@ -4,6 +4,8 @@ import json
 import asyncio
 from contextlib import suppress
 from datetime import timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -258,17 +260,22 @@ async def test_reminder_and_followup_request_are_once_only(plugin):
     plugin.config.proactive.daily_limit = 5
     plan = plugin.engine.create_plan(PlanInput(title="一起聊天", start=(now + timedelta(minutes=15)).isoformat(), end=(now + timedelta(minutes=45)).isoformat(), participants=["用户"]), "a", now)
     thread = plugin.continuity.save_thread("上次的作品", "用户说今天完成后想聊聊", "a", now.isoformat(), now)
+    plugin.ctx.maisaka.reply = SimpleNamespace(generate=AsyncMock(return_value={"success": True, "text": "还有十五分钟，一会儿聊。"}))
+    plugin.ctx.send.text.return_value = {"sent": True, "message_id": "共同提醒"}
     await plugin.living.share(now)
+    reminder, = plugin.store.all("share_receipt")
+    assert reminder["record_id"].startswith("reminder:" + plan["id"])
+    assert reminder["outcome"] == "实际已发送"
+    await plugin.living.share(now + timedelta(minutes=2))
     task = plugin.ctx.maisaka.proactive.trigger.return_value["task_id"]
     row = plugin.store.get("share_receipt", task)
     with plugin.store.db:
         plugin.store.put("share_receipt", {**row, "outcome": "Planner 选择沉默"})
     plugin.ctx.maisaka.proactive.trigger.return_value = {"success": True, "task_id": task + "2"}
-    await plugin.living.share(now + timedelta(minutes=2))
     await plugin.living.share(now + timedelta(minutes=4))
-    assert plugin.ctx.maisaka.proactive.trigger.await_count == 2
+    plugin.ctx.send.text.assert_awaited_once()
+    plugin.ctx.maisaka.proactive.trigger.assert_awaited_once()
     assert plugin.store.get("thread", thread["id"])["requested_at"] == ""
-    assert not plugin.store.all("sharing")
 
 
 async def test_continuity_webui_and_context_show_saved_state(plugin):

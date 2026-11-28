@@ -69,7 +69,7 @@ class ProactiveConfig(PluginConfigBase):
     natural_greetings: bool = setting("作息问候", default=False, description="随角色起床和睡前安排问候，使用所选主动交流模式。共用发送额度和间隔，群聊在近期互动后道晚安。")
     session_ids: list[str] = setting("额外接收聊天流（选填）", default_factory=list, description="个人资料中选择的聊天流自动用于主动交流和纪念日提醒。这里填写额外的群聊或其他聊天流；可发送 /maiweave 获取 ID。")
     share_threshold: int = setting("经历分享最低分", default=5, ge=1, le=10, description="普通、熟悉关系及群聊按此分数筛选经历；亲近私聊也会考虑3分及以上、有具体细节的日常小事。模型每轮选一件或等待。生日祝福、约定提醒按各自时间触发。", json_schema_extra={"choices": list(range(1, 11))})
-    daily_limit: int = setting("每日主动发送上限", default=4, ge=0, description="每个聊天流每天可发的分享与提醒次数，分段计一次。和日程约好的回信单独计。设为 0 暂停主动发送。")
+    daily_limit: int = setting("每日主动发送上限", default=4, ge=0, description="每个聊天流每天可发的分享与提醒次数，分段计一次。共同安排的提醒、确认、到点办事及约好的日程回信单独计。设为 0 暂停主动发送和到点办事。")
     cooldown_minutes: int = setting("主动交流间隔（分钟）", default=60, ge=1, description="两次实际发送的最短间隔")
     retry_minutes: int = setting("未发送后重新判断间隔（分钟）", default=60, ge=1, description="选择稍后交流或生成、发送失败后，同一话题等待多久再判断；到达话题截止时间后结束尝试。")
     start_hour: int = setting("允许开始时间（整点）", default=DEFAULT_WAKE_HOUR, ge=0, le=23, description="经历分享与提醒的时间窗口起点；早晚安跟随作息。")
@@ -134,7 +134,7 @@ class ContinuityConfig(PluginConfigBase):
     semantic_learning: bool = setting("归并同类活动与学习偏好", default=True, description="使用 MaiBot 模型归并不同说法，依据已发生体验更新偏好")
     goal_planning: bool = setting("分解与推进长期目标", default=True, description="将目标拆成可执行阶段，并依据活动结果推进")
     adaptive_schedule: bool = setting("动态调整自主日程", default=True, description="天气、精力与临时事件改变时调整可变动安排")
-    reminder_minutes: int = setting("共同安排提前提醒（分钟）", default=30, ge=1, le=120, description="使用已有主动交流开关、时段和额度")
+    reminder_minutes: int = setting("共同安排提前提醒（分钟）", default=30, ge=1, le=120, description="在允许交流的时段提醒，提醒与普通分享分别计数。每日上限设为 0 时暂停。")
     followup_hours: int = setting("未完成事项跟进间隔（小时）", default=24, ge=1, description="关系中的未解决事项进入一次性跟进队列")
 
 

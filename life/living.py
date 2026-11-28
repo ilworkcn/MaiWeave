@@ -15,6 +15,7 @@ from ..core.models import SHARE_REPLY_PAUSE, ActivityChoice, PlanInput
 from .anniversaries import Anniversaries
 from .greetings import Greetings
 from .presence import Presence
+from ..core.models import tool_plan
 from ..integrations.usage import generate
 from ..integrations.chat_context import brief, select_fields
 from ..integrations.share_receipts import ShareReceipts
@@ -1095,11 +1096,11 @@ class Living:
                                     f"今天是{item['person']}的{item['title']}，按用户配置的{item['calendar_label']}{item['date_label']}计算。"
                                     "结合已记录的资料自然表达祝福；资料中填写了出生年份时，可以提及年龄。", None))
             for plan in engine.plans(session):
-                if plan["session_id"] != session or not plan["participants"]:
+                if plan["session_id"] != session or not plan["participants"] or tool_plan(plan):
                     continue
                 remaining = (engine.time(plan["start"]) - now).total_seconds() / 60
                 if plan["status"] in {"scheduled", "active"} and 0 <= remaining <= self.config.continuity.reminder_minutes:
-                    notices.append((f"reminder:{plan['id']}:{plan['start']}", f"共同安排即将开始：{plan['title']}，开始时间{plan['start']}。可以自然提醒对方即将开始的安排。", None))
+                    notices.append((f"reminder:{plan['id']}:{plan['start']}", f"共同安排即将开始：{plan['title']}。还有{math.ceil(remaining)}分钟，现在提醒对方准备。", None))
                 if plan["status"] == "awaiting_confirmation" and now - engine.time(plan["end"]) <= timedelta(hours=24):
                     notices.append((f"confirmation:{plan['id']}", f"之前约好的{plan['title']}已经过了计划时间，完成情况尚未确认。可以问问对方实际进展，再根据回复更新记录。", None))
             for item in engine.store.all("thread"):
@@ -1129,8 +1130,10 @@ class Living:
                 if item["session_id"] == session:
                     notices.append((f"issue:{item['id']}:{item['reason']}", f"安排需要调整：{item['title']}。原因：{item['reason']}。说明当前待调整的状态。", None))
             notices = [n for n in notices if n[0] not in sent.get("notice_ids", []) and self.share_ready(n[0], session, now)]
+            notices.sort(key=lambda n: 0 if n[2] and n[2].get("plan_id") else 1 if n[0].startswith(("reminder:", "confirmation:")) else 2)
             promised = bool(ordinary_hours and notices and notices[0][2] and notices[0][2].get("plan_id"))
-            if not promised or config.daily_limit == 0:
+            shared_notice = bool(notices and notices[0][0].startswith(("reminder:", "confirmation:")))
+            if not (promised or shared_notice) or config.daily_limit == 0:
                 times = self.receipts.sent_times(session, now.tzinfo)
                 count = sum(at.date() == now.date() for at in times)
                 if count >= config.daily_limit:
@@ -1158,6 +1161,7 @@ class Living:
                     continue
             if not ordinary_hours:
                 notices, event = [], None
+                shared_notice = False
             if greeting and self.share_ready("greeting:" + greeting["key"], session, now) and not notices and (not event or event["importance"] < 7):
                 notices.append(("greeting:" + greeting["key"], greeting["intent"], None))
             else:
@@ -1193,7 +1197,9 @@ class Living:
                        + f"最近实际分享与回应：{json.dumps(self.receipts.context(session, now), ensure_ascii=False)}。")
             decision = None
             if notices:
-                intent = notices[0][1] if promised else notices[0][1] + context
+                intent = notices[0][1] if promised or shared_notice else notices[0][1] + context
+                if shared_notice and tired:
+                    intent += "现在有些累，表达简短自然。"
             else:
                 choices = [f"内容={item['summary']}；来源={item['source']}；本次经历发生时间={item['occurred_at']}；"
                            f"细节={json.dumps(item['details'], ensure_ascii=False)}" for item in candidates]
@@ -1222,7 +1228,7 @@ class Living:
             if greeting:
                 row.update(greeting_key=greeting["key"], greeting_kind=greeting["kind"],
                            greeting_until=greeting["until"], score="作息问候，按近期互动与关系判断")
-            if promised:
+            if promised or shared_notice:
                 row["plan_promise"] = True
             if not notices:
                 row["image_requested"] = decision.image and self.config.diary.chat_images_enabled and self.config.diary.image_service_enabled
@@ -1236,12 +1242,13 @@ class Living:
                             "candidate_ids": [item["id"] for item in candidates],
                             "outcome": "稍后再聊", "delivery": decision.reason})
                     continue
-            if config.mode == "主动表达":
+            if config.mode == "主动表达" or shared_notice:
                 await self.receipts.express(session, intent, row, now, can_report=self.continuity.can_report)
             else:
                 try:
                     result = await self.ctx.maisaka.proactive.trigger(
-                        session, intent + ("现在请用 reply 兑现这条约定。这次只接上约好的话题，答完就结束本轮。" if notices and promised else "结合当前对话判断是否适合开口，可以选择沉默。"),
+                        session, intent + ("现在请用 reply 兑现这条约定。这次只接上约好的话题，答完就结束本轮。" if promised
+                                           else "结合当前对话判断是否适合开口，可以选择沉默。"),
                         reason="MaiWeave 生活跟进", metadata={"maiweave_record_id": record_id})
                     if not result["success"]:
                         raise RuntimeError(result.get("error") or "主动交流请求失败")
