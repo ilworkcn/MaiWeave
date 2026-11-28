@@ -1,6 +1,7 @@
 """生活业务模型；时间统一保存为带时区的 ISO 字符串。"""
 
 from datetime import date, datetime, timedelta
+import re
 from typing import Literal
 from zoneinfo import ZoneInfo
 
@@ -48,6 +49,12 @@ class ShiftScene(BaseModel):
     resolution: str = Field(min_length=1, max_length=100)
     payoff: Literal["平常", "有成就感", "有人搭手"] = "平常"
     next_shift: str = Field(default="", max_length=120)
+
+
+def tool_plan(plan):
+    """带参与人和接收聊天的显式工具指令按时间执行。"""
+    return bool(plan.get("session_id") and plan.get("participants") and re.match(
+        r"^(?:请(?:麦麦|你)?|麦麦)?(?:用|使用|调用|通过)\s*(?:MCP|工具)", plan["title"].strip(), re.I))
 
 
 class PlanInput(BaseModel):

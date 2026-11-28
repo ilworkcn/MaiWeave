@@ -212,6 +212,8 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
         return datetime.now(ZoneInfo(self.config.life.timezone))
 
     async def on_load(self):
+        from .life.scheduled_tools import ScheduledTools
+        self.scheduled_tools = ScheduledTools(self)
         self.model_tasks = await self.ctx.llm.get_available_models()
         self.store = Store(Path(self.ctx.paths.data_dir) / "maiweave.sqlite3")
         self.anniversaries = Anniversaries(self.store)
@@ -326,7 +328,7 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
             except Exception as error:
                 self.last_errors[name] = str(error)
                 self.ctx.logger.exception("%s失败", name)
-        for name, job in [("外部世界", self.world.refresh), ("自主见闻", self.world.process),
+        for name, job in [("到点办事", self.scheduled_tools.tick), ("外部世界", self.world.refresh), ("自主见闻", self.world.process),
                           ("梦境生成", self.dreams.process), ("生活接续", self.continuity.process),
                           ("日记安排", self.arrange_diary), ("自主生活", self.plan_life),
                           ("主动交流", self.living.share), ("生活日记", self.diary.process), ("日记发空间", self.diary_publisher.process), ("书籍阅读", self.books.process)]:
@@ -423,6 +425,9 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
 
     @HookHandler("send_service.before_send")
     async def sleep_before_send(self, message: dict, storage_message: bool = True, **kwargs):
+        allowed = self.scheduled_tools.sending.get(message["session_id"])
+        if allowed and message.get("processed_plain_text") == allowed:
+            return {"action": "continue"}
         if storage_message and self.living.quiet_sleep(self.now(), message["session_id"]):
             self.ctx.logger.info("MaiWeave 按当前作息暂停本次聊天发言：%s", message["session_id"])
             return {"action": "abort"}
@@ -466,6 +471,41 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
                                           if t.get("function", {}).get("name") != "maiweave_show_life"]
         self.living.receipts.turn[session] = task
         receipt = self.store.find("share_receipt", task) if task else None
+        if receipt and receipt.get("execution_plan"):
+            used = set(receipt["calls"].values()) - {"tool_search", "stop", "wait"}
+            plan = self.store.find("plan", receipt["execution_plan"])
+            finished = used or not plan or plan["status"] in {"cancelled", "completed"} or not self.config.proactive.daily_limit or not self.config.proactive.enabled
+            searches = list(receipt["calls"].values()).count("tool_search")
+            available = {"stop"} if finished else {"tool_search"}
+            if searches and not finished:
+                for item in kwargs["items"]:
+                    if item.get("tool_call_id", item.get("call_id")) not in receipt["calls"]:
+                        continue
+                    output = item.get("output")
+                    if isinstance(output, str):
+                        try:
+                            output = json.loads(output)
+                        except ValueError:
+                            continue
+                    if isinstance(output, dict):
+                        available.update(t["name"] for t in output.get("tools", []))
+                if searches >= 2:
+                    available.discard("tool_search")
+                    available.add("stop")
+            if "mcp" in receipt["topic"].lower():
+                available.difference_update(self.searchable_tools)
+            defs = discovered_tools(kwargs["items"], kwargs.get("tool_definitions", []), available)
+            kwargs["tool_definitions"] = [t for t in defs if t["function"]["name"] in available]
+            from .life.scheduled_tools import search_term
+            term = search_term(receipt["topic"])
+            matches = [t["function"] for t in defs if t["function"]["name"] in available - {"tool_search", "stop"}
+                       and (term.lower() in t["function"]["name"].lower() or term in t["function"].get("description", ""))]
+            direct = matches[0]["name"] if len(matches) == 1 and not matches[0].get("parameters", {}).get("required") else ""
+            self.scheduled_tools.offered[task] = available, direct, term
+            kwargs["items"].append({"item_type": "UserMessageItem", "meta": {"item_id": "maiweave-due",
+                "logical_turn_id": None, "timestamp": self.now().isoformat()}, "parts": [{"type": "text",
+                "text": f"现在办本次日程「{receipt['topic']}」。先用 tool_search 搜具体事项的关键词，再调用命中工具取得今天的新结果。"}]})
+            return {"action": "continue", "modified_kwargs": kwargs}
         thread = self.store.find("thread", receipt["thread_id"]) if receipt and receipt.get("thread_id") else None
         stale_promise = thread and thread.get("plan_id") and not self.continuity.can_report(thread)
         if receipt and not receipt.get("calls") and (stale_promise or not self.engine.wallet.current_notice(receipt, self.now())):
@@ -538,6 +578,22 @@ class MaiWeavePlugin(WebUI, FeatureTools, MaiBotPlugin):
     @HookHandler("maisaka.planner.after_response")
     async def planner_receipt(self, session_id: str, output_items: list, **kwargs):
         original_items = output_items
+        task = self.living.receipts.turn.get(session_id)
+        execution = self.store.find("share_receipt", task) if task else None
+        if execution and execution.get("execution_plan"):
+            calls = [i for i in output_items if i.get("item_type") == "FunctionCallItem"]
+            allowed, direct, term = self.scheduled_tools.offered.pop(task, ({"stop"}, "", ""))
+            meta = next((i["meta"] for i in output_items if i.get("meta", {}).get("logical_turn_id")), {})
+            calls = [i for i in calls if i["tool_call"]["func_name"] in allowed]
+            if direct:
+                calls = [i for i in calls if i["tool_call"]["func_name"] not in {"tool_search", "stop"}]
+            search = not direct and "tool_search" in allowed
+            output_items = calls[:1] or [{"item_type": "FunctionCallItem", "meta": {
+                "item_id": uuid4().hex, "logical_turn_id": meta.get("logical_turn_id") or task, "timestamp": self.now().isoformat()},
+                "tool_call": {"call_id": uuid4().hex, "func_name": direct or ("tool_search" if search else "stop"),
+                              "args": {"query": term} if search else {}}}]
+            self.living.receipts.observe(session_id, output_items)
+            return {"action": "continue", "modified_kwargs": {**kwargs, "output_items": output_items}}
         output_items = distinct_image_calls(output_items, self.life_images.planner_actions.pop(session_id, None))
         note = self.life_images.turn_notes.get(session_id)
         if (note and note[3] == "发送" and asks_selfie(note[1])

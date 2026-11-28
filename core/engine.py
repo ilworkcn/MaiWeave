@@ -5,7 +5,7 @@ import math
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from .models import ExperienceInput, GoalInput, LifeState, PlanInput, PlanPatch, RelationshipChange, local_time
+from .models import ExperienceInput, GoalInput, LifeState, PlanInput, PlanPatch, RelationshipChange, local_time, tool_plan
 from .store import Store
 from .wallet import Wallet
 
@@ -70,7 +70,7 @@ def read_life_status(store: Store, now: datetime, *, enabled: bool, schedule_ena
     if state is None:
         return result
     plans = store.all("plan", omit=("changes",))
-    current = next((p for p in plans if p["status"] in ACTIVE
+    current = next((p for p in plans if p["status"] in ACTIVE and not tool_plan(p)
                     and datetime.fromisoformat(p["start"]) <= now < datetime.fromisoformat(p["end"])), None)
     upcoming = min((p for p in plans if p["status"] in ACTIVE
                     and datetime.fromisoformat(p["start"]) > now),
@@ -138,7 +138,7 @@ class LifeEngine:
             raise ValueError("结束时间必须晚于开始时间")
         for plan in self.store.all("plan"):
             excluded = {exclude} if isinstance(exclude, str) else exclude
-            if plan["id"] not in excluded and plan["status"] in ACTIVE and not (plan.get("activity_id") and plan["status"] == "scheduled"):
+            if plan["id"] not in excluded and plan["status"] in ACTIVE and not tool_plan(plan) and not (plan.get("activity_id") and plan["status"] == "scheduled"):
                 if start < self.time(plan["end"]) and end > self.time(plan["start"]):
                     raise ValueError("这段时间已有安排，请选择其他时间或先调整原安排")
 
@@ -175,7 +175,8 @@ class LifeEngine:
     def create_plan(self, value: PlanInput, session: str, now: datetime, autonomous: bool = False) -> dict:
         self.validate_plan(value, session, now)
         start, end = self.time(value.start), self.time(value.end)
-        self._check_interval(start, end)
+        if not tool_plan({**value.model_dump(), "session_id": session}):
+            self._check_interval(start, end)
         plan = {**value.model_dump(), "id": uid(), "session_id": session,
                 "start": start.isoformat(), "end": end.isoformat(), "status": "scheduled",
                 "autonomous": autonomous, "flexible": value.flexible or autonomous,
@@ -197,7 +198,11 @@ class LifeEngine:
             raise ValueError("请选择当前或未来的开始时间")
         if end <= now:
             raise ValueError("结束时间必须在当前时间之后")
-        self._check_interval(start, end, {record_id, plan.get("travel_id", "")})
+        if tool_plan(updated):
+            if end <= start:
+                raise ValueError("结束时间必须晚于开始时间")
+        else:
+            self._check_interval(start, end, {record_id, plan.get("travel_id", "")})
         updated.update(start=start.isoformat(), end=end.isoformat())
         if updated["kind"] != plan["kind"]:
             updated.update(pay=0, cost=0, hourly_pay=0, purchase_request="", groceries=0, food="")
@@ -210,6 +215,9 @@ class LifeEngine:
             updated.pop("shift_retry_at", None)
         updated["changes"].append({"at": now.isoformat(), "before": {k: plan[k] for k in changes}, "after": changes})
         if "start" in changes or updated["status"] == "blocked":
+            if updated["status"] == "blocked" and tool_plan(updated):
+                updated.pop("tool_task", None)
+                updated.pop("blocking_reason", None)
             updated["status"] = "scheduled"
         elif updated["status"] == "paused" and "end" in changes:
             updated["remaining_seconds"] = (end - now).total_seconds()
@@ -277,6 +285,8 @@ class LifeEngine:
                 plan["experience_id"] = record["id"]
                 plan["changes"].append({"at": now.isoformat(), "action": "record_completion", "source": value.source})
                 self.store.put("plan", plan)
+                if tool_plan(plan):
+                    return record
                 self.wallet.settle(plan, occurred)
                 self.progress_goal(plan, confirmed=True)
                 state = self.state()
@@ -482,6 +492,9 @@ class LifeEngine:
 
         def activate(plan, at):
             nonlocal missed_trip
+            if tool_plan(plan):
+                plan["status"] = "active"
+                return
             route = plan.get("route")
             origin = route["origin"] if route else plan["location"]
             reason = ""
@@ -502,7 +515,7 @@ class LifeEngine:
         with self.store.db:
             for left, right in zip(times, times[1:]):
                 sleeping = sleep_changes.get(left, sleeping)
-                current = next((p for p in plans if p["status"] in ACTIVE and self.time(p["start"]) <= left < self.time(p["end"])), None)
+                current = next((p for p in plans if p["status"] in ACTIVE and not tool_plan(p) and self.time(p["start"]) <= left < self.time(p["end"])), None)
                 if current and current["status"] == "scheduled":
                     activate(current, left)
                     if current["status"] != "active":
@@ -545,7 +558,9 @@ class LifeEngine:
                         state["journey"] = None
                 for plan in plans:
                     if plan["status"] in ACTIVE and self.time(plan["end"]) <= right:
-                        if plan["simulation"] and not plan["participants"]:
+                        if tool_plan(plan) and not plan.get("tool_task"):
+                            plan.update(status="blocked", blocking_reason="本次日程已经过时，工具未执行")
+                        elif plan["simulation"] and not plan["participants"]:
                             self._complete_simulation(plan, right)
                             self._completion_effect(state, plan)
                         else:
@@ -605,12 +620,12 @@ class LifeEngine:
             self.progress_goal(plan)
 
     def current(self, now: datetime, plans=None) -> dict | None:
-        return next((p for p in (self.store.all("plan") if plans is None else plans) if p["status"] in ACTIVE
+        return next((p for p in (self.store.all("plan") if plans is None else plans) if p["status"] in ACTIVE and not tool_plan(p)
                      and self.time(p["start"]) <= now < self.time(p["end"])), None)
 
     def free_minutes(self, now: datetime) -> int:
         starts = [self.time(p["start"]) for p in self.store.all("plan")
-                  if p["status"] in ACTIVE and self.time(p["start"]) > now]
+                  if p["status"] in ACTIVE and not tool_plan(p) and self.time(p["start"]) > now]
         return int((min(starts) - now).total_seconds() / 60) if starts else 720
 
     def snapshot(self, session: str, now: datetime, person: str = "") -> dict:
